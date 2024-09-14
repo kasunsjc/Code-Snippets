@@ -27,7 +27,7 @@ az keyvault create --resource-group $ResourceGroupName --location $Location --na
 
 # Assign the Key Vault RBAC role to user
 
-az role assignment create --role "Key Vault Certificates Officer" --assignee kasunr@infrakloud.com --scope "/subscriptions/$SubscriptionId/resourcegroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
+az role assignment create --role "Key Vault Certificates Officer" --assignee <UserID> --scope "/subscriptions/$SubscriptionId/resourcegroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
 
 # Import the certificate to the Key Vault
 # certificate file should be in .pfx format
