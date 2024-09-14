@@ -13,8 +13,9 @@ export ClusterName="aks-nginx-routing"
 export Location="northeurope"
 export KeyVaultName="aks-nginx-routing-kv"
 export CertificateName="aks-ingress-tls"
-export ZoneName="kasunrajapakse.xyz"
+export ZoneName="<DNSZoneName>"
 export DNSZoneResourceGroup="aks-demo-cluster-sea-rg"
+export SubscriptionId="<SubID>"
 
 # Login to Azure
 
@@ -24,9 +25,13 @@ az login
 
 az keyvault create --resource-group $ResourceGroupName --location $Location --name $KeyVaultName --enable-rbac-authorization true
 
+# Assign the Key Vault RBAC role to user
+
+az role assignment create --role "Key Vault Certificates Officer" --assignee kasunr@infrakloud.com --scope "/subscriptions/$SubscriptionId/resourcegroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
+
 # Import the certificate to the Key Vault
 # certificate file should be in .pfx format
-az keyvault certificate import --vault-name $KeyVaultName --name $CertificateName --file <path-to-certificate-file> --password <certificate-password> 
+az keyvault certificate import --vault-name $KeyVaultName --name $CertificateName --file star_kasunrajapakse_xyz.pfx 
 
 # Enable the Key Vault for the AKS cluster
 
@@ -40,13 +45,13 @@ az aks approuting update --resource-group $ResourceGroupName --name $ClusterName
 
 # if you have a public DNS zone, you can use it
 
-ZONEID=$(az network dns zone show --resource-group  --name $ZoneName --query "id" --output tsv)
+ZONEID=$(az network dns zone show --resource-group $DNSZoneResourceGroup --name $ZoneName --query "id" --output tsv)
 
 # Update the DNS zone to use the App routing addon
 
 az aks approuting zone add --resource-group $ResourceGroupName --name $ClusterName --ids=${ZONEID} --attach-zones
 
-# Get the Certificate URI from the Key Vault
+# Get the Certificate URI from the Key Vault. This URI will be used in the Ingress resource
 
 az keyvault certificate show --vault-name $KeyVaultName --name $CertificateName --query "id" --output tsv
 

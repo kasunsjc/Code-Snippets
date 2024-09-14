@@ -2,13 +2,13 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   annotations:
-    kubernetes.azure.com/tls-cert-keyvault-uri: <KeyVaultCertificateUri>
-  name: aks-helloworld
-  namespace: hello-web-app-routing
+    kubernetes.azure.com/tls-cert-keyvault-uri: "<CertificateURL>" # Make sure to replace this with your KeyVault Certificate URI
+  name: aks-helloworld-ssl
+  namespace: app-routing-ssl-demo
 spec:
   ingressClassName: webapprouting.kubernetes.azure.com
   rules:
-  - host: <Hostname>
+  - host: <HostName>
     http:
       paths:
       - backend:
@@ -20,5 +20,5 @@ spec:
         pathType: Prefix
   tls:
   - hosts:
-    - <Hostname>
-    secretName: keyvault-<your ingress name>
+    - <HostName>
+    secretName: keyvault-aks-helloworld-ssl # Make sure the ingress secret name start with keyvault-<secret name>
