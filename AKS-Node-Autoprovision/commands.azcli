@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Variables
+
+export RESOURCE_GROUP_NAME="aks-node-autoprovision"
+export LOCATION="northeurope"
+export CLUSTER_NAME="aks-node-autoprovision"
+
+# Login to Azure
+
+az login
+
+# Enable preview extension
+
+az extension add --name aks-preview
+
+# Update to the latest version of the aks-preview extension
+az extension update --name aks-preview
+
+# Register AKS node autoprovisioning feature
+
+az feature register --namespace "Microsoft.ContainerService" --name "NodeAutoProvisioningPreview"
+
+# Check the registration status
+
+az feature show --namespace "Microsoft.ContainerService" --name "NodeAutoProvisioningPreview"
+
+# Register the provider (When the feature is registered, the provider must be registered)
+
+az provider register --namespace Microsoft.ContainerService
+
+# Create a resource group
+
+az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
+
+# Create an AKS cluster with Node autoprovisioning
+
+az aks create --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP_NAME --node-provisioning-mode Auto --network-plugin azure --network-plugin-mode overlay --network-dataplane cilium --generate-ssh-keys --location $LOCATION
+
+# Create Nodepool with autoprovisioning
+
+kubectl apply -f nodepool-autoprovision.yaml
+
+# Create a deployment to test the nodepool
+
+kubectl apply -f deployment.yaml
+
