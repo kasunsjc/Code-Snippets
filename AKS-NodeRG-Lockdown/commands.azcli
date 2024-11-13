@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Variables
+
+export RESOURCE_GROUP_NAME="aks-nrg-lockdown"
+export LOCATION="northeurope"
+export CLUSTER_NAME="aks-nrg-lockdown"
+export NODE_RESOURCE_GROUP_NAME="aks-nrg-lockdown-nodes"
+
+# Login to Azure
+
+az login
+
+# Enable preview extension
+
+az extension add --name aks-preview
+
+# Update to the latest version of the aks-preview extension
+az extension update --name aks-preview
+
+# Register the AKS preview feature for Node Resource Group Lockdown
+
+az feature register --namespace "Microsoft.ContainerService" --name "NRGLockdownPreview"
+
+# Check the registration status
+# If its marked as Registered, then proceed to the next step
+
+az feature show --namespace "Microsoft.ContainerService" --name "NRGLockdownPreview"
+
+# Register the provider 
+
+az provider register --namespace Microsoft.ContainerService
+
+# Create a AKS cluster with Node Resource Group Lockdown
+
+az aks create --name $CLUSTER_NAME --location $LOCATION --resource-group $RESOURCE_GROUP_NAME --nrg-lockdown-restriction-level ReadOnly --generate-ssh-keys

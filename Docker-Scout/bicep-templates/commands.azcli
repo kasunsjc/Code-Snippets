@@ -1,0 +1,23 @@
+# Validate the Bicep file if your using powershell
+
+$location = "northeurope"
+$resourceGroupName = "dockerscout-rg"
+$deploymentName = "dockerscout-deployment"
+
+
+################ Variables for Linux #################
+# LOCATION=northeurope
+# RESOURCE_GROUP=dockerscout-rg
+# DEPLOYMENT_NAME=dockerscout-deployment
+#########################################################
+
+# Login to Azure
+
+az login
+
+# Create a resource group
+
+az group create --name $resourceGroupName --location $location
+
+# Deploy the Bicep file
+az deployment group create --resource-group $resourceGroupName --template-file ./acr.bicep --parameters ./acr.bicepparam --name $deploymentName

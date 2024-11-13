@@ -13,9 +13,9 @@ export ClusterName="aks-nginx-routing"
 export Location="northeurope"
 export KeyVaultName="aks-nginx-routing-kv"
 export CertificateName="aks-ingress-tls"
-export ZoneName="<DNSZoneName>"
+export ZoneName="kasunrajapakse.xyz"
 export DNSZoneResourceGroup="aks-demo-cluster-sea-rg"
-export SubscriptionId="<SubID>"
+export SubscriptionId="dac4cab6-7da3-4bba-a0c6-b93e33e6717a"
 
 # Login to Azure
 
@@ -27,7 +27,7 @@ az keyvault create --resource-group $ResourceGroupName --location $Location --na
 
 # Assign the Key Vault RBAC role to user
 
-az role assignment create --role "Key Vault Certificates Officer" --assignee <UserID> --scope "/subscriptions/$SubscriptionId/resourcegroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
+az role assignment create --role "Key Vault Certificates Officer" --assignee kasunr@infrakloud.com --scope "/subscriptions/$SubscriptionId/resourcegroups/$ResourceGroupName/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
 
 # Import the certificate to the Key Vault
 # certificate file should be in .pfx format
