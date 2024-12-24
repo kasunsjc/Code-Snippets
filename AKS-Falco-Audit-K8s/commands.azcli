@@ -1,0 +1,12 @@
+# Create a Resource Group
+RESOURCE_GROUP="falco-aks-rg"
+LOCATION="northeurope"
+
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+# Create an AKS cluster
+
+az deployment group create --name falco-aks-deploy --template-file bicep/infra.bicep --resource-group $RESOURCE_GROUP --parameters bicep/infra.bicepparam
+
+
+
