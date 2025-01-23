@@ -18,7 +18,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
     type: 'SystemAssigned'
   }
   properties: {
-    kubernetesVersion: '1.29.9'
+    kubernetesVersion: '1.30.7'
     autoUpgradeProfile: {
       upgradeChannel: 'stable'
     }
@@ -34,8 +34,11 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
     dnsPrefix: 'aks-cluster'
     enableRBAC: true
     addonProfiles: {
-      HttpApplicationRouting: {
+      omsagent: {
         enabled: true
+        config: {
+          logAnalyticsWorkspaceResourceID: logAnalyticsWorkspace.id
+        }
       }
     }
     agentPoolProfiles: [
@@ -52,8 +55,8 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
         ]
         enableAutoScaling: true
         minCount: 1
-        maxCount: 3
-      }
+        maxCount: 10
+      }   
     ]
     linuxProfile: {
       adminUsername: 'localadmin'
@@ -175,6 +178,21 @@ resource monitoringDataReaderRole 'Microsoft.Authorization/roleDefinitions@2022-
 resource grafanaAdminRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
   name: '22926164-76b3-42b3-bc55-97df8dab3e41'
   scope: subscription()
+}
+
+resource MonitoringMetricsPublisherRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '3913510d-42f4-4e42-8a64-420c390055eb'
+  scope: subscription()
+}
+
+resource AlertingRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aksCluster.id, 'omsagent', MonitoringMetricsPublisherRole.id)
+  scope: aksCluster
+  properties: {
+    roleDefinitionId: MonitoringMetricsPublisherRole.id
+    principalId: aksCluster.properties.addonProfiles.omsagent.identity.objectId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 // Assign the Monitoring Reader role to the Azure Managed Grafana system-assigned managed identity at the workspace scope
@@ -378,7 +396,7 @@ resource kubernetesRecordingRuleGroup 'Microsoft.AlertsManagement/prometheusRule
 
 // Create a Prometheus Rule Group for UX Recording Rules for Azure AKS Insights 
 
-resource prometheusRuleGroups_UXRecordingRulesRuleGroup_aks_mon_cluster_name_resource 'Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01' = {
+resource prometheusRuleGroups 'Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01' = {
   name: UXPromRecordingRules
   location: location
   properties: {
@@ -725,7 +743,7 @@ resource communityALerts 'Microsoft.AlertsManagement/prometheusRuleGroups@2021-0
       {
         alert: 'KubeNodeNotReady'
         expression: 'kube_node_status_condition{job="kube-state-metrics",condition="Ready",status="true"} == 0'
-        for: 'PT15M'
+        for: 'PT5M'
         labels: {
           severity: 'warning'
         }
