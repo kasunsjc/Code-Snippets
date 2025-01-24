@@ -12,7 +12,7 @@ param UXPromRecordingRules string = 'UXRecordingRulesRuleGroup'
 param userId string = 'cb4fc88c-d16d-4c75-895a-8042841b494b'
 
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-preview' = {
-  name: '${name}-${randomString}'
+  name: name
   location: location
   identity: {
     type: 'SystemAssigned'
