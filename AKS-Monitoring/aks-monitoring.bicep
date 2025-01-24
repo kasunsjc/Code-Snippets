@@ -2,22 +2,25 @@ param location string = 'northeurope'
 
 param name string = 'aks-mon-cluster'
 
-param nodeRecordingRuleGroupName string = 'node-recording-rules'
+param nodeRecordingRuleGroupName string = 'NodeRecordingRulesRuleGroup'
 
-param kubernetesRecordingRuleGroupName string = 'kubernetes-recording-rules'
+param kubernetesRecordingRuleGroupName string = 'KubernetesRecordingRulesRuleGroup'
 
-param UXPromRecordingRules string = 'ux-prom-recording-rule'
+param UXPromRecordingRules string = 'UXRecordingRulesRuleGroup'
 
 @description('Specifies the object id of an Azure Active Directory user. In general, this the object id of the system administrator who deploys the Azure resources.')
 param userId string = 'cb4fc88c-d16d-4c75-895a-8042841b494b'
 
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-preview' = {
-  name: name
+  name: '${name}-${randomString}'
   location: location
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
+    servicePrincipalProfile: {
+      clientId: 'msi'
+    }
     kubernetesVersion: '1.30.7'
     autoUpgradeProfile: {
       upgradeChannel: 'stable'
@@ -29,6 +32,10 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
       }
       metrics: {
         enabled: true
+        kubeStateMetrics: {
+          metricLabelsAllowlist: ''
+          metricAnnotationsAllowList: ''
+        }
       }
     }
     dnsPrefix: 'aks-cluster'
@@ -56,7 +63,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
         enableAutoScaling: true
         minCount: 1
         maxCount: 10
-      }   
+      }
     ]
     linuxProfile: {
       adminUsername: 'localadmin'
@@ -197,7 +204,7 @@ resource AlertingRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04
 
 // Assign the Monitoring Reader role to the Azure Managed Grafana system-assigned managed identity at the workspace scope
 resource monitoringReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name:  guid(name, prometheus.name, monitoringReaderRole.id)
+  name: guid(name, prometheus.name, monitoringReaderRole.id)
   scope: prometheus
   properties: {
     roleDefinitionId: monitoringReaderRole.id
@@ -208,7 +215,7 @@ resource monitoringReaderRoleAssignment 'Microsoft.Authorization/roleAssignments
 
 // Assign the Monitoring Data Reader role to the Azure Managed Grafana system-assigned managed identity at the workspace scope
 resource monitoringDataReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name:  guid(name, prometheus.name, monitoringDataReaderRole.id)
+  name: guid(name, prometheus.name, monitoringDataReaderRole.id)
   scope: prometheus
   properties: {
     roleDefinitionId: monitoringDataReaderRole.id
@@ -219,7 +226,7 @@ resource monitoringDataReaderRoleAssignment 'Microsoft.Authorization/roleAssignm
 
 // Assign the Grafana Admin role to the AKS admin group at the resource scope
 resource grafanaAdminRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(userId)) {
-  name:  guid(name, userId, grafanaAdminRole.id)
+  name: guid(name, userId, grafanaAdminRole.id)
   scope: grafana
   properties: {
     roleDefinitionId: grafanaAdminRole.id
@@ -229,7 +236,7 @@ resource grafanaAdminRoleAssignment 'Microsoft.Authorization/roleAssignments@202
 }
 
 resource nodeRecordingRuleGroup 'Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01' = {
-  name: nodeRecordingRuleGroupName
+  name: '${nodeRecordingRuleGroupName}-${aksCluster.name}'
   location: location
   properties: {
     description: 'Prometheus recording rules for node metrics'
@@ -290,7 +297,7 @@ resource nodeRecordingRuleGroup 'Microsoft.AlertsManagement/prometheusRuleGroups
 }
 
 resource kubernetesRecordingRuleGroup 'Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01' = {
-  name: kubernetesRecordingRuleGroupName
+  name: '${kubernetesRecordingRuleGroupName}-${aksCluster.name}'
   location: location
   properties: {
     description: 'Prometheus recording rules for Kubernetes resources'
@@ -397,7 +404,7 @@ resource kubernetesRecordingRuleGroup 'Microsoft.AlertsManagement/prometheusRule
 // Create a Prometheus Rule Group for UX Recording Rules for Azure AKS Insights 
 
 resource prometheusRuleGroups 'Microsoft.AlertsManagement/prometheusRuleGroups@2023-03-01' = {
-  name: UXPromRecordingRules
+  name: '${UXPromRecordingRules}-${aksCluster.name}'
   location: location
   properties: {
     enabled: true
@@ -817,6 +824,5 @@ resource communityALerts 'Microsoft.AlertsManagement/prometheusRuleGroups@2021-0
         ]
       }
     ]
-
   }
 }
