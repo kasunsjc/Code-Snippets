@@ -1,16 +1,22 @@
+@description('Location of the Azure resources. This value is used to determine the location of the resources that are created.')
 param location string = 'northeurope'
 
+@description('Specifies the name of the Azure Kubernetes Service cluster.')
 param name string = 'aks-mon-cluster'
 
+@description('Specifies the name of the Prometheus recording rule group for node metrics.')
 param nodeRecordingRuleGroupName string = 'NodeRecordingRulesRuleGroup'
 
+@description('Specifies the name of the Prometheus recording rule group for Kubernetes resources.')
 param kubernetesRecordingRuleGroupName string = 'KubernetesRecordingRulesRuleGroup'
 
+@description('Specifies the name of the Prometheus recording rule group for UX recording rules.')
 param UXPromRecordingRules string = 'UXRecordingRulesRuleGroup'
 
 @description('Specifies the object id of an Azure Active Directory user. In general, this the object id of the system administrator who deploys the Azure resources.')
 param userId string = 'cb4fc88c-d16d-4c75-895a-8042841b494b'
 
+@description('AKS Cluster')
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-preview' = {
   name: name
   location: location
