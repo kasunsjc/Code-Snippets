@@ -14,7 +14,7 @@ param kubernetesRecordingRuleGroupName string = 'KubernetesRecordingRulesRuleGro
 param UXPromRecordingRules string = 'UXRecordingRulesRuleGroup'
 
 @description('Specifies the object id of an Azure Active Directory user. In general, this the object id of the system administrator who deploys the Azure resources.')
-param userId string = 'cb4fc88c-d16d-4c75-895a-8042841b494b'
+param userId string = '<USER_OBJECT_ID>'
 
 @description('AKS Cluster')
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-preview' = {
@@ -76,7 +76,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
       ssh: {
         publicKeys: [
           {
-            keyData: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC22PmC0Z3MIUPHypBFlPtNKndLODa5+ckUSW69f6j41Cv1p6AY/slXcufL8ijqcbCXkmpru5Ud6/bHXW2TWxazi8pm+mJNStWHb0KdLHv0pM26Nt0ifv8AAsCTFSlVzLBq4Qjtp6/564NlUcaoGHfe1zrPnU7V8LSwPNnT7sHK3IlhjzXo+SNj6igZE+Tunr8jBK3D5QLdoGy9lhm2QT2jLFpSVPNIZELreUCEJY30hkVnbnLsHIHmLd/yChiW6Acd/iK2lTkVIwp/KR4XF3mvd5nlEkow7Yl7VlCbq/S34oAKV6he1uD7NGVRKnZF7TXkSr94M1NfLb6ULAiNk/jmbOoyEyQXcdtut/LmSbuIdOG1PMYzQMQX7eHTnuNobcMq+g79/uuPWtrVmNCv62gTvjjFpTAbq/txVnsMXVmV5I9MSCT2duDyC++zji5TEv9ATogdZZlkDzOlpWWZKmmV6ayLZbxthuV5PfIz+3Mxp3uAU/sYh8rmyTJmjGSB0aP1G+UDqLe2zJhciG9iWr6WJhrqj/8v0p0ZymK3GA5HwiBcCCTcifMYTuK/q+cMvUdWzRG3A6kuPQROaFvtWwh2p0Fi+XDzkLu+eSImZOua5LgX3UAv7/fKOpXBHzrnTGKz0Ig0hMbo0BNjixI8551CFZ3Vl3DxXkMz06izdXUrJQ== kasunrajapakse@Mac.home'
+            keyData: '<SSH_PUBLIC_KEY>'
           }
         ]
       }
