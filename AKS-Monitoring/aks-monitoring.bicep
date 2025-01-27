@@ -193,21 +193,6 @@ resource grafanaAdminRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' e
   scope: subscription()
 }
 
-resource MonitoringMetricsPublisherRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
-  name: '3913510d-42f4-4e42-8a64-420c390055eb'
-  scope: subscription()
-}
-
-resource AlertingRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aksCluster.id, 'omsagent', MonitoringMetricsPublisherRole.id)
-  scope: aksCluster
-  properties: {
-    roleDefinitionId: MonitoringMetricsPublisherRole.id
-    principalId: aksCluster.properties.addonProfiles.omsagent.identity.objectId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 // Assign the Monitoring Reader role to the Azure Managed Grafana system-assigned managed identity at the workspace scope
 resource monitoringReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(name, prometheus.name, monitoringReaderRole.id)
