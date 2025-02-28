@@ -1,0 +1,3 @@
+export ARC_NAME=acrtaskdemo
+
+az acr task create --registry $ACR_NAME --name acr-task-demo --image python-app:{{.Run.ID}} --context https://github.com/kasunsjc/acr-task-demo.git#main --file pyhton-app/Dockerfile --git-access-token $GIT_PAT
