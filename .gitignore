@@ -3,3 +3,6 @@
 *.pem
 *.key
 *.pfx
+*.config
+*.envrc
+keys/

@@ -1,0 +1,16 @@
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureClusterIdentity
+metadata:
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/sync-wave: "5"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+  labels:
+    clusterctl.cluster.x-k8s.io/move-hierarchy: "true"
+  name: cluster-identity
+  namespace: azure-infrastructure-system
+spec:
+  allowedNamespaces: {}
+  clientID: 2c3b4e5c-f2cd-4b37-8d22-63dee1e3c210
+  tenantID: 67e62596-f24c-4eae-9a15-e9aa38182dfd
+  type: WorkloadIdentity

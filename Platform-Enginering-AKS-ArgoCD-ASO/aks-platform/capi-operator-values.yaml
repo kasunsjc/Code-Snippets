@@ -1,0 +1,21 @@
+core:
+  cluster-api:
+    version: v1.9.6
+infrastructure:
+  azure:
+    version: v1.19.2
+addon:
+  helm:
+    version: v0.3.1
+manager:
+  featureGates:
+    core:
+      ClusterTopology: true
+      MachinePool: true
+additionalDeployments:
+  azureserviceoperator-controller-manager:
+    deployment:
+      containers:
+        - name: manager
+          args:
+            --crd-pattern: "resources.azure.com/*;containerservice.azure.com/*;keyvault.azure.com/*;managedidentity.azure.com/*;eventhub.azure.com/*;storage.azure.com/*"
