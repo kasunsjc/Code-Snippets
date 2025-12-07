@@ -51,8 +51,11 @@ param tags object = {
   ManagedBy: 'Bicep'
 }
 
+@description('Unique deployment identifier (timestamp)')
+param deploymentId string = utcNow('yyyyMMddHHmmss')
+
 // Variables
-var uniqueSuffix = uniqueString(resourceGroup().id)
+var uniqueSuffix = uniqueString(resourceGroup().id, deploymentId)
 var aksClusterName = '${namePrefix}-aks-${environment}-${uniqueSuffix}'
 var openAiName = '${namePrefix}-openai-${environment}-${uniqueSuffix}'
 var logAnalyticsName = '${namePrefix}-logs-${environment}-${uniqueSuffix}'
