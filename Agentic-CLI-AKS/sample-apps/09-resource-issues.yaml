@@ -1,0 +1,58 @@
+---
+# Application with no resource limits set (bad practice)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: no-limits-app
+  namespace: troubleshooting-demos
+  labels:
+    app: no-limits-app
+    issue: no-resource-limits
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: no-limits-app
+  template:
+    metadata:
+      labels:
+        app: no-limits-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        # No resource requests or limits defined
+---
+# Application with very high replica count causing node pressure
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: high-replica-app
+  namespace: troubleshooting-demos
+  labels:
+    app: high-replica-app
+    issue: too-many-replicas
+spec:
+  replicas: 20  # Too many replicas for cluster capacity
+  selector:
+    matchLabels:
+      app: high-replica-app
+  template:
+    metadata:
+      labels:
+        app: high-replica-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"

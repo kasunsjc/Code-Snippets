@@ -1,0 +1,45 @@
+---
+# Pod that requests more resources than available on any node
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pending-pod-app
+  namespace: troubleshooting-demos
+  labels:
+    app: pending-pod-app
+    issue: pending-pod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pending-pod-app
+  template:
+    metadata:
+      labels:
+        app: pending-pod-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "100Gi"  # Unrealistic memory request
+            cpu: "50"        # Unrealistic CPU request
+          limits:
+            memory: "100Gi"
+            cpu: "50"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pending-pod-service
+  namespace: troubleshooting-demos
+spec:
+  selector:
+    app: pending-pod-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 80

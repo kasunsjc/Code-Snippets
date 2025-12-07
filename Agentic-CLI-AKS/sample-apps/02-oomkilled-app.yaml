@@ -1,0 +1,51 @@
+---
+# Application that consumes too much memory and gets OOMKilled
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oomkilled-app
+  namespace: troubleshooting-demos
+  labels:
+    app: oomkilled-app
+    issue: out-of-memory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oomkilled-app
+  template:
+    metadata:
+      labels:
+        app: oomkilled-app
+    spec:
+      containers:
+      - name: memory-hog
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Starting memory-intensive application..."
+          # Allocate memory that exceeds the limit
+          dd if=/dev/zero of=/tmp/memory bs=1M count=256
+          sleep 3600
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"  # Too low for the workload
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oomkilled-service
+  namespace: troubleshooting-demos
+spec:
+  selector:
+    app: oomkilled-app
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080

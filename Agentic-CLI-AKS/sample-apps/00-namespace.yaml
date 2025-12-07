@@ -1,0 +1,9 @@
+---
+# Namespace for all troubleshooting demos
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: troubleshooting-demos
+  labels:
+    purpose: demo
+    troubleshooting: enabled
