@@ -1,0 +1,63 @@
+# ClusterResourcePlacement with PickN Strategy
+# This demonstrates selecting specific number of clusters
+
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: pickn-demo-placement
+spec:
+  resourceSelectors:
+    - group: ""
+      kind: Namespace
+      name: pickn-demo
+      version: v1
+    - group: apps
+      kind: Deployment
+      name: redis-demo
+      namespace: pickn-demo
+      version: v1
+  policy:
+    placementType: PickN
+    numberOfClusters: 1
+    affinity:
+      clusterAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          clusterSelectorTerms:
+            - labelSelector:
+                matchLabels:
+                  fleet.azure.com/member: "true"
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pickn-demo
+  labels:
+    app: pickn-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-demo
+  namespace: pickn-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-demo
+  template:
+    metadata:
+      labels:
+        app: redis-demo
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

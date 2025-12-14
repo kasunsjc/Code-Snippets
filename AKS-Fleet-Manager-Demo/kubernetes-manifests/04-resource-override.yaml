@@ -1,0 +1,33 @@
+# ClusterResourceOverride Example
+# This demonstrates overriding resources for specific clusters
+
+apiVersion: placement.kubernetes-fleet.io/v1alpha1
+kind: ClusterResourceOverride
+metadata:
+  name: demo-app-override
+spec:
+  clusterResourceSelectors:
+    - group: placement.kubernetes-fleet.io
+      kind: ClusterResourcePlacement
+      version: v1beta1
+      name: demo-app-placement
+  policy:
+    overrideRules:
+      - clusterSelector:
+          clusterSelectorTerms:
+            - labelSelector:
+                matchLabels:
+                  environment: production
+        jsonPatchOverrides:
+          - op: replace
+            path: /spec/replicas
+            value: 5
+      - clusterSelector:
+          clusterSelectorTerms:
+            - labelSelector:
+                matchLabels:
+                  environment: development
+        jsonPatchOverrides:
+          - op: replace
+            path: /spec/replicas
+            value: 2

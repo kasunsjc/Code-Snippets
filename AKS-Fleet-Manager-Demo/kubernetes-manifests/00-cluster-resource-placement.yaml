@@ -1,0 +1,32 @@
+# Kubernetes ClusterResourcePlacement (CRP) Example
+# This demonstrates how Fleet Manager propagates resources across member clusters
+
+apiVersion: placement.kubernetes-fleet.io/v1beta1
+kind: ClusterResourcePlacement
+metadata:
+  name: demo-app-placement
+spec:
+  resourceSelectors:
+    - group: ""
+      kind: Namespace
+      name: fleet-demo
+      version: v1
+    - group: apps
+      kind: Deployment
+      name: nginx-demo
+      namespace: fleet-demo
+      version: v1
+    - group: ""
+      kind: Service
+      name: nginx-demo
+      namespace: fleet-demo
+      version: v1
+  policy:
+    placementType: PickAll
+    affinity:
+      clusterAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          clusterSelectorTerms:
+            - labelSelector:
+                matchLabels:
+                  fleet.azure.com/member: "true"

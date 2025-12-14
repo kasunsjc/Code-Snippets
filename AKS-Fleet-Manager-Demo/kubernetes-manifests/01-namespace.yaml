@@ -1,0 +1,10 @@
+# Demo Namespace
+# This namespace will be propagated to all member clusters via Fleet Manager
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fleet-demo
+  labels:
+    app: fleet-demo
+    managed-by: fleet-manager
