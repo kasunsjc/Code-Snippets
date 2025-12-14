@@ -1,0 +1,93 @@
+# syntax=docker/dockerfile:1
+# Custom Docker Sandbox Template
+# This creates a reusable development environment for AI agents
+
+FROM docker/sandbox-templates:claude-code
+
+# Install Python development tools using uv
+RUN <<EOF
+curl -LsSf https://astral.sh/uv/install.sh | sh
+. ~/.local/bin/env
+
+# Install Python linters, formatters, and testing tools
+uv tool install ruff@latest
+uv tool install black@latest
+uv tool install mypy@latest
+uv tool install pytest@latest
+uv tool install poetry@latest
+EOF
+
+# Install Node.js development tools
+RUN <<EOF
+# Install pnpm and common Node.js tools
+npm install -g pnpm@latest
+pnpm config set store-dir ~/.pnpm-store
+
+# Install TypeScript and development tools
+pnpm add -g typescript ts-node @types/node
+pnpm add -g eslint prettier
+pnpm add -g nodemon concurrently
+EOF
+
+# Install additional utilities
+RUN <<EOF
+apt-get update
+apt-get install -y --no-install-recommends \
+    jq \
+    httpie \
+    tree \
+    bat \
+    ripgrep \
+    fd-find
+
+# Clean up
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+EOF
+
+# Configure shell with useful aliases
+RUN <<EOF
+cat >> ~/.bashrc <<'SHELL'
+
+# Useful aliases
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias grep='grep --color=auto'
+alias cat='batcat --paging=never'
+
+# Python aliases
+alias py='python3'
+alias ipy='ipython'
+alias venv='python3 -m venv'
+
+# Docker aliases
+alias d='docker'
+alias dc='docker-compose'
+alias dps='docker ps'
+alias di='docker images'
+
+# Git aliases
+alias gs='git status'
+alias ga='git add'
+alias gc='git commit'
+alias gp='git push'
+alias gl='git log --oneline --graph --decorate'
+
+SHELL
+EOF
+
+# Set environment variables
+ENV PATH="$PATH:~/.local/bin:~/.cargo/bin"
+ENV PYTHONUNBUFFERED=1
+ENV NODE_ENV=development
+
+# Set working directory
+WORKDIR /workspace
+
+# Labels
+LABEL maintainer="your-email@example.com"
+LABEL description="Custom Docker Sandbox template with Python, Node.js, and development tools"
+LABEL version="1.0"
