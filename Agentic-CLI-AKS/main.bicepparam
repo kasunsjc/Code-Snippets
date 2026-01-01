@@ -6,10 +6,10 @@ param namePrefix = 'aksagent'
 param environment = 'dev'
 
 // Location
-param location = 'eastus'
+param location = 'westeurope'
 
 // AKS Configuration
-param kubernetesVersion = '1.31.2'
+param kubernetesVersion = '1.33'
 param nodeCount = 2
 param nodeVmSize = 'Standard_D4s_v3'
 

@@ -1,0 +1,94 @@
+# ✅ Advanced Docker Hardened Image with Multi-Stage Build
+# This demonstrates production-ready best practices with DHI
+# Separates build environment from runtime for maximum security
+
+# =============================================================================
+# Stage 1: Builder Stage
+# =============================================================================
+# Use DHI dev variant for building (includes build tools)
+FROM dhi.io/python:3.13-dev AS builder
+
+# Set working directory
+WORKDIR /build
+
+# Copy requirements first to leverage Docker cache
+COPY requirements.txt .
+
+# Install dependencies in a virtual environment
+# This allows us to copy only the venv to the runtime stage
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY app.py .
+
+# =============================================================================
+# Stage 2: Runtime Stage (Production)
+# =============================================================================
+# Use minimal DHI runtime image for production
+FROM dhi.io/python:3.13
+
+# Set labels for better image management and compliance
+LABEL maintainer="your-email@example.com" \
+      description="Advanced DHI Multi-Stage Flask Demo" \
+      version="1.0.0" \
+      security.hardened="true" \
+      security.slsa="level-3" \
+      security.sbom="signed" \
+      org.opencontainers.image.source="https://github.com/your-repo"
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy application code from builder
+COPY --from=builder /build/app.py /app/
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=8000
+
+# Expose only necessary port
+EXPOSE 8000
+
+# Health check for container orchestrators
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ["/opt/venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+
+# DHI images already run as non-root (UID 65532)
+# This is explicit for documentation
+USER 65532:65532
+
+# Use exec form for proper signal handling
+CMD ["/opt/venv/bin/python", "/app/app.py"]
+
+# =============================================================================
+# Benefits of this Advanced DHI Multi-Stage Build:
+# =============================================================================
+# ✅ Multi-stage build separates build and runtime
+# ✅ Uses DHI dev variant for building
+# ✅ Uses minimal DHI runtime for production
+# ✅ Virtual environment isolation
+# ✅ No build tools in final image
+# ✅ Even smaller final image size
+# ✅ All DHI security benefits (SLSA 3, SBOM, signatures)
+# ✅ Health check included
+# ✅ Explicit non-root user
+# ✅ Proper labels for image management
+# ✅ Optimized for production workloads
+#
+# To build and verify:
+# docker build -f Dockerfile.advanced -t demo-app:advanced .
+# docker scout cves demo-app:advanced
+# docker images demo-app:advanced
+# docker run -d -p 8003:8000 demo-app:advanced
+#
+# To verify DHI base image security:
+# docker scout sbom dhi.io/python:3.13
+# docker scout compare demo-app:advanced --to demo-app:standard
+# =============================================================================

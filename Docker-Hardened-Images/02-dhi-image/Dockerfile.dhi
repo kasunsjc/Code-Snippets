@@ -1,0 +1,66 @@
+# ✅ Docker Hardened Image Dockerfile
+# This uses Docker's official hardened Python image from dhi.io
+# Demonstrates best practices with DHI using multi-stage build
+
+# =============================================================================
+# Stage 1: Builder Stage (with pip and build tools)
+# =============================================================================
+FROM dhi.io/python:3.13-dev AS builder
+
+WORKDIR /build
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+
+# Create a virtual environment and install packages
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# =============================================================================
+# Stage 2: Runtime Stage (minimal production image)
+# =============================================================================
+FROM dhi.io/python:3.13
+
+# Set working directory
+WORKDIR /app
+
+# Copy the entire virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Copy application code
+COPY app.py .
+
+# Set PATH to use the virtual environment
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Expose port
+EXPOSE 8000
+
+# The DHI image already runs as non-root (UID 65532)
+# No need to explicitly set USER
+
+# Run the application
+CMD ["python", "app.py"]
+
+# Benefits of this DHI-based image:
+# ✅ Uses dhi.io/python:3.13 (~35 MB vs 412 MB)
+# ✅ Multi-stage build: dev variant for building, minimal for runtime
+# ✅ Runs as non-root user (UID 65532) by default
+# ✅ Minimal packages (~80 vs 610 packages)
+# ✅ Near-zero CVEs (0H, 0M, 0L vs 1H, 5M, 141L)
+# ✅ Includes signed SBOM and provenance
+# ✅ SLSA Build Level 3 compliance
+# ✅ Cryptographically signed
+# ✅ VEX statements included
+# ✅ No shell or package manager in runtime (reduced attack surface)
+# ✅ Automatically patched by Docker
+# ✅ Free and Apache 2.0 licensed
+#
+# Note: DHI production images don't include pip (by design for security)
+# That's why we use multi-stage build with -dev variant for building
+#
+# To verify security metadata:
+# docker scout sbom dhi.io/python:3.13
+# docker scout attestation dhi.io/python:3.13
+# cosign verify dhi.io/python:3.13
