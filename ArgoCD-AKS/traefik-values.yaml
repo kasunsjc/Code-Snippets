@@ -1,0 +1,127 @@
+# Traefik Helm Chart Values
+# This configuration sets up Traefik as an ingress controller
+
+# Deployment configuration
+deployment:
+  enabled: true
+  kind: Deployment
+  replicas: 2
+
+# Enable dashboard
+ingressRoute:
+  dashboard:
+    enabled: true
+    # Secure the dashboard with basic auth or disable in production
+    matchRule: Host(`traefik.argo-demo.kasunrajapakse.xyz`)
+    entryPoints: ["websecure"]
+    # Add middleware for authentication if needed
+
+# Ports configuration
+ports:
+  web:
+    port: 8000
+    exposedPort: 80
+    protocol: TCP
+  websecure:
+    port: 8443
+    exposedPort: 443
+    protocol: TCP
+    # Enable TLS
+    tls:
+      enabled: true
+      # Use cert-manager for certificate management
+      certResolver: letsencrypt
+  metrics:
+    port: 9100
+    expose:
+      default: false
+    exposedPort: 9100
+    protocol: TCP
+
+# Service configuration
+service:
+  enabled: true
+  type: LoadBalancer
+  annotations: {}
+  labels: {}
+  spec:
+    # Preserve client source IP
+    externalTrafficPolicy: Local
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+# Logs
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true
+    format: json
+
+# Metrics
+metrics:
+  prometheus:
+    enabled: true
+    entryPoint: metrics
+    service:
+      enabled: true
+    serviceMonitor:
+      enabled: false
+
+# Global arguments
+globalArguments:
+  - "--global.checknewversion"
+  - "--global.sendanonymoususage=false"
+
+# Additional arguments
+additionalArguments: []
+  # Note: We're using cert-manager for TLS certificates, not Traefik's built-in ACME
+  # This allows us to run multiple Traefik replicas for high availability
+
+# Persistence is not needed when using cert-manager
+persistence:
+  enabled: false
+
+# Security context
+securityContext:
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: true
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+
+podSecurityContext:
+  fsGroup: 65532
+  fsGroupChangePolicy: "OnRootMismatch"
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

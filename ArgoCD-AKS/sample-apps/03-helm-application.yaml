@@ -1,0 +1,77 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-helm-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # Helm chart repository
+    repoURL: https://charts.bitnami.com/bitnami
+    chart: nginx
+    targetRevision: 18.2.4
+    
+    # Helm values
+    helm:
+      # Values file from the repository
+      # valueFiles:
+      #   - values.yaml
+      
+      # Inline values (these will override values.yaml)
+      values: |
+        replicaCount: 2
+        
+        image:
+          registry: docker.io
+          repository: bitnami/nginx
+          tag: 1.27.3-debian-12-r0
+        
+        service:
+          type: LoadBalancer
+          port: 80
+        
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        
+        ingress:
+          enabled: false
+        
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: false
+      
+      # Additional parameters
+      parameters:
+        - name: replicaCount
+          value: "2"
+        - name: service.type
+          value: LoadBalancer
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nginx-helm
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+        factor: 2

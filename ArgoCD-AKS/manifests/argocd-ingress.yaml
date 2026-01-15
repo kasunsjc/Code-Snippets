@@ -1,0 +1,73 @@
+---
+# Certificate managed by cert-manager
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-tls
+  namespace: argocd
+spec:
+  secretName: argocd-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - argo-demo.kasunrajapakse.xyz
+  usages:
+    - digital signature
+    - key encipherment
+---
+# Middleware for ArgoCD - Handle gRPC properly
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+    customResponseHeaders:
+      X-Frame-Options: "SAMEORIGIN"
+      X-Content-Type-Options: "nosniff"
+      X-XSS-Protection: "1; mode=block"
+---
+# IngressRoute for ArgoCD Server (HTTPS)
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd-server
+  namespace: argocd
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`argo-demo.kasunrajapakse.xyz`)
+      priority: 10
+      services:
+        - name: argocd-server
+          port: 80
+      middlewares:
+        - name: argocd-server
+  tls:
+    secretName: argocd-tls
+---
+# IngressRoute for ArgoCD Server gRPC
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: argocd-server-grpc
+  namespace: argocd
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - kind: Rule
+      match: Host(`argo-demo.kasunrajapakse.xyz`) && Headers(`Content-Type`, `application/grpc`)
+      priority: 11
+      services:
+        - name: argocd-server
+          port: 80
+          scheme: h2c
+  tls:
+    secretName: argocd-tls

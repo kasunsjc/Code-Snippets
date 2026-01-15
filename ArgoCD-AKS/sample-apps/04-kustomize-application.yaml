@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kustomize-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/argoproj/argocd-example-apps.git
+    targetRevision: HEAD
+    path: kustomize-guestbook
+    
+    # Kustomize configuration
+    kustomize:
+      # Kustomize version (optional)
+      version: v5.0.0
+      
+      # Name prefix to add to all resources
+      namePrefix: demo-
+      
+      # Name suffix to add to all resources
+      nameSuffix: -v1
+      
+      # Common labels to add to all resources
+      commonLabels:
+        environment: dev
+        managed-by: argocd
+      
+      # Common annotations to add to all resources
+      commonAnnotations:
+        deployed-by: argocd
+      
+      # Images to override
+      images:
+        - gcr.io/heptio-images/ks-guestbook-demo:0.2
+      
+      # Replicas override
+      replicas:
+        - name: guestbook-ui
+          count: 3
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kustomize-demo
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+        factor: 2

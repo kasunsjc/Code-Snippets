@@ -1,0 +1,118 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # Repository containing your application manifests
+    repoURL: https://github.com/argoproj/argocd-example-apps.git
+    targetRevision: HEAD
+    # Path to the directory containing ArgoCD Application manifests
+    path: apps
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    
+    syncOptions:
+      - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: multi-env-apps
+  namespace: argocd
+spec:
+  # Generators define how to create multiple Applications
+  generators:
+    # List generator - manually define environments
+    - list:
+        elements:
+          - env: dev
+            cluster: https://kubernetes.default.svc
+            replicaCount: "1"
+          - env: staging
+            cluster: https://kubernetes.default.svc
+            replicaCount: "2"
+          - env: prod
+            cluster: https://kubernetes.default.svc
+            replicaCount: "3"
+  
+  template:
+    metadata:
+      name: 'myapp-{{env}}'
+      labels:
+        environment: '{{env}}'
+    spec:
+      project: default
+      
+      source:
+        repoURL: https://github.com/argoproj/argocd-example-apps.git
+        targetRevision: HEAD
+        path: guestbook
+        
+        # Override replicas based on environment
+        kustomize:
+          replicas:
+            - name: guestbook-ui
+              count: '{{replicaCount}}'
+          
+          commonLabels:
+            environment: '{{env}}'
+      
+      destination:
+        server: '{{cluster}}'
+        namespace: 'myapp-{{env}}'
+      
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: git-directory-apps
+  namespace: argocd
+spec:
+  generators:
+    # Git directory generator - automatically create apps from repo structure
+    - git:
+        repoURL: https://github.com/argoproj/argocd-example-apps.git
+        revision: HEAD
+        directories:
+          - path: apps/*
+  
+  template:
+    metadata:
+      name: '{{path.basename}}'
+    spec:
+      project: default
+      
+      source:
+        repoURL: https://github.com/argoproj/argocd-example-apps.git
+        targetRevision: HEAD
+        path: '{{path}}'
+      
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{path.basename}}'
+      
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

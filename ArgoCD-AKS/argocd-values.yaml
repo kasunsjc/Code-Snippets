@@ -1,0 +1,216 @@
+# ArgoCD Helm Chart Values
+# This configuration sets up ArgoCD with high availability and production-ready settings
+
+global:
+  domain: argo-demo.kasunrajapakse.xyz
+
+# Redis HA for improved reliability
+redis-ha:
+  enabled: true
+  haproxy:
+    enabled: true
+    replicas: 3
+    metrics:
+      enabled: true
+
+# Controller configuration
+controller:
+  replicas: 1
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# Server configuration
+server:
+  replicas: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+  
+  # Ingress configuration
+  ingress:
+    enabled: false
+    # Note: We're using Traefik IngressRoute CRD instead of standard Ingress
+    # See manifests/argocd-ingress.yaml for the IngressRoute configuration
+  
+  # ArgoCD Server extra args for running behind ingress
+  extraArgs:
+    - --insecure  # Disable internal TLS as Traefik handles it
+  
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # ArgoCD Server configuration
+  config: {}
+    # OIDC configuration can be added here if needed
+    # oidc.config: |
+    #   name: Azure AD
+    #   issuer: https://login.microsoftonline.com/<tenant-id>/v2.0
+    #   clientID: <client-id>
+    #   clientSecret: $oidc.azure.clientSecret
+    #   requestedScopes:
+    #     - openid
+    #     - profile
+    #     - email
+
+  # RBAC configuration
+  rbacConfig:
+    policy.default: role:readonly
+    policy.csv: |
+      p, role:org-admin, applications, *, */*, allow
+      p, role:org-admin, clusters, get, *, allow
+      p, role:org-admin, repositories, get, *, allow
+      p, role:org-admin, repositories, create, *, allow
+      p, role:org-admin, repositories, update, *, allow
+      p, role:org-admin, repositories, delete, *, allow
+      g, admin@example.com, role:org-admin
+
+# Repo Server configuration
+repoServer:
+  replicas: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 50
+    targetMemoryUtilizationPercentage: 50
+  
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# ApplicationSet Controller
+applicationSet:
+  replicas: 2
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Notifications Controller (optional but recommended)
+notifications:
+  enabled: true
+  argocdUrl: https://argocd.example.com
+  
+  # Notification services configuration
+  # Configure Slack, Teams, Email, etc.
+  notifiers:
+    service.slack: |
+      token: $slack-token
+  
+  # Notification templates
+  templates:
+    template.app-deployed: |
+      message: |
+        Application {{.app.metadata.name}} is now running new version.
+      slack:
+        attachments: |
+          [{
+            "title": "{{ .app.metadata.name}}",
+            "title_link":"{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+            "color": "#18be52",
+            "fields": [
+            {
+              "title": "Sync Status",
+              "value": "{{.app.status.sync.status}}",
+              "short": true
+            },
+            {
+              "title": "Repository",
+              "value": "{{.app.spec.source.repoURL}}",
+              "short": true
+            }
+            ]
+          }]
+  
+  # Notification triggers
+  triggers:
+    trigger.on-deployed: |
+      - description: Application is synced and healthy
+        send:
+        - app-deployed
+        when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+
+# Dex (optional - for SSO)
+dex:
+  enabled: false
+  # Configure Dex for OAuth/OIDC integration if needed
+
+# Configs
+configs:
+  # Add any additional configurations
+  params:
+    server.insecure: false
+    server.rootpath: ''
+    server.staticassets: /shared/app
+    
+  # Repository credentials
+  credentialTemplates: {}
+  
+  repositories:
+    argocd-example-apps:
+      url: https://github.com/argoproj/argocd-example-apps
+      name: argocd-example-apps
+      type: git
+    kasun-argocd-example-apps:
+      url: https://github.com/kasunsjc/argocd-example-apps
+      name: kasun-argocd-example-apps
+      type: git
+
+  secret:
+    # Create the secret (required)
+    createSecret: true
+    # ArgoCD will automatically generate a random initial admin password
+    # and store it in the 'argocd-initial-admin-secret' secret
+    # Retrieve it with: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+    # 
+    # To set a custom password instead, uncomment and set argocdServerAdminPassword:
+    # argocdServerAdminPassword: "$2a$10$rRyBsGSHK6.uc8fntPwVIuLVHgsAhAX7TcdrqW/XGaN2opqHbQQW6"
+    # (Generate hash using: htpasswd -nbBC 10 "" $ARGO_PWD | tr -d ':\n' | sed 's/$2y/$2a/')
+
+# Additional volumes for custom plugins or tools
+volumes: []
+
+# Additional volume mounts
+volumeMounts: []

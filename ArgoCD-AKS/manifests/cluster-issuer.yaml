@@ -1,0 +1,42 @@
+---
+# ClusterIssuer for Let's Encrypt Staging (for testing)
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # Let's Encrypt staging server
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: admin@kasunrajapakse.xyz
+    
+    # Secret to store the ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-staging-key
+    
+    # ACME HTTP-01 challenge solver
+    solvers:
+    - http01:
+        ingress:
+          class: traefik
+---
+# ClusterIssuer for Let's Encrypt Production
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Let's Encrypt production server
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@kasunrajapakse.xyz
+    
+    # Secret to store the ACME account private key
+    privateKeySecretRef:
+      name: letsencrypt-prod-key
+    
+    # ACME HTTP-01 challenge solver
+    solvers:
+    - http01:
+        ingress:
+          class: traefik

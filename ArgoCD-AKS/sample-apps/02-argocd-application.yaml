@@ -1,0 +1,72 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app
+  namespace: argocd
+  # Add finalizer to ensure proper cleanup
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  # The project the application belongs to
+  project: default
+
+  # Source of the application manifests
+  source:
+    # Repository URL (replace with your repository)
+    repoURL: https://github.com/argoproj/argocd-example-apps.git
+    # Target revision (branch, tag, or commit SHA)
+    targetRevision: HEAD
+    # Path within the repository
+    path: guestbook
+
+  # Destination cluster and namespace
+  destination:
+    # Cluster URL (in-cluster by default)
+    server: https://kubernetes.default.svc
+    # Target namespace
+    namespace: demo-app
+
+  # Sync policy
+  syncPolicy:
+    # Automated sync settings
+    automated:
+      # Automatically sync when changes are detected
+      prune: true
+      # Automatically sync when the cluster state doesn't match Git
+      selfHeal: true
+      # Allow empty resources to be pruned
+      allowEmpty: false
+
+    # Sync options
+    syncOptions:
+      # Create namespace if it doesn't exist
+      - CreateNamespace=true
+      # Validate resources before applying
+      - Validate=true
+      # Use server-side apply
+      - ServerSideApply=true
+      # Prune last (cleanup after other resources are synced)
+      - PruneLast=true
+
+    # Retry strategy for failed syncs
+    retry:
+      # Maximum number of retry attempts
+      limit: 5
+      # Backoff settings
+      backoff:
+        # Initial delay between retries
+        duration: 5s
+        # Maximum delay between retries
+        maxDuration: 3m
+        # Factor to multiply the duration for each retry
+        factor: 2
+
+  # Ignore differences in certain fields
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+  # RevisionHistoryLimit limits the number of items kept in the application's revision history
+  revisionHistoryLimit: 10

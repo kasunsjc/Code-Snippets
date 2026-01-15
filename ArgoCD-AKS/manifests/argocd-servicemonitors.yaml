@@ -1,0 +1,149 @@
+---
+# ServiceMonitor for ArgoCD Server
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-server-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-server
+    app.kubernetes.io/component: server
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-server-metrics
+  
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# ServiceMonitor for ArgoCD Application Controller
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-controller-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-application-controller
+    app.kubernetes.io/component: application-controller
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-application-controller
+  
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# ServiceMonitor for ArgoCD Repo Server
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-repo-server-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-repo-server
+    app.kubernetes.io/component: repo-server
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-repo-server
+  
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# ServiceMonitor for ArgoCD ApplicationSet Controller
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-applicationset-controller-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-applicationset-controller
+    app.kubernetes.io/component: applicationset-controller
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-applicationset-controller
+  
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# ServiceMonitor for ArgoCD Notifications Controller
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-notifications-controller-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-notifications-controller
+    app.kubernetes.io/component: notifications-controller
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-notifications-controller
+  
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http
+
+---
+# ServiceMonitor for Redis HA
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: argocd-redis-ha-metrics
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-redis-ha
+    app.kubernetes.io/component: redis
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: argocd-redis-ha
+  
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    scheme: http

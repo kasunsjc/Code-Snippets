@@ -1,0 +1,60 @@
+# Cert-Manager Helm Chart Values
+# This configuration sets up cert-manager for automatic TLS certificate management
+
+# Install CRDs as part of the Helm release
+installCRDs: true
+
+# Global configuration
+global:
+  # Leader election namespace
+  leaderElection:
+    namespace: cert-manager
+
+# Replica count for cert-manager controller
+replicaCount: 1
+
+# Resources for cert-manager controller
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+# Prometheus metrics
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: false
+    prometheusInstance: default
+    interval: 60s
+    scrapeTimeout: 30s
+
+# Webhook configuration
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# CA Injector configuration
+cainjector:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
