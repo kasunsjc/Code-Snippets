@@ -19,7 +19,7 @@ param logAnalyticsWorkspaceId string
 param tags object = {}
 
 @description('System node pool VM size')
-param systemNodePoolVmSize string = 'Standard_DS2_v2'
+param systemNodePoolVmSize string = 'Standard_D2s_v3'
 
 @description('System node pool node count')
 param systemNodePoolNodeCount int = 2
