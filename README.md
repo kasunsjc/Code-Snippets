@@ -28,18 +28,16 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 📂 **Location:** [`ACR-Task/`](./ACR-Task/)
 
 **What's Included:**
-- Azure CLI commands for ACR Task builds
+- Example ACR Task command script (`command.azcli`)
 - Sample Python application with Dockerfile
-- Automated build pipeline examples
 
 **Key Features:**
 - Build images without local Docker
 - Automatic image tagging with run IDs
-- Integration with Azure DevOps/GitHub Actions
 
 **Quick Start:**
 ```bash
-cd ACR-Task
+cd ACR-Task/python-app
 export ACR_NAME=your-acr-name
 az acr build -t $ACR_NAME.azurecr.io/hello-world:{{.Run.ID}} --registry $ACR_NAME -f ./Dockerfile .
 ```
@@ -335,7 +333,7 @@ docker scout cves scout-demo
 ### By Technology
 | Category | Demos |
 |----------|-------|
-| **Azure Kubernetes Service** | AKS-Fleet-Manager, AKS-Monitoring, AKS-Nginx-Add-on, AKS-Node-Autoprovision, AKS-NodeRG-Lockdown, Agentic-CLI-AKS |
+| **Azure Kubernetes Service** | AKS-Fleet-Manager-Demo, AKS-Monitoring, AKS-Nginx-Add-on, AKS-Node-Autoprovision, AKS-NodeRG-Lockdown, Agentic-CLI-AKS |
 | **Docker** | Docker-Hardened-Images, Docker-Sandboxes-Demo, Docker-Scout |
 | **Azure Container Registry** | ACR-Task, Docker-Scout |
 | **Security** | Docker-Hardened-Images, AKS-NodeRG-Lockdown, Docker-Scout |

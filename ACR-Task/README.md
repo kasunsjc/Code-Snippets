@@ -11,7 +11,7 @@ Azure Container Registry (ACR) Tasks allows you to build, test, and push contain
 ```
 ACR-Task/
 ├── README.md           # This documentation
-├── command.azcli       # Azure CLI commands for ACR Tasks
+├── command.azcli       # Azure CLI commands for ACR Tasks (run from python-app/ directory)
 └── python-app/         # Sample Python application
     ├── Dockerfile      # Container image definition
     ├── app.py          # Python application code
