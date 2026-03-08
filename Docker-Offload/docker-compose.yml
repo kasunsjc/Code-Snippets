@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        BUILD_DATE: ${BUILD_DATE:-2024-01-01}
+    image: docker-offload-demo:latest
+    container_name: offload-demo-web
+    ports:
+      - "8080:8080"
+    environment:
+      - DEPLOYMENT_TYPE=Docker Offload
+      - PORT=8080
+      - VERSION=1.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Example: Add a database service to demonstrate multi-container offload
+  redis:
+    image: redis:7-alpine
+    container_name: offload-demo-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+# Networks and volumes work seamlessly with Docker Offload
+networks:
+  default:
+    name: offload-demo-network
