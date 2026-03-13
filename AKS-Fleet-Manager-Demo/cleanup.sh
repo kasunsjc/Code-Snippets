@@ -11,14 +11,19 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Configuration
-RESOURCE_GROUP="rg-aks-fleet-demo"
+# Default resource group name
+DEFAULT_RG="rg-aks-fleet-demo"
 
 echo -e "${RED}======================================${NC}"
 echo -e "${RED}AKS Fleet Manager Demo Cleanup${NC}"
 echo -e "${RED}======================================${NC}"
 echo ""
 
+# Prompt for resource group name
+read -p "Enter the resource group name [$DEFAULT_RG]: " RESOURCE_GROUP
+RESOURCE_GROUP=${RESOURCE_GROUP:-$DEFAULT_RG}
+
+echo ""
 echo -e "${YELLOW}This will delete the following:${NC}"
 echo "  - Resource Group: $RESOURCE_GROUP"
 echo "  - Fleet Manager and all member clusters"
@@ -57,12 +62,14 @@ fi
 
 # Clean up kubectl contexts
 echo -e "${YELLOW}Cleaning up kubectl contexts...${NC}"
-CONTEXTS=$(kubectl config get-contexts -o name | grep -E "fleet-hub|aks-member")
+CONTEXTS=$(kubectl config get-contexts -o name 2>/dev/null | grep -iE "fleet|member|hub" || true)
 
 if [ ! -z "$CONTEXTS" ]; then
     for context in $CONTEXTS; do
         echo "  Removing context: $context"
         kubectl config delete-context $context 2>/dev/null || true
+        kubectl config delete-cluster $context 2>/dev/null || true
+        kubectl config delete-user $context 2>/dev/null || true
     done
     echo -e "${GREEN}✓ Kubectl contexts cleaned up${NC}"
 else
