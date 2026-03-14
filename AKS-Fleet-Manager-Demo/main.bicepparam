@@ -1,13 +1,11 @@
 using './main.bicep'
 
 param location = 'northeurope'
-param memberCluster1Location = 'westeurope'
-param memberCluster2Location = 'northeurope'
-param cluster1KubernetesVersion = '1.33.5'
-param cluster2KubernetesVersion = '1.33.5'
-param cluster3KubernetesVersion = '1.32'
-param cluster4KubernetesVersion = '1.32'
-param cluster5KubernetesVersion = '1.32'
+param clusterLocation1 = 'westeurope'
+param clusterLocation2 = 'northeurope'
+param devKubernetesVersion = '1.33.5'
+param accKubernetesVersion = '1.33.5'
+param prodKubernetesVersion = '1.32'
 param environmentName = 'demo'
 param resourceGroupName = 'rg-aks-fleet-demo-01'
 param enableHubCluster = true

@@ -4,7 +4,7 @@ A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager ca
 
 ## 📋 Overview
 
-This demo deploys an AKS Fleet Manager with two member clusters across different Azure regions, demonstrating key fleet management capabilities including:
+This demo deploys an AKS Fleet Manager with **six AKS member clusters** organised by environment across different Azure regions, demonstrating key fleet management capabilities including:
 
 - **Multi-cluster orchestration**: Manage multiple AKS clusters as a single fleet
 - **Resource propagation**: Deploy applications across multiple clusters from a single point
@@ -12,34 +12,32 @@ This demo deploys an AKS Fleet Manager with two member clusters across different
 - **Multi-cluster services**: Enable service discovery across member clusters
 - **Update management**: Coordinate Kubernetes upgrades across all fleet members
 - **Resource overrides**: Customize resource configurations per cluster
+- **Dynamic fleet membership**: Connect existing standalone clusters to the fleet (demonstrated with dev-2)
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│             AKS Fleet Manager (Hub)                 │
-│                                                     │
-│  ┌───────────────────────────────────────────┐    │
-│  │  ClusterResourcePlacement Controller       │    │
-│  │  Multi-cluster Service Discovery          │    │
-│  │  Update Orchestration                     │    │
-│  └───────────────────────────────────────────┘    │
-└────────────┬──────────────┬─────────────────────────┘
-             │              │
-     ┌───────┴──────┐  ┌────┴───────┐
-     │              │  │            │
-┌────▼─────────┐   │  │  ┌─────────▼────┐
-│ Member       │   │  │  │  Member      │
-│ Cluster 1    │   │  │  │  Cluster 2   │
-│ (East US)    │   │  │  │  (West US)   │
-│              │   │  │  │              │
-│ - Workloads  │   │  │  │ - Workloads  │
-│ - Services   │   │  │  │ - Services   │
-│ - Networking │   │  │  │ - Networking │
-└──────────────┘   │  │  └──────────────┘
-                   │  │
-                   └──┘
-           Fleet Membership
+┌──────────────────────────────────────────────────────────────────┐
+│                   AKS Fleet Manager (Hub)                        │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  ClusterResourcePlacement Controller                      │   │
+│  │  Multi-cluster Service Discovery                         │   │
+│  │  Update Orchestration                                    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────┬──────────┬──────────┬──────────┬──────────┬───────────────┘
+      │          │          │          │          │
+┌─────▼────┐ ┌──▼───────┐ ┌▼────────┐ ┌▼────────┐ ┌▼────────┐
+│ Dev 1    │ │ ACC 1    │ │ ACC 2   │ │ Prod 1  │ │ Prod 2  │
+│(W.Europe)│ │(W.Europe)│ │(N.Europe│ │(W.Europe│ │(N.Europe│
+│ ✅ Fleet  │ │ ✅ Fleet  │ │ ✅ Fleet │ │ ✅ Fleet │ │ ✅ Fleet │
+└──────────┘ └──────────┘ └─────────┘ └─────────┘ └─────────┘
+
+┌──────────┐
+│ Dev 2    │  ⚠️ Standalone (not in fleet)
+│(N.Europe)│  → Use connect-cluster.sh to join
+│ ⚠️ Alone  │
+└──────────┘
 ```
 
 ## 📁 Project Structure
@@ -50,6 +48,7 @@ AKS-Fleet-Manager-Demo/
 ├── main.bicepparam               # Deployment parameters
 ├── deploy.sh                     # Infrastructure deployment script
 ├── deploy-samples.sh             # Sample applications deployment
+├── connect-cluster.sh            # Connect standalone cluster to fleet
 ├── cleanup.sh                    # Resource cleanup script
 ├── commands.sh                   # Useful commands reference
 ├── README.md                     # This file
@@ -58,6 +57,7 @@ AKS-Fleet-Manager-Demo/
 │   ├── fleet-member.bicep       # Fleet membership configuration
 │   ├── aks-member.bicep         # AKS member cluster
 │   ├── vnet.bicep               # Virtual network
+│   ├── fleet-rbac.bicep         # Fleet RBAC role assignments
 │   └── log-analytics.bicep      # Monitoring workspace
 └── kubernetes-manifests/         # K8s sample manifests
     ├── 00-cluster-resource-placement.yaml
@@ -116,12 +116,15 @@ Edit [main.bicepparam](main.bicepparam) to customize:
 This script will:
 - Create a resource group
 - Deploy Fleet Manager with hub cluster
-- Deploy two member AKS clusters in different regions
+- Deploy **six AKS clusters** organised by environment:
+  - **Dev**: `aks-dev-1-demo` (fleet member) + `aks-dev-2-demo` (standalone)
+  - **ACC**: `aks-acc-1-demo` + `aks-acc-2-demo` (both fleet members)
+  - **Prod**: `aks-prod-1-demo` + `aks-prod-2-demo` (both fleet members)
 - Configure networking and monitoring
-- Register clusters with the fleet
+- Register 5 clusters with the fleet (dev-2 excluded for connection demo)
 - Configure kubectl contexts
 
-**Expected time:** 15-20 minutes
+**Expected time:** 20-25 minutes
 
 ### 4. Assign RBAC Permissions
 After deployment, assign the Fleet Manager admin role to access the hub cluster:
@@ -175,11 +178,14 @@ kubectl get clusterresourceplacement
 
 Check resources in member clusters:
 ```bash
-# Member Cluster 1
-kubectl get pods -n fleet-demo --context aks-member1-demo
+# Dev Cluster 1
+kubectl get pods -n fleet-demo --context aks-dev-1-demo
 
-# Member Cluster 2
-kubectl get pods -n fleet-demo --context aks-member2-demo
+# ACC Cluster 1
+kubectl get pods -n fleet-demo --context aks-acc-1-demo
+
+# Prod Cluster 1
+kubectl get pods -n fleet-demo --context aks-prod-1-demo
 ```
 
 ## 🎓 Demo Scenarios
@@ -200,8 +206,9 @@ kubectl get clusterresourceplacement demo-app-placement
 kubectl describe clusterresourceplacement demo-app-placement
 
 # Check on member clusters
-kubectl get pods -n fleet-demo --context aks-member1-demo
-kubectl get pods -n fleet-demo --context aks-member2-demo
+kubectl get pods -n fleet-demo --context aks-dev-1-demo
+kubectl get pods -n fleet-demo --context aks-acc-1-demo
+kubectl get pods -n fleet-demo --context aks-prod-1-demo
 ```
 
 **Key Learning:** Resources defined once on the hub are automatically propagated to all matching member clusters.
@@ -233,8 +240,8 @@ kubectl label membercluster <member2-name> environment=development
 kubectl apply -f kubernetes-manifests/04-resource-override.yaml
 
 # Verify different replica counts
-kubectl get deployment nginx-demo -n fleet-demo --context aks-member1-demo
-kubectl get deployment nginx-demo -n fleet-demo --context aks-member2-demo
+kubectl get deployment nginx-demo -n fleet-demo --context aks-prod-1-demo
+kubectl get deployment nginx-demo -n fleet-demo --context aks-dev-1-demo
 ```
 
 **Key Learning:** Override policies allow customization while maintaining centralized management.
@@ -251,11 +258,87 @@ kubectl apply -f kubernetes-manifests/05-multi-cluster-service.yaml
 kubectl get serviceexport -n multi-cluster-svc
 
 # Verify service in member clusters
-kubectl get svc backend-service -n multi-cluster-svc --context aks-member1-demo
-kubectl get svc backend-service -n multi-cluster-svc --context aks-member2-demo
+kubectl get svc backend-service -n multi-cluster-svc --context aks-dev-1-demo
+kubectl get svc backend-service -n multi-cluster-svc --context aks-prod-1-demo
 ```
 
 **Key Learning:** Services can be discovered and consumed across cluster boundaries.
+
+### Scenario 5: Connect Standalone Cluster to Fleet
+
+Demonstrates adding an existing AKS cluster to a Fleet Manager. The demo includes a Dev cluster (`aks-dev-2-demo`) that is **not connected** to the fleet during initial deployment.
+
+**Why this matters:** In real-world scenarios, you often have existing AKS clusters that need to be gradually onboarded to a Fleet Manager for centralized management.
+
+#### Automatic Connection (Using Helper Script)
+
+The easiest way to connect the standalone cluster:
+
+```bash
+# Connect dev-2 cluster to the fleet
+./connect-cluster.sh rg-aks-fleet-demo-01
+
+# Or specify cluster name explicitly
+./connect-cluster.sh rg-aks-fleet-demo-01 aks-dev-2-demo
+```
+
+The script will:
+- Find the Fleet Manager in the resource group
+- Detect standalone clusters not yet connected
+- Create the fleet membership
+- Verify the connection
+
+#### Manual Connection (Step-by-Step)
+
+For learning purposes, connect the cluster manually:
+
+```bash
+# 1. Get the resource group name (from deployment outputs)
+RESOURCE_GROUP="rg-aks-fleet-demo-01"
+
+# 2. Get the Fleet Manager name
+FLEET_NAME=$(az fleet list --resource-group $RESOURCE_GROUP --query "[0].name" -o tsv)
+
+# 3. Get the standalone cluster resource ID
+CLUSTER_RESOURCE_ID=$(az aks show \
+  --name aks-dev-2-demo \
+  --resource-group $RESOURCE_GROUP \
+  --query id -o tsv)
+
+# 4. Create fleet membership
+az fleet member create \
+  --fleet-name $FLEET_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --name aks-dev-2-demo-member \
+  --member-cluster-id $CLUSTER_RESOURCE_ID
+
+# 5. Verify the connection
+az fleet member list \
+  --fleet-name $FLEET_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --output table
+
+# 6. Check from fleet hub
+kubectl config use-context fleet-hub
+kubectl get memberclusters
+```
+
+#### Test Resource Propagation to New Member
+
+After connecting dev-2, test that resources propagate correctly:
+
+```bash
+# The existing PickAll placement should now include dev-2
+kubectl get clusterresourceplacement demo-app-placement -o yaml
+
+# Verify resources deployed to dev-2
+kubectl get pods -n fleet-demo --context aks-dev-2-demo
+
+# If not yet deployed, apply placement again
+kubectl apply -f kubernetes-manifests/00-cluster-resource-placement.yaml
+```
+
+**Key Learning:** Fleet Manager automatically propagates existing ClusterResourcePlacements to newly joined members that match the placement criteria.
 
 ## 🔍 Key Concepts
 

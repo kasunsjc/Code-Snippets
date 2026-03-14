@@ -37,6 +37,23 @@ az fleet member delete \
   --resource-group rg-aks-fleet-demo \
   --fleet-name <fleet-name> \
   --name <member-name>
+
+# Connect a standalone cluster to fleet
+# Get cluster resource ID
+CLUSTER_RESOURCE_ID=$(az aks show \
+  --name <cluster-name> \
+  --resource-group rg-aks-fleet-demo \
+  --query id -o tsv)
+
+# Create fleet membership
+az fleet member create \
+  --fleet-name <fleet-name> \
+  --resource-group rg-aks-fleet-demo \
+  --name <member-name> \
+  --member-cluster-id $CLUSTER_RESOURCE_ID
+
+# Or use the helper script
+./connect-cluster.sh rg-aks-fleet-demo-01 aks-dev-2-demo
 ```
 
 ## Kubernetes Fleet Commands

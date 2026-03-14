@@ -1,15 +1,16 @@
 // AKS Fleet Manager Demo - Main Deployment
-// This template deploys an AKS Fleet Manager with multiple member clusters
+// This template deploys an AKS Fleet Manager with environment-based member clusters
+// Dev (2), ACC (2), Prod (2) - one Dev cluster is standalone for fleet connection demo
 targetScope = 'subscription'
 
 @description('Azure region for the resource group and Fleet Manager')
 param location string = 'westeurope'
 
-@description('Azure region for member cluster 1')
-param memberCluster1Location string = 'westeurope'
+@description('Azure region for cluster location 1 (dev-1, acc-1, prod-1)')
+param clusterLocation1 string = 'westeurope'
 
-@description('Azure region for member cluster 2')
-param memberCluster2Location string = 'northeurope'
+@description('Azure region for cluster location 2 (dev-2, acc-2, prod-2)')
+param clusterLocation2 string = 'northeurope'
 
 @description('Environment name for resource naming')
 param environmentName string = 'demo'
@@ -20,20 +21,14 @@ param resourceGroupName string = 'rg-aks-fleet-${environmentName}'
 @description('Enable hub cluster for Fleet Manager')
 param enableHubCluster bool = true
 
-@description('Kubernetes version for cluster 1')
-param cluster1KubernetesVersion string = '1.33.5'
+@description('Kubernetes version for Dev clusters')
+param devKubernetesVersion string = '1.32.0'
 
-@description('Kubernetes version for cluster 2')
-param cluster2KubernetesVersion string = '1.33.5'
+@description('Kubernetes version for ACC clusters')
+param accKubernetesVersion string = '1.33.5'
 
-@description('Kubernetes version for cluster 3')
-param cluster3KubernetesVersion string = '1.32'
-
-@description('Kubernetes version for cluster 4')
-param cluster4KubernetesVersion string = '1.32'
-
-@description('Kubernetes version for cluster 5')
-param cluster5KubernetesVersion string = '1.32'
+@description('Kubernetes version for Prod clusters')
+param prodKubernetesVersion string = '1.32'
 
 @description('Principal ID (Object ID) to assign Fleet Manager admin role. Leave empty to use current user.')
 param principalId string = ''
@@ -55,11 +50,12 @@ param tags object = {
 
 // Variables
 var fleetName = 'fleet-${environmentName}-${uniqueString(subscription().subscriptionId, resourceGroupName)}'
-var memberCluster1Name = 'aks-member1-${environmentName}'
-var memberCluster2Name = 'aks-member2-${environmentName}'
-var memberCluster3Name = 'aks-member3-${environmentName}'
-var memberCluster4Name = 'aks-member4-${environmentName}'
-var memberCluster5Name = 'aks-member5-${environmentName}'
+var devCluster1Name = 'aks-dev-1-${environmentName}'
+var devCluster2Name = 'aks-dev-2-${environmentName}'
+var accCluster1Name = 'aks-acc-1-${environmentName}'
+var accCluster2Name = 'aks-acc-2-${environmentName}'
+var prodCluster1Name = 'aks-prod-1-${environmentName}'
+var prodCluster2Name = 'aks-prod-2-${environmentName}'
 var logAnalyticsWorkspaceName = 'law-fleet-${environmentName}-${uniqueString(subscription().subscriptionId, resourceGroupName)}'
 
 // Create Resource Group
@@ -80,13 +76,13 @@ module logAnalytics 'modules/log-analytics.bicep' = {
   }
 }
 
-// Virtual Networks for member clusters
+// Virtual Networks for clusters
 module vnet1 'modules/vnet.bicep' = {
   scope: rg
   name: 'vnet1-deployment'
   params: {
-    vnetName: 'vnet-member1-${environmentName}'
-    location: memberCluster1Location
+    vnetName: 'vnet-fleet-1-${environmentName}'
+    location: clusterLocation1
     addressPrefix: '10.1.0.0/16'
     aksSubnetPrefix: '10.1.0.0/22'
     tags: tags
@@ -97,81 +93,107 @@ module vnet2 'modules/vnet.bicep' = {
   scope: rg
   name: 'vnet2-deployment'
   params: {
-    vnetName: 'vnet-member2-${environmentName}'
-    location: memberCluster2Location
+    vnetName: 'vnet-fleet-2-${environmentName}'
+    location: clusterLocation2
     addressPrefix: '10.2.0.0/16'
     aksSubnetPrefix: '10.2.0.0/22'
     tags: tags
   }
 }
 
-// AKS Member Cluster 1
-module aksCluster1 'modules/aks-member.bicep' = {
+// =============================================
+// Dev Clusters
+// =============================================
+
+// Dev Cluster 1 (connected to fleet)
+module aksDev1 'modules/aks-member.bicep' = {
   scope: rg
-  name: 'aks-cluster1-deployment'
+  name: 'aks-dev-1-deployment'
   params: {
-    clusterName: memberCluster1Name
-    location: memberCluster1Location
-    kubernetesVersion: cluster1KubernetesVersion
+    clusterName: devCluster1Name
+    location: clusterLocation1
+    kubernetesVersion: devKubernetesVersion
     subnetId: vnet1.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
-    tags: union(tags, { MemberCluster: 'cluster1', Region: memberCluster1Location })
+    tags: union(tags, { Environment: 'dev', Cluster: 'dev-1', Region: clusterLocation1 })
   }
 }
 
-// AKS Member Cluster 2
-module aksCluster2 'modules/aks-member.bicep' = {
+// Dev Cluster 2 (standalone - not connected to fleet initially for demo purposes)
+module aksDev2 'modules/aks-member.bicep' = {
   scope: rg
-  name: 'aks-cluster2-deployment'
+  name: 'aks-dev-2-deployment'
   params: {
-    clusterName: memberCluster2Name
-    location: memberCluster2Location
-    kubernetesVersion: cluster2KubernetesVersion
+    clusterName: devCluster2Name
+    location: clusterLocation2
+    kubernetesVersion: devKubernetesVersion
     subnetId: vnet2.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
-    tags: union(tags, { MemberCluster: 'cluster2', Region: memberCluster2Location })
+    tags: union(tags, { Environment: 'dev', Cluster: 'dev-2-standalone', Region: clusterLocation2, Standalone: 'true' })
   }
 }
 
-// AKS Member Cluster 3
-module aksCluster3 'modules/aks-member.bicep' = {
+// =============================================
+// ACC (Acceptance) Clusters
+// =============================================
+
+// ACC Cluster 1
+module aksAcc1 'modules/aks-member.bicep' = {
   scope: rg
-  name: 'aks-cluster3-deployment'
+  name: 'aks-acc-1-deployment'
   params: {
-    clusterName: memberCluster3Name
-    location: memberCluster1Location
-    kubernetesVersion: cluster3KubernetesVersion
+    clusterName: accCluster1Name
+    location: clusterLocation1
+    kubernetesVersion: accKubernetesVersion
     subnetId: vnet1.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
-    tags: union(tags, { MemberCluster: 'cluster3', Region: memberCluster1Location })
+    tags: union(tags, { Environment: 'acc', Cluster: 'acc-1', Region: clusterLocation1 })
   }
 }
 
-// AKS Member Cluster 4
-module aksCluster4 'modules/aks-member.bicep' = {
+// ACC Cluster 2
+module aksAcc2 'modules/aks-member.bicep' = {
   scope: rg
-  name: 'aks-cluster4-deployment'
+  name: 'aks-acc-2-deployment'
   params: {
-    clusterName: memberCluster4Name
-    location: memberCluster2Location
-    kubernetesVersion: cluster4KubernetesVersion
+    clusterName: accCluster2Name
+    location: clusterLocation2
+    kubernetesVersion: accKubernetesVersion
     subnetId: vnet2.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
-    tags: union(tags, { MemberCluster: 'cluster4', Region: memberCluster2Location })
+    tags: union(tags, { Environment: 'acc', Cluster: 'acc-2', Region: clusterLocation2 })
   }
 }
 
-// AKS Member Cluster 5
-module aksCluster5 'modules/aks-member.bicep' = {
+// =============================================
+// Prod Clusters
+// =============================================
+
+// Prod Cluster 1
+module aksProd1 'modules/aks-member.bicep' = {
   scope: rg
-  name: 'aks-cluster5-deployment'
+  name: 'aks-prod-1-deployment'
   params: {
-    clusterName: memberCluster5Name
-    location: memberCluster1Location
-    kubernetesVersion: cluster5KubernetesVersion
+    clusterName: prodCluster1Name
+    location: clusterLocation1
+    kubernetesVersion: prodKubernetesVersion
     subnetId: vnet1.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
-    tags: union(tags, { MemberCluster: 'cluster5', Region: memberCluster1Location })
+    tags: union(tags, { Environment: 'prod', Cluster: 'prod-1', Region: clusterLocation1 })
+  }
+}
+
+// Prod Cluster 2
+module aksProd2 'modules/aks-member.bicep' = {
+  scope: rg
+  name: 'aks-prod-2-deployment'
+  params: {
+    clusterName: prodCluster2Name
+    location: clusterLocation2
+    kubernetesVersion: prodKubernetesVersion
+    subnetId: vnet2.outputs.aksSubnetId
+    logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
+    tags: union(tags, { Environment: 'prod', Cluster: 'prod-2', Region: clusterLocation2 })
   }
 }
 
@@ -187,83 +209,90 @@ module fleetManager 'modules/fleet-manager.bicep' = {
   }
 }
 
-// Fleet Membership for Cluster 1
-module fleetMember1 'modules/fleet-member.bicep' = {
+// =============================================
+// Fleet Memberships (dev-2 is excluded - standalone)
+// =============================================
+
+// Fleet Membership for Dev Cluster 1
+module fleetMemberDev1 'modules/fleet-member.bicep' = {
   scope: rg
-  name: 'fleet-member1-deployment'
+  name: 'fleet-member-dev-1-deployment'
   dependsOn: [
     fleetManager
-    aksCluster1
+    aksDev1
   ]
   params: {
     fleetName: fleetManager.outputs.fleetName
-    memberClusterName: memberCluster1Name
-    memberClusterResourceId: aksCluster1.outputs.clusterResourceId
-    memberName: '${memberCluster1Name}-member'
+    memberClusterName: devCluster1Name
+    memberClusterResourceId: aksDev1.outputs.clusterResourceId
+    memberName: '${devCluster1Name}-member'
   }
 }
 
-// Fleet Membership for Cluster 2
-module fleetMember2 'modules/fleet-member.bicep' = {
+// NOTE: Dev Cluster 2 is intentionally NOT connected to the fleet
+// Use connect-cluster.sh to demo adding it to the fleet
+
+// Fleet Membership for ACC Cluster 1
+module fleetMemberAcc1 'modules/fleet-member.bicep' = {
   scope: rg
-  name: 'fleet-member2-deployment'
+  name: 'fleet-member-acc-1-deployment'
   dependsOn: [
     fleetManager
-    aksCluster2
+    aksAcc1
   ]
   params: {
     fleetName: fleetManager.outputs.fleetName
-    memberClusterName: memberCluster2Name
-    memberClusterResourceId: aksCluster2.outputs.clusterResourceId
-    memberName: '${memberCluster2Name}-member'
+    memberClusterName: accCluster1Name
+    memberClusterResourceId: aksAcc1.outputs.clusterResourceId
+    memberName: '${accCluster1Name}-member'
   }
 }
 
-// Fleet Membership for Cluster 3
-module fleetMember3 'modules/fleet-member.bicep' = {
+// Fleet Membership for ACC Cluster 2
+module fleetMemberAcc2 'modules/fleet-member.bicep' = {
   scope: rg
-  name: 'fleet-member3-deployment'
+  name: 'fleet-member-acc-2-deployment'
   dependsOn: [
     fleetManager
-    aksCluster3
+    aksAcc2
   ]
   params: {
     fleetName: fleetManager.outputs.fleetName
-    memberClusterName: memberCluster3Name
-    memberClusterResourceId: aksCluster3.outputs.clusterResourceId
-    memberName: '${memberCluster3Name}-member'
+    memberClusterName: accCluster2Name
+    memberClusterResourceId: aksAcc2.outputs.clusterResourceId
+    memberName: '${accCluster2Name}-member'
   }
 }
 
-// Fleet Membership for Cluster 4
-module fleetMember4 'modules/fleet-member.bicep' = {
+// Fleet Membership for Prod Cluster 1
+module fleetMemberProd1 'modules/fleet-member.bicep' = {
   scope: rg
-  name: 'fleet-member4-deployment'
+  name: 'fleet-member-prod-1-deployment'
   dependsOn: [
     fleetManager
-    aksCluster4
+    aksProd1
   ]
   params: {
     fleetName: fleetManager.outputs.fleetName
-    memberClusterName: memberCluster4Name
-    memberClusterResourceId: aksCluster4.outputs.clusterResourceId
-    memberName: '${memberCluster4Name}-member'
+    memberClusterName: prodCluster1Name
+    memberClusterResourceId: aksProd1.outputs.clusterResourceId
+    memberName: '${prodCluster1Name}-member'
   }
 }
 
-// Fleet Membership for Cluster 5
-module fleetMember5 'modules/fleet-member.bicep' = {
+// Fleet Membership for Prod Cluster 2
+module fleetMemberProd2 'modules/fleet-member.bicep' = {
   scope: rg
-  name: 'fleet-member5-deployment'
+  name: 'fleet-member-prod-2-deployment'
   dependsOn: [
     fleetManager
-    aksCluster5
+    aksProd2
   ]
   params: {
     fleetName: fleetManager.outputs.fleetName
-    memberClusterName: memberCluster5Name
-    memberClusterResourceId: aksCluster5.outputs.clusterResourceId
-    memberName: '${memberCluster5Name}-member'
+    memberClusterName: prodCluster2Name
+    memberClusterResourceId: aksProd2.outputs.clusterResourceId
+    memberName: '${prodCluster2Name}-member'
   }
 }
 
@@ -286,14 +315,23 @@ output resourceGroupName string = rg.name
 output fleetName string = fleetManager.outputs.fleetName
 output fleetResourceId string = fleetManager.outputs.fleetResourceId
 output fleetHubKubeConfigCommand string = enableHubCluster ? 'az fleet get-credentials --resource-group ${rg.name} --name ${fleetManager.outputs.fleetName}' : 'N/A - Hub cluster not enabled'
-output memberCluster1Name string = aksCluster1.outputs.clusterName
-output memberCluster2Name string = aksCluster2.outputs.clusterName
-output memberCluster3Name string = aksCluster3.outputs.clusterName
-output memberCluster4Name string = aksCluster4.outputs.clusterName
-output memberCluster5Name string = aksCluster5.outputs.clusterName
-output memberCluster1ResourceId string = aksCluster1.outputs.clusterResourceId
-output memberCluster2ResourceId string = aksCluster2.outputs.clusterResourceId
-output memberCluster3ResourceId string = aksCluster3.outputs.clusterResourceId
-output memberCluster4ResourceId string = aksCluster4.outputs.clusterResourceId
-output memberCluster5ResourceId string = aksCluster5.outputs.clusterResourceId
+
+// Dev Cluster Outputs
+output devCluster1Name string = aksDev1.outputs.clusterName
+output devCluster2Name string = aksDev2.outputs.clusterName
+output devCluster1ResourceId string = aksDev1.outputs.clusterResourceId
+output devCluster2ResourceId string = aksDev2.outputs.clusterResourceId
+
+// ACC Cluster Outputs
+output accCluster1Name string = aksAcc1.outputs.clusterName
+output accCluster2Name string = aksAcc2.outputs.clusterName
+output accCluster1ResourceId string = aksAcc1.outputs.clusterResourceId
+output accCluster2ResourceId string = aksAcc2.outputs.clusterResourceId
+
+// Prod Cluster Outputs
+output prodCluster1Name string = aksProd1.outputs.clusterName
+output prodCluster2Name string = aksProd2.outputs.clusterName
+output prodCluster1ResourceId string = aksProd1.outputs.clusterResourceId
+output prodCluster2ResourceId string = aksProd2.outputs.clusterResourceId
+
 output logAnalyticsWorkspaceId string = logAnalytics.outputs.workspaceId

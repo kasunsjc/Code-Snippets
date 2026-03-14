@@ -92,13 +92,29 @@ FLEET_NAME=$(az deployment sub show \
     --name $DEPLOYMENT_NAME \
     --query properties.outputs.fleetName.value -o tsv)
 
-MEMBER_CLUSTER1=$(az deployment sub show \
+DEV_CLUSTER1=$(az deployment sub show \
     --name $DEPLOYMENT_NAME \
-    --query properties.outputs.memberCluster1Name.value -o tsv)
+    --query properties.outputs.devCluster1Name.value -o tsv)
 
-MEMBER_CLUSTER2=$(az deployment sub show \
+DEV_CLUSTER2=$(az deployment sub show \
     --name $DEPLOYMENT_NAME \
-    --query properties.outputs.memberCluster2Name.value -o tsv)
+    --query properties.outputs.devCluster2Name.value -o tsv)
+
+ACC_CLUSTER1=$(az deployment sub show \
+    --name $DEPLOYMENT_NAME \
+    --query properties.outputs.accCluster1Name.value -o tsv)
+
+ACC_CLUSTER2=$(az deployment sub show \
+    --name $DEPLOYMENT_NAME \
+    --query properties.outputs.accCluster2Name.value -o tsv)
+
+PROD_CLUSTER1=$(az deployment sub show \
+    --name $DEPLOYMENT_NAME \
+    --query properties.outputs.prodCluster1Name.value -o tsv)
+
+PROD_CLUSTER2=$(az deployment sub show \
+    --name $DEPLOYMENT_NAME \
+    --query properties.outputs.prodCluster2Name.value -o tsv)
 
 echo -e "${GREEN}✓ Deployment outputs retrieved${NC}"
 echo ""
@@ -110,8 +126,16 @@ echo -e "${GREEN}======================================${NC}"
 echo ""
 echo -e "${YELLOW}Resource Group:${NC} $RESOURCE_GROUP"
 echo -e "${YELLOW}Fleet Manager:${NC} $FLEET_NAME"
-echo -e "${YELLOW}Member Cluster 1:${NC} $MEMBER_CLUSTER1"
-echo -e "${YELLOW}Member Cluster 2:${NC} $MEMBER_CLUSTER2"
+echo ""
+echo -e "${YELLOW}Dev Clusters:${NC}"
+echo -e "  Dev 1 (fleet member):    $DEV_CLUSTER1"
+echo -e "  Dev 2 (⚠ standalone):    $DEV_CLUSTER2"
+echo -e "${YELLOW}ACC Clusters:${NC}"
+echo -e "  ACC 1 (fleet member):    $ACC_CLUSTER1"
+echo -e "  ACC 2 (fleet member):    $ACC_CLUSTER2"
+echo -e "${YELLOW}Prod Clusters:${NC}"
+echo -e "  Prod 1 (fleet member):   $PROD_CLUSTER1"
+echo -e "  Prod 2 (fleet member):   $PROD_CLUSTER2"
 echo ""
 
 # Get credentials
@@ -122,17 +146,14 @@ az fleet get-credentials \
     --context fleet-hub \
     --overwrite-existing
 
-az aks get-credentials \
-    --resource-group $RESOURCE_GROUP \
-    --name $MEMBER_CLUSTER1 \
-    --context $MEMBER_CLUSTER1 \
-    --overwrite-existing
-
-az aks get-credentials \
-    --resource-group $RESOURCE_GROUP \
-    --name $MEMBER_CLUSTER2 \
-    --context $MEMBER_CLUSTER2 \
-    --overwrite-existing
+# Get credentials for all clusters
+for CLUSTER in $DEV_CLUSTER1 $DEV_CLUSTER2 $ACC_CLUSTER1 $ACC_CLUSTER2 $PROD_CLUSTER1 $PROD_CLUSTER2; do
+    az aks get-credentials \
+        --resource-group $RESOURCE_GROUP \
+        --name $CLUSTER \
+        --context $CLUSTER \
+        --overwrite-existing
+done
 
 echo -e "${GREEN}✓ Cluster credentials configured${NC}"
 echo ""
@@ -175,5 +196,6 @@ echo ""
 echo "Next steps:"
 echo "1. Switch to fleet hub context: kubectl config use-context fleet-hub"
 echo "2. Deploy sample applications: ./deploy-samples.sh"
-echo "3. View fleet status: kubectl get clusters"
+echo "3. View fleet status: kubectl get memberclusters"
+echo "4. Connect standalone dev-2 cluster: ./connect-cluster.sh $RESOURCE_GROUP $DEV_CLUSTER2"
 echo ""
