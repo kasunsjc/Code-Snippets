@@ -1,0 +1,100 @@
+# ---------------------------------------------------
+# 1. Deployment
+# ---------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  namespace: sample-app
+  labels:
+    app: sample-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+    spec:
+      containers:
+        - name: sample-app
+          image: mcr.microsoft.com/azuredocs/aks-helloworld:v1
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+# ---------------------------------------------------
+# 2. Service (ClusterIP)
+# ---------------------------------------------------
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-svc
+  namespace: sample-app
+spec:
+  type: ClusterIP
+  selector:
+    app: sample-app
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+---
+# ---------------------------------------------------
+# 3. Ingress – AKS App Routing with kasunrajapakse.xyz
+# ---------------------------------------------------
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-app-ingress
+  namespace: sample-app
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  ingressClassName: webapprouting.kubernetes.azure.com
+  rules:
+    - host: sample-app.kasunrajapakse.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sample-app-svc
+                port:
+                  number: 80
+---
+# ---------------------------------------------------
+# 4. KEDA ScaledObject – HTTP-based autoscaling (CPU)
+# ---------------------------------------------------
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: sample-app-scaledobject
+  namespace: sample-app
+spec:
+  scaleTargetRef:
+    name: sample-app                       # targets the Deployment above
+  pollingInterval: 15                      # check metrics every 15s
+  cooldownPeriod: 60                       # wait 60s before scaling down
+  minReplicaCount: 1                       # minimum pods
+  maxReplicaCount: 10                      # maximum pods
+  triggers:
+    # Scale based on CPU utilisation reported by the metrics server
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "50"                        # scale up when avg CPU > 50%
+    # Scale based on Memory utilisation
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "60"                        # scale up when avg memory > 60%
