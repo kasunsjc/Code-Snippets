@@ -230,11 +230,6 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
         enableAutoScaling: enableAutoScaling
         minCount: enableAutoScaling ? minNodeCount : null
         maxCount: enableAutoScaling ? maxNodeCount : null
-        availabilityZones: [
-          '1'
-          '2'
-          '3'
-        ]
       }
     ]
     networkProfile: {
