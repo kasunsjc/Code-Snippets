@@ -3,14 +3,13 @@
 # ============================================================
 # AKS Advanced Container Networking Services (ACNS) Demo
 # ============================================================
-# This script creates an AKS cluster with ACNS enabled,
-# including Container Network Observability, Container Network
-# Security (FQDN filtering & L7 policies), and Container
-# Network Performance features.
+# This script provisions infrastructure using Bicep and then
+# demonstrates ACNS features including FQDN filtering,
+# L7 policies, and network observability.
 #
 # Requirements:
 #   - Azure CLI 2.79.0+
-#   - aks-preview extension
+#   - Bicep CLI (bundled with Azure CLI)
 #   - Kubernetes 1.29+
 # ============================================================
 
@@ -22,9 +21,6 @@ export CLUSTER_NAME="aks-acns-cluster"
 # Login to Azure
 az login
 
-# Install/update the aks-preview extension
-az extension add --name aks-preview --upgrade
-
 # ============================================================
 # Step 1: Create Resource Group
 # ============================================================
@@ -32,25 +28,17 @@ az extension add --name aks-preview --upgrade
 az group create --name $RESOURCE_GROUP --location $LOCATION
 
 # ============================================================
-# Step 2: Create AKS Cluster with ACNS Enabled (Cilium)
+# Step 2: Deploy AKS Cluster with ACNS via Bicep
 # ============================================================
-# This creates an AKS cluster with:
-#   - Azure CNI with overlay mode
-#   - Cilium data plane (required for security & performance)
+# The Bicep template (main.bicep) provisions:
+#   - AKS cluster with Azure CNI overlay + Cilium data plane
 #   - ACNS enabled (observability + security + performance)
 #   - L7 advanced network policies (includes FQDN filtering)
 
-az aks create \
-    --name $CLUSTER_NAME \
+az deployment group create \
     --resource-group $RESOURCE_GROUP \
-    --location $LOCATION \
-    --network-plugin azure \
-    --network-plugin-mode overlay \
-    --network-dataplane cilium \
-    --enable-acns \
-    --acns-advanced-networkpolicies L7 \
-    --node-count 2 \
-    --generate-ssh-keys
+    --template-file main.bicep \
+    --parameters main.bicepparam
 
 # ============================================================
 # Step 3: Get Cluster Credentials
@@ -139,17 +127,22 @@ kubectl exec -n kube-system ds/cilium -- cilium status | grep Hubble
 kubectl exec -n kube-system ds/cilium -- hubble observe --last 10
 
 # ============================================================
-# Enable ACNS on an Existing Cluster (Alternative)
+# Deploy with Custom Parameters (Alternative)
 # ============================================================
-# If you already have an AKS cluster with Cilium, you can
-# enable ACNS on it:
+# Override defaults by passing parameters inline:
 #
-# az aks update \
+# az deployment group create \
 #     --resource-group $RESOURCE_GROUP \
-#     --name $CLUSTER_NAME \
-#     --enable-acns
-#
-# To also enable L7 policies:
+#     --template-file main.bicep \
+#     --parameters clusterName='my-cluster' \
+#                  nodeCount=3 \
+#                  nodeVmSize='Standard_D4s_v3' \
+#                  acnsAdvancedNetworkPolicies='FQDN'
+
+# ============================================================
+# Enable ACNS on an Existing Cluster (CLI Alternative)
+# ============================================================
+# If you already have an AKS cluster with Cilium:
 #
 # az aks update \
 #     --resource-group $RESOURCE_GROUP \
@@ -158,29 +151,18 @@ kubectl exec -n kube-system ds/cilium -- hubble observe --last 10
 #     --acns-advanced-networkpolicies L7
 
 # ============================================================
-# Disable ACNS (when no longer needed)
+# Disable ACNS Features
 # ============================================================
 # Disable only observability:
-#
-# az aks update \
-#     --resource-group $RESOURCE_GROUP \
-#     --name $CLUSTER_NAME \
-#     --enable-acns \
-#     --disable-acns-observability
+# az aks update --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME \
+#     --enable-acns --disable-acns-observability
 #
 # Disable only security:
-#
-# az aks update \
-#     --resource-group $RESOURCE_GROUP \
-#     --name $CLUSTER_NAME \
-#     --enable-acns \
-#     --disable-acns-security
+# az aks update --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME \
+#     --enable-acns --disable-acns-security
 #
 # Disable all ACNS features:
-#
-# az aks update \
-#     --resource-group $RESOURCE_GROUP \
-#     --name $CLUSTER_NAME \
+# az aks update --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME \
 #     --disable-acns
 
 # ============================================================

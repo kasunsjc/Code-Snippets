@@ -19,7 +19,9 @@ Advanced Container Networking Services (ACNS) is a suite of services that enhanc
 ```
 AKS-Advanced-Container-Networking/
 ├── README.md                         # This documentation
-├── commands.azcli                    # Full setup and demo commands
+├── main.bicep                        # Bicep template for AKS cluster with ACNS
+├── main.bicepparam                   # Bicep parameter file
+├── commands.azcli                    # Deployment and demo commands
 ├── fqdn-filtering-policy.yaml       # CiliumNetworkPolicy for FQDN filtering
 ├── fqdn-clusterwide-policy.yaml     # CiliumClusterwideNetworkPolicy example
 ├── l7-policy.yaml                   # Layer 7 CiliumNetworkPolicy
@@ -37,20 +39,33 @@ export LOCATION="eastus"
 export CLUSTER_NAME="aks-acns-cluster"
 ```
 
-### 2. Create AKS Cluster with ACNS
+### 2. Deploy Infrastructure with Bicep
 
 ```bash
-az aks create \
-    --name $CLUSTER_NAME \
+# Create resource group
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+# Deploy AKS cluster with ACNS via Bicep
+az deployment group create \
     --resource-group $RESOURCE_GROUP \
-    --location $LOCATION \
-    --network-plugin azure \
-    --network-plugin-mode overlay \
-    --network-dataplane cilium \
-    --enable-acns \
-    --acns-advanced-networkpolicies L7 \
-    --node-count 2 \
-    --generate-ssh-keys
+    --template-file main.bicep \
+    --parameters main.bicepparam
+```
+
+The Bicep template (`main.bicep`) provisions the AKS cluster with:
+- Azure CNI with overlay mode and Cilium data plane
+- ACNS enabled with observability and security features
+- L7 advanced network policies (includes FQDN filtering)
+- System-assigned managed identity
+- Auto-scaling system node pool across 3 availability zones
+
+Override parameters inline if needed:
+
+```bash
+az deployment group create \
+    --resource-group $RESOURCE_GROUP \
+    --template-file main.bicep \
+    --parameters clusterName='my-cluster' nodeCount=3 nodeVmSize='Standard_D4s_v3'
 ```
 
 ### 3. Get Credentials
@@ -198,7 +213,7 @@ az aks update --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME \
 
 ## 📋 Requirements
 
-- Azure CLI 2.79.0+ with `aks-preview` extension
+- Azure CLI 2.79.0+ with Bicep CLI (bundled)
 - Azure CNI with overlay mode
 - Cilium data plane
 - Kubernetes 1.29+
