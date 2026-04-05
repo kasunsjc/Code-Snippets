@@ -21,7 +21,9 @@ AKS-Advanced-Container-Networking/
 ├── README.md                         # This documentation
 ├── main.bicep                        # Bicep template for AKS cluster with ACNS
 ├── main.bicepparam                   # Bicep parameter file
-├── commands.azcli                    # Deployment and demo commands
+├── deploy.sh                         # One-command deployment script
+├── cleanup.sh                        # Resource cleanup script
+├── commands.azcli                    # Step-by-step demo commands
 ├── fqdn-filtering-policy.yaml       # CiliumNetworkPolicy for FQDN filtering
 ├── fqdn-clusterwide-policy.yaml     # CiliumClusterwideNetworkPolicy example
 ├── l7-policy.yaml                   # Layer 7 CiliumNetworkPolicy
@@ -31,7 +33,17 @@ AKS-Advanced-Container-Networking/
 
 ## 🚀 Quick Start
 
-### 1. Set Environment Variables
+### Option A: One-Command Deploy
+
+```bash
+./deploy.sh
+```
+
+This script handles everything: prerequisite checks, resource group creation, Bicep deployment, credential setup, and ACNS verification.
+
+### Option B: Step-by-Step
+
+#### 1. Set Environment Variables
 
 ```bash
 export RESOURCE_GROUP="aks-acns-demo"
@@ -39,7 +51,7 @@ export LOCATION="eastus"
 export CLUSTER_NAME="aks-acns-cluster"
 ```
 
-### 2. Deploy Infrastructure with Bicep
+#### 2. Deploy Infrastructure with Bicep
 
 ```bash
 # Create resource group
@@ -219,6 +231,12 @@ az aks update --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME \
 - Kubernetes 1.29+
 
 ## 🧹 Cleanup
+
+```bash
+./cleanup.sh
+```
+
+This removes the kubectl context and deletes the resource group with all resources. Or manually:
 
 ```bash
 az group delete --name $RESOURCE_GROUP --yes --no-wait
