@@ -13,7 +13,7 @@ NC='\033[0m'
 
 # Configuration
 RESOURCE_GROUP="aks-acns-demo"
-LOCATION="eastus"
+LOCATION="northeurope"
 CLUSTER_NAME="aks-acns-cluster"
 DEPLOYMENT_NAME="acns-deployment-$(date +%Y%m%d-%H%M%S)"
 
