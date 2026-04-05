@@ -1,0 +1,191 @@
+#!/bin/bash
+
+# ============================================================
+# AKS Advanced Container Networking Services (ACNS) Demo
+# ============================================================
+# This script creates an AKS cluster with ACNS enabled,
+# including Container Network Observability, Container Network
+# Security (FQDN filtering & L7 policies), and Container
+# Network Performance features.
+#
+# Requirements:
+#   - Azure CLI 2.79.0+
+#   - aks-preview extension
+#   - Kubernetes 1.29+
+# ============================================================
+
+# Variables
+export RESOURCE_GROUP="aks-acns-demo"
+export LOCATION="eastus"
+export CLUSTER_NAME="aks-acns-cluster"
+
+# Login to Azure
+az login
+
+# Install/update the aks-preview extension
+az extension add --name aks-preview --upgrade
+
+# ============================================================
+# Step 1: Create Resource Group
+# ============================================================
+
+az group create --name $RESOURCE_GROUP --location $LOCATION
+
+# ============================================================
+# Step 2: Create AKS Cluster with ACNS Enabled (Cilium)
+# ============================================================
+# This creates an AKS cluster with:
+#   - Azure CNI with overlay mode
+#   - Cilium data plane (required for security & performance)
+#   - ACNS enabled (observability + security + performance)
+#   - L7 advanced network policies (includes FQDN filtering)
+
+az aks create \
+    --name $CLUSTER_NAME \
+    --resource-group $RESOURCE_GROUP \
+    --location $LOCATION \
+    --network-plugin azure \
+    --network-plugin-mode overlay \
+    --network-dataplane cilium \
+    --enable-acns \
+    --acns-advanced-networkpolicies L7 \
+    --node-count 2 \
+    --generate-ssh-keys
+
+# ============================================================
+# Step 3: Get Cluster Credentials
+# ============================================================
+
+az aks get-credentials \
+    --name $CLUSTER_NAME \
+    --resource-group $RESOURCE_GROUP \
+    --overwrite-existing
+
+# ============================================================
+# Step 4: Verify ACNS is Enabled
+# ============================================================
+
+az aks show \
+    --name $CLUSTER_NAME \
+    --resource-group $RESOURCE_GROUP \
+    --query "networkProfile.advancedNetworking" \
+    --output json
+
+# Verify Cilium is running
+kubectl get pods -n kube-system -l k8s-app=cilium
+
+# ============================================================
+# Step 5: Deploy FQDN Filtering Demo
+# ============================================================
+
+# Create a demo namespace
+kubectl create ns demo
+
+# Apply the FQDN filtering policy (allows only *.bing.com)
+kubectl apply -f fqdn-filtering-policy.yaml -n demo
+
+# Deploy a test pod for FQDN filtering
+kubectl apply -f sample-deployment.yaml -n demo
+
+# Wait for pod to be ready
+kubectl wait --for=condition=Ready pod -l app=demo-container -n demo --timeout=120s
+
+# Test allowed FQDN (should succeed)
+echo "Testing allowed FQDN (*.bing.com)..."
+kubectl exec -n demo deploy/demo-client -- /agnhost connect www.bing.com:80
+
+# Test blocked FQDN (should fail)
+echo "Testing blocked FQDN (www.example.com)..."
+kubectl exec -n demo deploy/demo-client -- /agnhost connect www.example.com:80
+
+# ============================================================
+# Step 6: Deploy L7 Policy Demo
+# ============================================================
+
+# Create a namespace for the L7 demo
+kubectl create ns l7-demo
+
+# Deploy the HTTP server and client applications
+kubectl apply -f l7-demo-apps.yaml -n l7-demo
+
+# Wait for pods to be ready
+kubectl wait --for=condition=Ready pod -l app=http-server -n l7-demo --timeout=120s
+kubectl wait --for=condition=Ready pod -l app=http-client -n l7-demo --timeout=120s
+
+# Apply the L7 policy (allows only GET /products)
+kubectl apply -f l7-policy.yaml -n l7-demo
+
+# Test allowed request (GET /products - should succeed)
+echo "Testing allowed request (GET /products)..."
+HTTP_CLIENT_POD=$(kubectl get pod -n l7-demo -l app=http-client -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n l7-demo $HTTP_CLIENT_POD -- curl -s http://http-server:80/products
+
+# Test blocked request (POST /products - should be denied)
+echo "Testing blocked request (POST /products)..."
+kubectl exec -n l7-demo $HTTP_CLIENT_POD -- curl -s -X POST http://http-server:80/products -d "test=data"
+
+# Test blocked request (GET / - should be denied)
+echo "Testing blocked request (GET /)..."
+kubectl exec -n l7-demo $HTTP_CLIENT_POD -- curl -s http://http-server:80/
+
+# ============================================================
+# Step 7: Monitor with Cilium Hubble (Observability)
+# ============================================================
+
+# Check Hubble status
+kubectl exec -n kube-system ds/cilium -- cilium status | grep Hubble
+
+# View flow logs (real-time observability)
+kubectl exec -n kube-system ds/cilium -- hubble observe --last 10
+
+# ============================================================
+# Enable ACNS on an Existing Cluster (Alternative)
+# ============================================================
+# If you already have an AKS cluster with Cilium, you can
+# enable ACNS on it:
+#
+# az aks update \
+#     --resource-group $RESOURCE_GROUP \
+#     --name $CLUSTER_NAME \
+#     --enable-acns
+#
+# To also enable L7 policies:
+#
+# az aks update \
+#     --resource-group $RESOURCE_GROUP \
+#     --name $CLUSTER_NAME \
+#     --enable-acns \
+#     --acns-advanced-networkpolicies L7
+
+# ============================================================
+# Disable ACNS (when no longer needed)
+# ============================================================
+# Disable only observability:
+#
+# az aks update \
+#     --resource-group $RESOURCE_GROUP \
+#     --name $CLUSTER_NAME \
+#     --enable-acns \
+#     --disable-acns-observability
+#
+# Disable only security:
+#
+# az aks update \
+#     --resource-group $RESOURCE_GROUP \
+#     --name $CLUSTER_NAME \
+#     --enable-acns \
+#     --disable-acns-security
+#
+# Disable all ACNS features:
+#
+# az aks update \
+#     --resource-group $RESOURCE_GROUP \
+#     --name $CLUSTER_NAME \
+#     --disable-acns
+
+# ============================================================
+# Cleanup
+# ============================================================
+# Uncomment to delete all resources:
+#
+# az group delete --name $RESOURCE_GROUP --yes --no-wait
