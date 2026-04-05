@@ -1,0 +1,81 @@
+# HTTP Server - Nginx with custom routes
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+data:
+  default.conf: |
+    server {
+        listen 8080;
+
+        location / {
+            return 200 "Hello from the server root!\n";
+        }
+
+        location /products {
+            return 200 "Listing products...\n";
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-server
+  labels:
+    app: http-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http-server
+  template:
+    metadata:
+      labels:
+        app: http-server
+    spec:
+      containers:
+      - name: http-server
+        image: nginx:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nginx/conf.d
+      volumes:
+      - name: config-volume
+        configMap:
+          name: nginx-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: http-server
+spec:
+  selector:
+    app: http-server
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8080
+---
+# HTTP Client - curl image for testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-client
+  labels:
+    app: http-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http-client
+  template:
+    metadata:
+      labels:
+        app: http-client
+    spec:
+      containers:
+      - name: http-client
+        image: curlimages/curl:latest
+        command: ["sleep", "infinity"]

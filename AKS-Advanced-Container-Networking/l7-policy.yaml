@@ -1,0 +1,21 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-get-products
+spec:
+  description: "Allow only GET requests to /products from http-client to http-server"
+  endpointSelector:
+    matchLabels:
+      app: http-server
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: http-client
+    toPorts:
+    - ports:
+      - port: "8080"
+        protocol: TCP
+      rules:
+        http:
+        - method: "GET"
+          path: "/products"
