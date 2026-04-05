@@ -70,7 +70,7 @@ resource prometheus 'Microsoft.Monitor/accounts@2023-04-03' = {
 // Azure Managed Grafana
 // ============================================================
 resource grafana 'Microsoft.Dashboard/grafana@2023-09-01' = {
-  name: '${clusterName}-grafana'
+  name: take('${clusterName}-gr', 23)
   location: location
   sku: {
     name: 'Standard'

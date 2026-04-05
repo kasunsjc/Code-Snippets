@@ -205,7 +205,7 @@ display_summary() {
     echo "   Open $GRAFANA_URL"
     echo "   Navigate to Dashboards > Azure Managed Prometheus"
     echo ""
-    echo "4. See commands.azcli for full demo walkthrough"
+    echo "4. See README.md for full demo walkthrough"
     echo ""
     echo "=========================================="
     echo ""

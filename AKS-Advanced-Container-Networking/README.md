@@ -19,11 +19,10 @@ Advanced Container Networking Services (ACNS) is a suite of services that enhanc
 ```
 AKS-Advanced-Container-Networking/
 ├── README.md                         # This documentation
-├── main.bicep                        # Bicep template for AKS cluster with ACNS
+├── main.bicep                        # Bicep template for AKS + ACNS + Prometheus + Grafana
 ├── main.bicepparam                   # Bicep parameter file
 ├── deploy.sh                         # One-command deployment script
 ├── cleanup.sh                        # Resource cleanup script
-├── commands.azcli                    # Step-by-step demo commands
 ├── fqdn-filtering-policy.yaml       # CiliumNetworkPolicy for FQDN filtering
 ├── fqdn-clusterwide-policy.yaml     # CiliumClusterwideNetworkPolicy example
 ├── l7-policy.yaml                   # Layer 7 CiliumNetworkPolicy
@@ -41,28 +40,7 @@ AKS-Advanced-Container-Networking/
 
 This script handles everything: prerequisite checks, resource group creation, Bicep deployment, credential setup, and ACNS verification.
 
-### Option B: Step-by-Step
-
-#### 1. Set Environment Variables
-
-```bash
-export RESOURCE_GROUP="aks-acns-demo"
-export LOCATION="eastus"
-export CLUSTER_NAME="aks-acns-cluster"
-```
-
-#### 2. Deploy Infrastructure with Bicep
-
-```bash
-# Create resource group
-az group create --name $RESOURCE_GROUP --location $LOCATION
-
-# Deploy AKS cluster with ACNS via Bicep
-az deployment group create \
-    --resource-group $RESOURCE_GROUP \
-    --template-file main.bicep \
-    --parameters main.bicepparam
-```
+The `deploy.sh` script handles everything: prerequisite checks, resource group creation, Bicep deployment, credential setup, ACNS verification, and displays the Grafana URL.
 
 The Bicep template (`main.bicep`) provisions:
 - AKS cluster with Azure CNI overlay + Cilium data plane
@@ -73,21 +51,6 @@ The Bicep template (`main.bicep`) provisions:
 - Role assignments for Grafana → Prometheus data access
 - System-assigned managed identity
 - Auto-scaling system node pool across 3 availability zones
-
-Override parameters inline if needed:
-
-```bash
-az deployment group create \
-    --resource-group $RESOURCE_GROUP \
-    --template-file main.bicep \
-    --parameters clusterName='my-cluster' nodeCount=3 nodeVmSize='Standard_D4s_v3'
-```
-
-### 3. Get Credentials
-
-```bash
-az aks get-credentials --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP
-```
 
 ## 🔒 FQDN Filtering Demo
 
