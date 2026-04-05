@@ -117,14 +117,50 @@ echo "Testing blocked request (GET /)..."
 kubectl exec -n l7-demo $HTTP_CLIENT_POD -- curl -s http://http-server:80/
 
 # ============================================================
-# Step 7: Monitor with Cilium Hubble (Observability)
+# Step 7: Observability - Azure Managed Prometheus & Grafana
 # ============================================================
+# The Bicep template deploys Azure Managed Prometheus and Grafana.
+# Prometheus scrapes metrics from AKS, and Grafana provides
+# pre-built dashboards for ACNS network observability.
 
-# Check Hubble status
+# Verify Azure Monitor metrics pods are running
+kubectl get pods -n kube-system | grep ama-
+
+# Check Hubble status on Cilium
 kubectl exec -n kube-system ds/cilium -- cilium status | grep Hubble
 
-# View flow logs (real-time observability)
+# View real-time flow logs
 kubectl exec -n kube-system ds/cilium -- hubble observe --last 10
+
+# Get the Grafana dashboard URL
+GRAFANA_URL=$(az grafana show \
+    --name "${CLUSTER_NAME}-grafana" \
+    --resource-group $RESOURCE_GROUP \
+    --query "properties.endpoint" \
+    --output tsv)
+echo "Grafana URL: $GRAFANA_URL"
+
+# Pre-built dashboards are available under:
+# Dashboards > Azure Managed Prometheus > Kubernetes / Networking / *
+#
+# Available dashboards:
+#   - Clusters (node-level metrics)
+#   - DNS (Cluster) / DNS (Workload)
+#   - Drops (Workload)
+#   - Pod Flows (Namespace) / Pod Flows (Workload)
+#   - L7 (Namespace) / L7 (Workload)
+
+# Optional: Enable hubble_flows_processed_total for Pod Flows dashboards
+# This metric is not scraped by default due to high cardinality.
+# Update the ama-metrics-settings-configmap:
+#
+# 1. Download the configmap:
+#    kubectl get configmap ama-metrics-settings-configmap -n kube-system -o yaml > ama-metrics-settings.yaml
+#
+# 2. Set networkobservabilityHubble = "hubble.*" in default-targets-metrics-keep-list
+#
+# 3. Apply:
+#    kubectl apply -f ama-metrics-settings.yaml
 
 # ============================================================
 # Deploy with Custom Parameters (Alternative)

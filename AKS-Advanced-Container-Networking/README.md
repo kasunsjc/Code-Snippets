@@ -64,10 +64,13 @@ az deployment group create \
     --parameters main.bicepparam
 ```
 
-The Bicep template (`main.bicep`) provisions the AKS cluster with:
-- Azure CNI with overlay mode and Cilium data plane
+The Bicep template (`main.bicep`) provisions:
+- AKS cluster with Azure CNI overlay + Cilium data plane
 - ACNS enabled with observability and security features
 - L7 advanced network policies (includes FQDN filtering)
+- Azure Managed Prometheus for metrics collection
+- Azure Managed Grafana with pre-built networking dashboards
+- Role assignments for Grafana → Prometheus data access
 - System-assigned managed identity
 - Auto-scaling system node pool across 3 availability zones
 
@@ -152,7 +155,30 @@ kubectl exec -n l7-demo $HTTP_CLIENT -- curl -s http://http-server:80/
 
 ## 📊 Observability
 
-ACNS provides network metrics via Prometheus and Grafana integration.
+ACNS metrics are collected by **Azure Managed Prometheus** and visualized in **Azure Managed Grafana**, both provisioned by the Bicep template.
+
+### Access Grafana Dashboards
+
+After deployment, open the Grafana URL from the deploy output. Pre-built dashboards are available under **Dashboards > Azure Managed Prometheus**:
+
+| Dashboard | Description |
+|-----------|-------------|
+| **Kubernetes / Networking / Clusters** | Node-level metrics for your clusters |
+| **Kubernetes / Networking / DNS (Cluster)** | DNS metrics across cluster or selected nodes |
+| **Kubernetes / Networking / DNS (Workload)** | DNS metrics for specific workloads (e.g. CoreDNS) |
+| **Kubernetes / Networking / Drops (Workload)** | Dropped packets to/from workloads |
+| **Kubernetes / Networking / Pod Flows (Namespace)** | L4/L7 packet flows by namespace |
+| **Kubernetes / Networking / Pod Flows (Workload)** | L4/L7 packet flows by workload |
+| **Kubernetes / Networking / L7 (Namespace)** | L7 traffic metrics by namespace |
+| **Kubernetes / Networking / L7 (Workload)** | L7 traffic metrics by workload |
+
+> **Note**: To populate Pod Flows dashboards, update the `ama-metrics-settings-configmap` to scrape `hubble_flows_processed_total`. Set `networkobservabilityHubble = "hubble.*"` in the `default-targets-metrics-keep-list` section.
+
+### Verify Azure Monitor Pods
+
+```bash
+kubectl get pods -n kube-system | grep ama-
+```
 
 ### Node-Level Metrics (Cilium)
 

@@ -69,11 +69,19 @@ deploy_bicep() {
     print_message "Starting Bicep deployment: $DEPLOYMENT_NAME..."
     print_warning "This deployment may take 10-15 minutes..."
 
+    # Get current user object ID for Grafana Admin role
+    USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+
+    if [ -z "$USER_OBJECT_ID" ]; then
+        print_warning "Could not retrieve user object ID. Grafana Admin role will not be assigned."
+    fi
+
     az deployment group create \
         --name "$DEPLOYMENT_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --template-file main.bicep \
         --parameters main.bicepparam \
+        --parameters userId="$USER_OBJECT_ID" \
         --output table
 
     print_message "Deployment completed successfully!"
@@ -92,6 +100,18 @@ get_outputs() {
         --name "$DEPLOYMENT_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --query properties.outputs.networkDataplane.value \
+        --output tsv)
+
+    GRAFANA_URL=$(az deployment group show \
+        --name "$DEPLOYMENT_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query properties.outputs.grafanaEndpoint.value \
+        --output tsv)
+
+    PROMETHEUS_ID=$(az deployment group show \
+        --name "$DEPLOYMENT_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query properties.outputs.prometheusResourceId.value \
         --output tsv)
 
     print_message "Outputs retrieved successfully!"
@@ -121,6 +141,10 @@ verify_acns() {
     print_message "Verifying Cilium pods..."
     kubectl get pods -n kube-system -l k8s-app=cilium
 
+    echo ""
+    print_message "Verifying Azure Monitor metrics pods..."
+    kubectl get pods -n kube-system -o wide | grep ama- || print_warning "Azure Monitor pods not yet ready. They may take a few minutes to start."
+
     print_message "ACNS verification complete!"
 }
 
@@ -134,6 +158,8 @@ display_summary() {
     echo "AKS Cluster:           $CLUSTER_NAME"
     echo "Cluster FQDN:          $CLUSTER_FQDN"
     echo "Network Dataplane:     $NETWORK_DATAPLANE"
+    echo "Grafana URL:           $GRAFANA_URL"
+    echo "Prometheus ID:         $PROMETHEUS_ID"
     echo ""
     echo "=========================================="
     echo "   ACNS Features Enabled"
@@ -142,6 +168,24 @@ display_summary() {
     echo "  ✅ Container Network Observability"
     echo "  ✅ Container Network Security (FQDN + L7)"
     echo "  ✅ Container Network Performance (eBPF)"
+    echo "  ✅ Azure Managed Prometheus"
+    echo "  ✅ Azure Managed Grafana"
+    echo ""
+    echo "=========================================="
+    echo "   Grafana Dashboards"
+    echo "=========================================="
+    echo ""
+    echo "Open Grafana at: $GRAFANA_URL"
+    echo ""
+    echo "Pre-built dashboards under Azure Managed Prometheus:"
+    echo "  - Kubernetes / Networking / Clusters"
+    echo "  - Kubernetes / Networking / DNS (Cluster)"
+    echo "  - Kubernetes / Networking / DNS (Workload)"
+    echo "  - Kubernetes / Networking / Drops (Workload)"
+    echo "  - Kubernetes / Networking / Pod Flows (Namespace)"
+    echo "  - Kubernetes / Networking / Pod Flows (Workload)"
+    echo "  - Kubernetes / Networking / L7 (Namespace)"
+    echo "  - Kubernetes / Networking / L7 (Workload)"
     echo ""
     echo "=========================================="
     echo "   Next Steps"
@@ -157,7 +201,11 @@ display_summary() {
     echo "   kubectl apply -f l7-demo-apps.yaml -n l7-demo"
     echo "   kubectl apply -f l7-policy.yaml -n l7-demo"
     echo ""
-    echo "3. See commands.azcli for full demo walkthrough"
+    echo "3. View metrics in Grafana:"
+    echo "   Open $GRAFANA_URL"
+    echo "   Navigate to Dashboards > Azure Managed Prometheus"
+    echo ""
+    echo "4. See commands.azcli for full demo walkthrough"
     echo ""
     echo "=========================================="
     echo ""

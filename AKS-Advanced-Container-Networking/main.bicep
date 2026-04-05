@@ -6,6 +6,8 @@
 //   - Cilium data plane
 //   - Advanced Container Networking Services enabled
 //   - L7 advanced network policies (includes FQDN filtering)
+//   - Azure Managed Prometheus for metrics collection
+//   - Azure Managed Grafana for metrics visualization
 // ============================================================
 
 @description('Azure region for all resources.')
@@ -53,8 +55,157 @@ param maxNodeCount int = 5
 ])
 param acnsAdvancedNetworkPolicies string = 'L7'
 
+@description('Object ID of the user to assign Grafana Admin role. Leave empty to skip.')
+param userId string = ''
+
 // ============================================================
-// AKS Cluster with ACNS
+// Azure Monitor Workspace (Managed Prometheus)
+// ============================================================
+resource prometheus 'Microsoft.Monitor/accounts@2023-04-03' = {
+  name: '${clusterName}-prometheus'
+  location: location
+}
+
+// ============================================================
+// Azure Managed Grafana
+// ============================================================
+resource grafana 'Microsoft.Dashboard/grafana@2023-09-01' = {
+  name: '${clusterName}-grafana'
+  location: location
+  sku: {
+    name: 'Standard'
+  }
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    grafanaIntegrations: {
+      azureMonitorWorkspaceIntegrations: [
+        {
+          azureMonitorWorkspaceResourceId: prometheus.id
+        }
+      ]
+    }
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+// ============================================================
+// Data Collection for Prometheus Metrics
+// ============================================================
+resource dataCollectionEndpoint 'Microsoft.Insights/dataCollectionEndpoints@2022-06-01' = {
+  name: 'MSProm-${location}-${clusterName}'
+  location: location
+  kind: 'Linux'
+  properties: {
+    networkAcls: {
+      publicNetworkAccess: 'Enabled'
+    }
+  }
+}
+
+resource dataCollectionRule 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
+  name: 'MSProm-${location}-${clusterName}'
+  location: location
+  properties: {
+    dataCollectionEndpointId: dataCollectionEndpoint.id
+    dataSources: {
+      prometheusForwarder: [
+        {
+          name: 'PrometheusDataSource'
+          streams: [
+            'Microsoft-PrometheusMetrics'
+          ]
+          labelIncludeFilter: {}
+        }
+      ]
+    }
+    destinations: {
+      monitoringAccounts: [
+        {
+          accountResourceId: prometheus.id
+          name: 'MonitoringAccount1'
+        }
+      ]
+    }
+    dataFlows: [
+      {
+        streams: [
+          'Microsoft-PrometheusMetrics'
+        ]
+        destinations: [
+          'MonitoringAccount1'
+        ]
+      }
+    ]
+  }
+}
+
+resource dataCollectionRuleAssociation 'Microsoft.Insights/dataCollectionRuleAssociations@2022-06-01' = {
+  name: 'MSProm-${location}-${clusterName}'
+  scope: aksCluster
+  properties: {
+    dataCollectionRuleId: dataCollectionRule.id
+    description: 'Association of data collection rule for Prometheus metrics scraping.'
+  }
+}
+
+// ============================================================
+// Role Assignments for Grafana → Prometheus
+// ============================================================
+
+// Monitoring Reader role
+resource monitoringReaderRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '43d0d8ad-25c7-4714-9337-8ba259a9fe05'
+  scope: subscription()
+}
+
+// Monitoring Data Reader role
+resource monitoringDataReaderRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: 'b0d8363b-8ddd-447d-831f-62ca05bff136'
+  scope: subscription()
+}
+
+// Grafana Admin role
+resource grafanaAdminRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' existing = {
+  name: '22926164-76b3-42b3-bc55-97df8dab3e41'
+  scope: subscription()
+}
+
+// Allow Grafana to read Prometheus metrics
+resource monitoringReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(clusterName, prometheus.name, monitoringReaderRole.id)
+  scope: prometheus
+  properties: {
+    roleDefinitionId: monitoringReaderRole.id
+    principalId: grafana.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource monitoringDataReaderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(clusterName, prometheus.name, monitoringDataReaderRole.id)
+  scope: prometheus
+  properties: {
+    roleDefinitionId: monitoringDataReaderRole.id
+    principalId: grafana.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Assign Grafana Admin to the deploying user
+resource grafanaAdminRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(userId)) {
+  name: guid(clusterName, userId, grafanaAdminRole.id)
+  scope: grafana
+  properties: {
+    roleDefinitionId: grafanaAdminRole.id
+    principalId: userId
+    principalType: 'User'
+  }
+}
+
+// ============================================================
+// AKS Cluster with ACNS + Azure Monitor Metrics
 // ============================================================
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
   name: clusterName
@@ -66,6 +217,15 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
     dnsPrefix: dnsPrefix
     kubernetesVersion: kubernetesVersion
     enableRBAC: true
+    azureMonitorProfile: {
+      metrics: {
+        enabled: true
+        kubeStateMetrics: {
+          metricLabelsAllowlist: ''
+          metricAnnotationsAllowList: ''
+        }
+      }
+    }
     agentPoolProfiles: [
       {
         name: 'systempool'
@@ -132,6 +292,12 @@ output clusterFqdn string = aksCluster.properties.fqdn
 
 @description('The network data plane configured for the cluster.')
 output networkDataplane string = aksCluster.properties.networkProfile.networkDataplane
+
+@description('The Grafana dashboard endpoint URL.')
+output grafanaEndpoint string = grafana.properties.endpoint
+
+@description('The Azure Monitor workspace (Prometheus) resource ID.')
+output prometheusResourceId string = prometheus.id
 
 @description('Command to get cluster credentials.')
 output getCredentialsCommand string = 'az aks get-credentials --resource-group ${resourceGroup().name} --name ${aksCluster.name}'
