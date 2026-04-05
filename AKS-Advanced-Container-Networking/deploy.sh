@@ -114,6 +114,12 @@ get_outputs() {
         --query properties.outputs.prometheusResourceId.value \
         --output tsv)
 
+    LOG_ANALYTICS_ID=$(az deployment group show \
+        --name "$DEPLOYMENT_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query properties.outputs.logAnalyticsWorkspaceId.value \
+        --output tsv)
+
     print_message "Outputs retrieved successfully!"
 }
 
@@ -145,6 +151,10 @@ verify_acns() {
     print_message "Verifying Azure Monitor metrics pods..."
     kubectl get pods -n kube-system -o wide | grep ama- || print_warning "Azure Monitor pods not yet ready. They may take a few minutes to start."
 
+    echo ""
+    print_message "Verifying Container Insights (omsagent) pods..."
+    kubectl get pods -n kube-system -o wide | grep omsagent || print_warning "OMS agent pods not yet ready. They may take a few minutes to start."
+
     print_message "ACNS verification complete!"
 }
 
@@ -160,6 +170,7 @@ display_summary() {
     echo "Network Dataplane:     $NETWORK_DATAPLANE"
     echo "Grafana URL:           $GRAFANA_URL"
     echo "Prometheus ID:         $PROMETHEUS_ID"
+    echo "Log Analytics:         $LOG_ANALYTICS_ID"
     echo ""
     echo "=========================================="
     echo "   ACNS Features Enabled"
@@ -168,6 +179,7 @@ display_summary() {
     echo "  ✅ Container Network Observability"
     echo "  ✅ Container Network Security (FQDN + L7)"
     echo "  ✅ Container Network Performance (eBPF)"
+    echo "  ✅ Container Insights (Log Analytics)"
     echo "  ✅ Azure Managed Prometheus"
     echo "  ✅ Azure Managed Grafana"
     echo ""

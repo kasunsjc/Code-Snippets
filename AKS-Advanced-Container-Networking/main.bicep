@@ -8,6 +8,7 @@
 //   - L7 advanced network policies (includes FQDN filtering)
 //   - Azure Managed Prometheus for metrics collection
 //   - Azure Managed Grafana for metrics visualization
+//   - Container Insights with Log Analytics workspace
 // ============================================================
 
 @description('Azure region for all resources.')
@@ -57,6 +58,20 @@ param userId string = ''
 resource prometheus 'Microsoft.Monitor/accounts@2023-04-03' = {
   name: '${clusterName}-prometheus'
   location: location
+}
+
+// ============================================================
+// Log Analytics Workspace (Container Insights)
+// ============================================================
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${clusterName}-logs'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
 }
 
 // ============================================================
@@ -219,6 +234,14 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
         }
       }
     }
+    addonProfiles: {
+      omsagent: {
+        enabled: true
+        config: {
+          logAnalyticsWorkspaceResourceID: logAnalytics.id
+        }
+      }
+    }
     agentPoolProfiles: [
       {
         name: 'systempool'
@@ -286,3 +309,6 @@ output prometheusResourceId string = prometheus.id
 
 @description('Command to get cluster credentials.')
 output getCredentialsCommand string = 'az aks get-credentials --resource-group ${resourceGroup().name} --name ${aksCluster.name}'
+
+@description('The Log Analytics workspace resource ID.')
+output logAnalyticsWorkspaceId string = logAnalytics.id
