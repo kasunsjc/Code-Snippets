@@ -80,9 +80,9 @@ k8s_count=0; docker_count=0; azure_count=0
 for ex in "${EXAMPLES[@]}"; do
   cat=$(categorize "$ex")
   case "$cat" in
-    Kubernetes) ((k8s_count++)) ;;
-    Docker) ((docker_count++)) ;;
-    Azure) ((azure_count++)) ;;
+    Kubernetes) ((++k8s_count)) ;;
+    Docker) ((++docker_count)) ;;
+    Azure) ((++azure_count)) ;;
   esac
 done
 

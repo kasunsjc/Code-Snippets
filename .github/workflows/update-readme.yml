@@ -5,8 +5,9 @@ on:
     branches: [main]
     paths:
       - '**/README.md'
-      - '*/Dockerfile'
-      - '*.bicep'
+      - '**/Dockerfile*'
+      - '**/*.bicep'
+      - '**/*.bicepparam'
       - '.github/workflows/update-readme.yml'
       - 'scripts/generate-readme.sh'
 
