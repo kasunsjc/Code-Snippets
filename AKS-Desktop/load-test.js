@@ -15,7 +15,7 @@ export const options = {
 };
 
 export default function () {
-  const res = http.get("http://sample-app.kasunrajapakse.xyz/");
+  const res = http.get("http://project-2-app.kasunrajapakse.xyz/");
 
   check(res, {
     "status is 200": (r) => r.status === 200,

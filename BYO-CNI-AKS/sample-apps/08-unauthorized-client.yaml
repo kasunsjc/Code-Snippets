@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unauthorized-client
+  namespace: cilium-demo
+  labels:
+    app: unauthorized-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unauthorized-client
+  template:
+    metadata:
+      labels:
+        app: unauthorized-client
+    spec:
+      containers:
+        - name: netshoot
+          image: nicolaka/netshoot
+          command: ["sleep", "infinity"]

@@ -1,0 +1,20 @@
+---
+# Cilium Network Policy: Allow only backend-api -> database traffic
+# Deny all other ingress to the database tier
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: database-policy
+  namespace: cilium-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      app: database
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: backend-api
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP

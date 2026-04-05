@@ -1,0 +1,20 @@
+---
+# Cilium Network Policy: Allow frontend -> backend-api traffic only
+# This demonstrates L3/L4 network policy using Cilium
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: backend-api-policy
+  namespace: cilium-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend-api
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: frontend
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP

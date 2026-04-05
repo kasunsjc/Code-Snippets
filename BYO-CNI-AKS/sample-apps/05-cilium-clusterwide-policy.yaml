@@ -1,0 +1,14 @@
+---
+# Cilium Cluster-wide Network Policy: Default deny all ingress
+# Apply this to enforce zero-trust networking across the cluster
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  endpointSelector:
+    matchLabels: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system

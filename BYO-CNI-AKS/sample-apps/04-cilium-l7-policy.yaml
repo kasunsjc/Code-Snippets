@@ -1,0 +1,28 @@
+---
+# Cilium Network Policy: L7 HTTP-aware policy
+# Only allow GET and POST on specific paths to the backend-api
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: backend-api-l7-policy
+  namespace: cilium-demo
+spec:
+  endpointSelector:
+    matchLabels:
+      app: backend-api
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: frontend
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+          rules:
+            http:
+              - method: GET
+                path: "/api/.*"
+              - method: POST
+                path: "/api/.*"
+              - method: GET
+                path: "/health"

@@ -4,22 +4,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: sample-app
-  namespace: sample-app
+  name: project-2-app
+  namespace: project-2
   labels:
-    app: sample-app
+    app: project-2-app
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: sample-app
+      app: project-2-app
   template:
     metadata:
       labels:
-        app: sample-app
+        app: project-2-app
     spec:
       containers:
-        - name: sample-app
+        - name: project-2-app
           image: mcr.microsoft.com/azuredocs/aks-helloworld:v1
           ports:
             - containerPort: 80
@@ -37,12 +37,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: sample-app-svc
-  namespace: sample-app
+  name: project-2-app-svc
+  namespace: project-2
 spec:
   type: ClusterIP
   selector:
-    app: sample-app
+    app: project-2-app
   ports:
     - port: 80
       targetPort: 80
@@ -54,21 +54,21 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: sample-app-ingress
-  namespace: sample-app
+  name: project-2-app-ingress
+  namespace: project-2
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   ingressClassName: webapprouting.kubernetes.azure.com
   rules:
-    - host: sample-app-02.kasunrajapakse.xyz
+    - host: project-2-app.kasunrajapakse.xyz
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: sample-app-svc
+                name: project-2-app-svc
                 port:
                   number: 80
 ---
@@ -78,11 +78,11 @@ spec:
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: sample-app-scaledobject
-  namespace: sample-app
+  name: project-2-app-scaledobject
+  namespace: project-2
 spec:
   scaleTargetRef:
-    name: sample-app                       # targets the Deployment above
+    name: project-2-app                   # targets the Deployment above
   pollingInterval: 15                      # check metrics every 15s
   cooldownPeriod: 60                       # wait 60s before scaling down
   minReplicaCount: 1                       # minimum pods

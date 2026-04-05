@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netshoot-client
+  namespace: cilium-demo
+  labels:
+    app.kubernetes.io/name: netshoot-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netshoot-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netshoot-client
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - frontend
+                        - backend-api
+                        - database
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: netshoot
+          image: nicolaka/netshoot
+          command: ["sleep", "infinity"]
