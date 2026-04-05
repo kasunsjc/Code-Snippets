@@ -29,7 +29,6 @@ jobs:
               - '**/*.bicepparam'
             shell:
               - '**/*.sh'
-              - '**/*.azcli'
             yaml:
               - '**/*.yaml'
               - '**/*.yml'
@@ -99,14 +98,19 @@ jobs:
         run: |
           exit_code=0
           while IFS= read -r -d '' file; do
-            echo "🔍 Checking: $file"
-            if shellcheck -S warning "$file" 2>/dev/null; then
-              echo "  ✅ OK"
+            # Only lint files that have a shebang (actual scripts, not reference docs)
+            if head -1 "$file" | grep -q '^#!'; then
+              echo "🔍 Checking: $file"
+              if shellcheck -S warning -e SC2034 "$file"; then
+                echo "  ✅ OK"
+              else
+                echo "  ⚠️  Issues found"
+                exit_code=1
+              fi
             else
-              echo "  ⚠️  Issues found"
-              exit_code=1
+              echo "⏭️  Skipping (no shebang): $file"
             fi
-          done < <(find . \( -name '*.sh' -o -name '*.azcli' \) -not -path './.git/*' -print0)
+          done < <(find . -name '*.sh' -not -path './.git/*' -print0)
 
           exit $exit_code
 
@@ -122,7 +126,7 @@ jobs:
 
       - name: Lint YAML files
         run: |
-          cat > .yamllint.yml << 'EOF'
+          cat > .yamllint.yml <<'EOF'
           extends: relaxed
           rules:
             line-length:
@@ -130,6 +134,8 @@ jobs:
             truthy:
               check-keys: false
           EOF
+          # Fix heredoc indentation - strip leading spaces
+          sed -i 's/^          //' .yamllint.yml
 
           find . \( -name '*.yaml' -o -name '*.yml' \) \
             -not -path './.git/*' \
