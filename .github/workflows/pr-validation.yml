@@ -1,0 +1,197 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dockerfiles: ${{ steps.filter.outputs.dockerfiles }}
+      bicep: ${{ steps.filter.outputs.bicep }}
+      shell: ${{ steps.filter.outputs.shell }}
+      yaml: ${{ steps.filter.outputs.yaml }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            dockerfiles:
+              - '**/Dockerfile*'
+            bicep:
+              - '**/*.bicep'
+              - '**/*.bicepparam'
+            shell:
+              - '**/*.sh'
+              - '**/*.azcli'
+            yaml:
+              - '**/*.yaml'
+              - '**/*.yml'
+              - '!.github/**'
+
+  lint-dockerfiles:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.dockerfiles == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find Dockerfiles
+        id: find
+        run: |
+          files=$(find . -name 'Dockerfile*' -not -path './.git/*' | tr '\n' ' ')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+
+      - name: Lint Dockerfiles with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: "Dockerfile"
+          recursive: true
+          failure-threshold: warning
+          ignore: DL3008,DL3013,DL3018
+
+  validate-bicep:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.bicep == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: |
+          curl -Lo bicep https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64
+          chmod +x bicep
+          sudo mv bicep /usr/local/bin/
+
+      - name: Validate Bicep files
+        run: |
+          exit_code=0
+          while IFS= read -r -d '' file; do
+            echo "🔍 Validating: $file"
+            if bicep build "$file" --stdout > /dev/null 2>&1; then
+              echo "  ✅ Valid"
+            else
+              echo "  ❌ Invalid"
+              bicep build "$file" 2>&1 || true
+              exit_code=1
+            fi
+          done < <(find . -name '*.bicep' -not -name '*.bicepparam' -not -path './.git/*' -print0)
+
+          exit $exit_code
+
+  lint-shell-scripts:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shell == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          exit_code=0
+          while IFS= read -r -d '' file; do
+            echo "🔍 Checking: $file"
+            if shellcheck -S warning "$file" 2>/dev/null; then
+              echo "  ✅ OK"
+            else
+              echo "  ⚠️  Issues found"
+              exit_code=1
+            fi
+          done < <(find . \( -name '*.sh' -o -name '*.azcli' \) -not -path './.git/*' -print0)
+
+          exit $exit_code
+
+  validate-yaml:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.yaml == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint YAML files
+        run: |
+          cat > .yamllint.yml << 'EOF'
+          extends: relaxed
+          rules:
+            line-length:
+              max: 200
+            truthy:
+              check-keys: false
+          EOF
+
+          find . \( -name '*.yaml' -o -name '*.yml' \) \
+            -not -path './.git/*' \
+            -not -path './.github/*' \
+            -exec yamllint -c .yamllint.yml {} +
+
+  check-readme-exists:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for README in each example directory
+        run: |
+          missing=()
+          for dir in */; do
+            dirname=$(basename "$dir")
+            # Skip non-example directories
+            case "$dirname" in
+              .git|.github|scripts|node_modules) continue ;;
+            esac
+
+            if [[ ! -f "$dir/README.md" ]]; then
+              missing+=("$dirname")
+            fi
+          done
+
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::warning::The following example directories are missing README.md:"
+            for m in "${missing[@]}"; do
+              echo "  ⚠️  $m/"
+            done
+          else
+            echo "✅ All example directories have a README.md"
+          fi
+
+  summary:
+    needs: [lint-dockerfiles, validate-bicep, lint-shell-scripts, validate-yaml, check-readme-exists]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validation Summary
+        run: |
+          echo "## PR Validation Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+
+          for job in dockerfiles bicep shell yaml readme; do
+            case "$job" in
+              dockerfiles) result="${{ needs.lint-dockerfiles.result }}" ; name="Dockerfile Lint" ;;
+              bicep)       result="${{ needs.validate-bicep.result }}"   ; name="Bicep Validation" ;;
+              shell)       result="${{ needs.lint-shell-scripts.result }}"; name="Shell Script Lint" ;;
+              yaml)        result="${{ needs.validate-yaml.result }}"    ; name="YAML Lint" ;;
+              readme)      result="${{ needs.check-readme-exists.result }}"; name="README Check" ;;
+            esac
+
+            case "$result" in
+              success)  status="✅ Passed" ;;
+              failure)  status="❌ Failed" ;;
+              skipped)  status="⏭️ Skipped" ;;
+              *)        status="⚠️ $result" ;;
+            esac
+
+            echo "| $name | $status |" >> "$GITHUB_STEP_SUMMARY"
+          done
