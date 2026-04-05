@@ -90,35 +90,35 @@ deploy_bicep() {
 get_outputs() {
     print_message "Retrieving deployment outputs..."
 
-    CLUSTER_FQDN=$(az deployment group show \
-        --name "$DEPLOYMENT_NAME" \
+    CLUSTER_FQDN=$(az aks show \
+        --name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
-        --query properties.outputs.clusterFqdn.value \
+        --query fqdn \
         --output tsv)
 
-    NETWORK_DATAPLANE=$(az deployment group show \
-        --name "$DEPLOYMENT_NAME" \
+    NETWORK_DATAPLANE=$(az aks show \
+        --name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
-        --query properties.outputs.networkDataplane.value \
+        --query networkProfile.networkDataplane \
         --output tsv)
 
-    GRAFANA_URL=$(az deployment group show \
-        --name "$DEPLOYMENT_NAME" \
+    GRAFANA_URL=$(az grafana show \
+        --name "$(az grafana list --resource-group "$RESOURCE_GROUP" --query '[0].name' --output tsv)" \
         --resource-group "$RESOURCE_GROUP" \
-        --query properties.outputs.grafanaEndpoint.value \
-        --output tsv)
+        --query properties.endpoint \
+        --output tsv 2>/dev/null || echo "N/A")
 
-    PROMETHEUS_ID=$(az deployment group show \
-        --name "$DEPLOYMENT_NAME" \
+    PROMETHEUS_ID=$(az resource list \
         --resource-group "$RESOURCE_GROUP" \
-        --query properties.outputs.prometheusResourceId.value \
-        --output tsv)
+        --resource-type "Microsoft.Monitor/accounts" \
+        --query '[0].id' \
+        --output tsv 2>/dev/null || echo "N/A")
 
-    LOG_ANALYTICS_ID=$(az deployment group show \
-        --name "$DEPLOYMENT_NAME" \
+    LOG_ANALYTICS_ID=$(az resource list \
         --resource-group "$RESOURCE_GROUP" \
-        --query properties.outputs.logAnalyticsWorkspaceId.value \
-        --output tsv)
+        --resource-type "Microsoft.OperationalInsights/workspaces" \
+        --query '[0].id' \
+        --output tsv 2>/dev/null || echo "N/A")
 
     print_message "Outputs retrieved successfully!"
 }
