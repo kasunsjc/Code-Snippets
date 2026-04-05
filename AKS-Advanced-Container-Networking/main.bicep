@@ -48,13 +48,6 @@ param minNodeCount int = 1
 @maxValue(100)
 param maxNodeCount int = 5
 
-@description('Advanced network policy level. Use "L7" for L7 + FQDN, or "FQDN" for FQDN-only filtering.')
-@allowed([
-  'L7'
-  'FQDN'
-])
-param acnsAdvancedNetworkPolicies string = 'L7'
-
 @description('Object ID of the user to assign Grafana Admin role. Leave empty to skip.')
 param userId string = ''
 
@@ -207,7 +200,7 @@ resource grafanaAdminRoleAssignment 'Microsoft.Authorization/roleAssignments@202
 // ============================================================
 // AKS Cluster with ACNS + Azure Monitor Metrics
 // ============================================================
-resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
+resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
   name: clusterName
   location: location
   identity: {
@@ -255,9 +248,6 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
         }
         security: {
           enabled: true
-          fqdnPolicy: {
-            enabled: true
-          }
         }
       }
     }

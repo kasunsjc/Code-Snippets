@@ -9,4 +9,3 @@ param adminUsername = 'azureuser'
 param enableAutoScaling = true
 param minNodeCount = 1
 param maxNodeCount = 5
-param acnsAdvancedNetworkPolicies = 'L7'
