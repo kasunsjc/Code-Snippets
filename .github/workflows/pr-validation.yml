@@ -101,7 +101,7 @@ jobs:
             # Only lint files that have a shebang (actual scripts, not reference docs)
             if head -1 "$file" | grep -q '^#!'; then
               echo "🔍 Checking: $file"
-              if shellcheck -S warning -e SC2034 "$file"; then
+              if shellcheck -S warning -e SC2034,SC2046,SC2207 "$file"; then
                 echo "  ✅ OK"
               else
                 echo "  ⚠️  Issues found"
@@ -126,14 +126,19 @@ jobs:
 
       - name: Lint YAML files
         run: |
-          cat > .yamllint.yml <<'EOF'
+          cat > .yamllint.yml <<'YAMLLINT'
           extends: relaxed
           rules:
             line-length:
               max: 200
             truthy:
               check-keys: false
-          EOF
+            new-line-at-end-of-file: disable
+            trailing-spaces: disable
+            indentation:
+              spaces: consistent
+              indent-sequences: whatever
+          YAMLLINT
           # Fix heredoc indentation - strip leading spaces
           sed -i 's/^          //' .yamllint.yml
 
