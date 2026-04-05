@@ -1,0 +1,57 @@
+name: Update Root README
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/README.md'
+      - '**/Dockerfile*'
+      - '**/*.bicep'
+      - '**/*.bicepparam'
+      - '.github/workflows/update-readme.yml'
+      - 'scripts/generate-readme.sh'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate updated README
+        run: |
+          chmod +x scripts/generate-readme.sh
+          bash scripts/generate-readme.sh
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet README.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "docs: auto-update root README with latest examples"
+          title: "docs: auto-update root README"
+          body: |
+            This PR was automatically generated because example directories changed.
+
+            **Changes detected:**
+            - New or updated example directories
+            - Updated README table of contents
+
+            Please review the generated README for accuracy.
+          branch: auto/update-readme
+          delete-branch: true
+          labels: documentation,automated
