@@ -1,0 +1,24 @@
+apiVersion: "cilium.io/v2"
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-bing-fqdn
+spec:
+  endpointSelector:
+    matchLabels:
+      app: demo-container
+  egress:
+    # Allow DNS queries to kube-dns for FQDN resolution
+    - toEndpoints:
+      - matchLabels:
+          "k8s:io.kubernetes.pod.namespace": kube-system
+          "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+           - port: "53"
+             protocol: ANY
+          rules:
+            dns:
+              - matchPattern: "*.bing.com"
+    # Allow traffic to resolved bing.com IPs
+    - toFQDNs:
+      - matchPattern: "*.bing.com"
