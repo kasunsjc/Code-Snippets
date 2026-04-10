@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Variables
 RESOURCE_GROUP_NAME="rg-byocni-cilium-demo"
-LOCATION="eastus"
+LOCATION="northeurope"
 DEPLOYMENT_NAME="byocni-deployment-$(date +%Y%m%d-%H%M%S)"
 CILIUM_VERSION="1.18.7"
 
@@ -155,8 +155,9 @@ install_cilium() {
     helm repo update
 
     # Install Cilium with AKS-compatible settings
-    helm install cilium cilium/cilium \
+    helm upgrade cilium cilium/cilium \
         --version "${CILIUM_VERSION}" \
+        --install \
         --namespace kube-system \
         --set aksbyocni.enabled=true \
         --set nodeinit.enabled=true \
@@ -164,9 +165,34 @@ install_cilium() {
         --set hubble.ui.enabled=true \
         --set hubble.metrics.enableOpenMetrics=true \
         --set hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,httpV2:exemplars=true;labelsContext=source_ip\,source_namespace\,source_workload\,destination_ip\,destination_namespace\,destination_workload\,traffic_direction}" \
-        --set ipam.operator.clusterPoolIPv4PodCIDRList="{10.244.0.0/16}"
+        --set ipam.operator.clusterPoolIPv4PodCIDRList="{10.244.0.0/16}" \
+        --set kubeProxyReplacement=true \
+        --set l2announcements.enabled=true \
+        --set devices="{eth0}" \
+        --set ipam.mode=cluster-pool \
+        --set ingressController.enabled=true \
+        --set gatewayAPI.enabled=true
 
     print_message "Cilium Helm chart installed!"
+}
+
+install_gateway_api_crds() {
+    print_message "Installing Gateway API CRDs..."
+
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
+
+    print_message "Gateway API CRDs installed!"
+
+    # Restart Cilium pods to pick up the Gateway API CRDs
+    print_message "Restarting Cilium pods to detect Gateway API CRDs..."
+    kubectl -n kube-system rollout restart daemonset/cilium
+    kubectl -n kube-system rollout restart deployment/cilium-operator
+
+    print_message "Cilium pods restarted!"
 }
 
 wait_for_cilium() {
@@ -270,6 +296,7 @@ get_outputs
 configure_aks_access
 wait_for_nodes
 install_cilium
+install_gateway_api_crds
 wait_for_cilium
 verify_nodes
 display_summary
