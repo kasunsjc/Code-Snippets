@@ -6,7 +6,7 @@ param namePrefix = 'byocni'
 param environment = 'dev'
 
 // Location
-param location = 'eastus'
+param location = 'northeurope'
 
 // AKS Configuration
 param kubernetesVersion = '1.34'
