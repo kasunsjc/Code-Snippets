@@ -1,0 +1,39 @@
+---
+# Pod that tries to resolve a non-existent service DNS name
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-resolution-app
+  namespace: troubleshooting-demos
+  labels:
+    app: dns-resolution-app
+    scenario: dns-failure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dns-resolution-app
+  template:
+    metadata:
+      labels:
+        app: dns-resolution-app
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          while true; do
+            echo "Attempting to connect to backend-api-svc..."
+            wget -q -O- http://backend-api-svc.troubleshooting-demos.svc.cluster.local:8080/health || echo "ERROR: Cannot resolve backend-api-svc"
+            sleep 10
+          done
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"

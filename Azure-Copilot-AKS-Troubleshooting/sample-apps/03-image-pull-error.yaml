@@ -1,0 +1,32 @@
+---
+# Pod that fails to pull a non-existent container image
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-pull-error
+  namespace: troubleshooting-demos
+  labels:
+    app: image-pull-error
+    scenario: image-pull-backoff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: image-pull-error
+  template:
+    metadata:
+      labels:
+        app: image-pull-error
+    spec:
+      containers:
+      - name: app
+        image: myregistry.azurecr.io/myapp:v99.99.99
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"

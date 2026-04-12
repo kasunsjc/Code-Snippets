@@ -1,0 +1,45 @@
+---
+# Pod and Service with mismatched ports
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wrong-port-app
+  namespace: troubleshooting-demos
+  labels:
+    app: wrong-port-app
+    scenario: port-mismatch
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wrong-port-app
+  template:
+    metadata:
+      labels:
+        app: wrong-port-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wrong-port-svc
+  namespace: troubleshooting-demos
+spec:
+  selector:
+    app: wrong-port-app
+  ports:
+  - port: 8080
+    targetPort: 3000  # Wrong! Container listens on 80, not 3000
+  type: ClusterIP
