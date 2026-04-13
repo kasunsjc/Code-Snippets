@@ -1,0 +1,39 @@
+---
+# Pod that crashes because it tries to write to a read-only filesystem
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: readonly-fs-app
+  namespace: troubleshooting-demos
+  labels:
+    app: readonly-fs-app
+    scenario: readonly-filesystem
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: readonly-fs-app
+  template:
+    metadata:
+      labels:
+        app: readonly-fs-app
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Writing application logs..."
+          echo "$(date) - Application started" >> /var/log/app.log
+          tail -f /var/log/app.log
+        securityContext:
+          readOnlyRootFilesystem: true
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"

@@ -1,0 +1,39 @@
+---
+# Pod with a liveness probe that always fails
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: failing-probe-app
+  namespace: troubleshooting-demos
+  labels:
+    app: failing-probe-app
+    scenario: liveness-failure
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: failing-probe-app
+  template:
+    metadata:
+      labels:
+        app: failing-probe-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 9999
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"

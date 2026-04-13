@@ -1,0 +1,41 @@
+---
+# Pod that crashes because a required environment variable is missing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crashloop-app
+  namespace: troubleshooting-demos
+  labels:
+    app: crashloop-app
+    scenario: crash-loop-backoff
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crashloop-app
+  template:
+    metadata:
+      labels:
+        app: crashloop-app
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Starting application..."
+          if [ -z "$DATABASE_URL" ]; then
+            echo "FATAL: DATABASE_URL is not configured!"
+            exit 1
+          fi
+          echo "Connected to database"
+          sleep 3600
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"

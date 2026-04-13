@@ -241,6 +241,28 @@ verify_nodes() {
     kubectl get nodes -o wide
 }
 
+deploy_bookinfo() {
+    print_message "Deploying Bookinfo sample application..."
+
+    # Create bookinfo namespace
+    kubectl create namespace bookinfo --dry-run=client -o yaml | kubectl apply -f -
+
+    # Deploy Bookinfo app from Istio samples
+    kubectl apply -n bookinfo -f https://raw.githubusercontent.com/istio/istio/master/samples/bookinfo/platform/kube/bookinfo.yaml
+
+    # Wait for all deployments to be ready
+    print_info "Waiting for Bookinfo deployments to be ready..."
+    kubectl -n bookinfo rollout status deployment/productpage-v1 --timeout=120s
+    kubectl -n bookinfo rollout status deployment/details-v1 --timeout=120s
+    kubectl -n bookinfo rollout status deployment/ratings-v1 --timeout=120s
+    kubectl -n bookinfo rollout status deployment/reviews-v1 --timeout=120s
+    kubectl -n bookinfo rollout status deployment/reviews-v2 --timeout=120s
+    kubectl -n bookinfo rollout status deployment/reviews-v3 --timeout=120s
+
+    print_message "Bookinfo application deployed!"
+    kubectl -n bookinfo get pods
+}
+
 display_summary() {
     echo ""
     echo "=========================================="
@@ -283,6 +305,17 @@ display_summary() {
 }
 
 # Main execution
+DEPLOY_BOOKINFO=false
+
+# Parse arguments
+for arg in "$@"; do
+    case $arg in
+        --deploy-bookinfo)
+            DEPLOY_BOOKINFO=true
+            ;;
+    esac
+done
+
 echo ""
 echo "=========================================="
 echo "   BYO CNI AKS + Cilium - Deployment"
@@ -299,4 +332,7 @@ install_cilium
 install_gateway_api_crds
 wait_for_cilium
 verify_nodes
+if [ "$DEPLOY_BOOKINFO" = true ]; then
+    deploy_bookinfo
+fi
 display_summary

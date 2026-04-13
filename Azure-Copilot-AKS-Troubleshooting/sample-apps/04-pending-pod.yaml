@@ -1,0 +1,30 @@
+---
+# Pod that stays Pending because it requests more resources than available
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pending-pod
+  namespace: troubleshooting-demos
+  labels:
+    app: pending-pod
+    scenario: pending-unschedulable
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pending-pod
+  template:
+    metadata:
+      labels:
+        app: pending-pod
+    spec:
+      containers:
+      - name: app
+        image: nginx:1.27
+        resources:
+          requests:
+            memory: "64Gi"
+            cpu: "32"
+          limits:
+            memory: "64Gi"
+            cpu: "32"

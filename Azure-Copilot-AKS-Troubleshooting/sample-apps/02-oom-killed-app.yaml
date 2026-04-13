@@ -1,0 +1,38 @@
+---
+# Pod that gets OOMKilled due to memory limit being too low
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oom-killed-app
+  namespace: troubleshooting-demos
+  labels:
+    app: oom-killed-app
+    scenario: oom-killed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oom-killed-app
+  template:
+    metadata:
+      labels:
+        app: oom-killed-app
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - |
+          echo "Allocating memory..."
+          # Allocate more memory than the limit allows
+          dd if=/dev/zero of=/dev/null bs=1M count=256
+          tail -f /dev/null
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "100m"
+          limits:
+            memory: "50Mi"
+            cpu: "200m"
