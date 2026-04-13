@@ -312,7 +312,6 @@ for arg in "$@"; do
     case $arg in
         --deploy-bookinfo)
             DEPLOY_BOOKINFO=true
-            shift
             ;;
     esac
 done
