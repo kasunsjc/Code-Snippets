@@ -41,6 +41,17 @@ jobs:
           overall_status=0
           summary=""
 
+          # Helper: sanitize a string into a valid deployment name
+          sanitize_name() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g'
+          }
+
+          # Helper: extract a quoted value from a Bicep/bicepparam line
+          # Handles both single and double quotes (e.g., 'value' or "value")
+          extract_quoted_value() {
+            echo "$1" | sed "s/.*= *['\"]\\([^'\"]*\\)['\"].*/\\1/" | xargs
+          }
+
           # -------------------------------------------------------
           # 1. Validate Bicep files that have matching .bicepparam
           # -------------------------------------------------------
@@ -49,7 +60,8 @@ jobs:
             bicepfile=""
 
             # Resolve the bicep file referenced in the .bicepparam
-            using_ref=$(grep -m1 "^using " "$paramfile" | sed "s/using '\\(.*\\)'/\\1/" | xargs)
+            using_line=$(grep -m1 "^using " "$paramfile")
+            using_ref=$(echo "$using_line" | sed "s/using *['\"]\\([^'\"]*\\)['\"].*/\\1/" | xargs)
             if [[ -n "$using_ref" ]]; then
               bicepfile="$dir/$using_ref"
             fi
@@ -59,11 +71,12 @@ jobs:
               continue
             fi
 
-            deployment_name=$(basename "$dir" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
+            deployment_name=$(sanitize_name "$(basename "$dir")")
             result_file="$WHATIF_RESULTS_DIR/${deployment_name}.txt"
 
             # Determine target scope from the bicep file
-            target_scope=$(grep -m1 'targetScope' "$bicepfile" | sed "s/.*= *'\\(.*\\)'/\\1/" | xargs)
+            scope_line=$(grep -m1 'targetScope' "$bicepfile" || true)
+            target_scope=$(extract_quoted_value "$scope_line")
 
             echo ""
             echo "==========================================="
@@ -75,7 +88,8 @@ jobs:
 
             if [[ "$target_scope" == "subscription" ]]; then
               # Subscription-scoped deployment
-              location=$(grep -m1 "param location" "$paramfile" | sed "s/.*= *'\\(.*\\)'/\\1/" | xargs)
+              loc_line=$(grep -m1 "param location" "$paramfile" || true)
+              location=$(extract_quoted_value "$loc_line")
               location="${location:-westeurope}"
 
               if az deployment sub what-if \
@@ -121,7 +135,7 @@ jobs:
               continue
             fi
 
-            deployment_name=$(echo "$bicepfile" | sed 's|^\./||' | tr '/' '-' | sed 's/\.bicep$//' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
+            deployment_name=$(sanitize_name "$(echo "$bicepfile" | sed 's|^\./||' | tr '/' '-' | sed 's/\.bicep$//')")
             result_file="$WHATIF_RESULTS_DIR/${deployment_name}-build.txt"
 
             echo ""
@@ -137,7 +151,7 @@ jobs:
               summary="${summary}❌ ${bicepfile} (build only)\n"
               overall_status=1
             fi
-          done < <(find . -name '*.bicep' -not -name '*.bicepparam' -not -path './.git/*' -not -path '*/modules/*' -print0)
+          done < <(find . -name '*.bicep' -not -path './.git/*' -not -path '*/modules/*' -print0)
 
           # Save summary for the issue creation step
           echo -e "$summary" > "$WHATIF_RESULTS_DIR/summary.txt"
