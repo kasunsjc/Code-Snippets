@@ -305,6 +305,18 @@ display_summary() {
 }
 
 # Main execution
+DEPLOY_BOOKINFO=false
+
+# Parse arguments
+for arg in "$@"; do
+    case $arg in
+        --deploy-bookinfo)
+            DEPLOY_BOOKINFO=true
+            shift
+            ;;
+    esac
+done
+
 echo ""
 echo "=========================================="
 echo "   BYO CNI AKS + Cilium - Deployment"
@@ -321,5 +333,7 @@ install_cilium
 install_gateway_api_crds
 wait_for_cilium
 verify_nodes
-deploy_bookinfo
+if [ "$DEPLOY_BOOKINFO" = true ]; then
+    deploy_bookinfo
+fi
 display_summary

@@ -15,6 +15,7 @@ NC='\033[0m'
 RESOURCE_GROUP_NAME="rg-copilot-aks-demo"
 LOCATION="eastus"
 DEPLOYMENT_NAME="copilot-aks-$(date +%Y%m%d-%H%M%S)"
+AKS_CLUSTER_NAME="copilot-aks-demo"
 
 print_message() {
     echo -e "${GREEN}==>${NC} $1"
@@ -42,7 +43,8 @@ check_prerequisites() {
     fi
 
     if ! command -v kubectl &> /dev/null; then
-        print_warning "kubectl is not installed. Install it with: az aks install-cli"
+        print_error "kubectl is not installed. Install it with: az aks install-cli"
+        exit 1
     fi
 
     print_message "Prerequisites check passed!"
@@ -77,7 +79,7 @@ get_credentials() {
 
     az aks get-credentials \
         --resource-group "$RESOURCE_GROUP_NAME" \
-        --name "copilot-aks-demo" \
+        --name "$AKS_CLUSTER_NAME" \
         --overwrite-existing
 
     print_message "Credentials configured!"

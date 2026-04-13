@@ -41,7 +41,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 }
 
 // AKS Cluster
-resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-06-02-preview' = {
+resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
   name: aksClusterName
   location: location
   tags: tags
