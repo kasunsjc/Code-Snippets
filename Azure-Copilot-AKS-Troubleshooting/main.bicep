@@ -10,7 +10,7 @@ param location string = resourceGroup().location
 param aksClusterName string = 'copilot-aks-demo'
 
 @description('AKS Kubernetes version')
-param kubernetesVersion string = '1.31.2'
+param kubernetesVersion string = '1.34'
 
 @description('AKS node count')
 @minValue(1)
