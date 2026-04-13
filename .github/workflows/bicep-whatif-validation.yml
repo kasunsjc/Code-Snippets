@@ -1,0 +1,287 @@
+name: Weekly Bicep What-If Validation
+
+on:
+  schedule:
+    - cron: '0 8 * * 1' # Every Monday at 8:00 AM UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  WHATIF_RESULTS_DIR: /tmp/whatif-results
+
+jobs:
+  whatif-validation:
+    name: Bicep What-If Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Run What-If Validation
+        id: whatif
+        run: |
+          set -e
+          mkdir -p "$WHATIF_RESULTS_DIR"
+
+          overall_status=0
+          summary=""
+
+          # Helper: sanitize a string into a valid deployment name
+          sanitize_name() {
+            echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g'
+          }
+
+          # Helper: extract a quoted value from a Bicep/bicepparam line
+          # Handles both single and double quotes (e.g., 'value' or "value")
+          extract_quoted_value() {
+            echo "$1" | sed "s/.*= *['\"]\\([^'\"]*\\)['\"].*/\\1/" | xargs
+          }
+
+          # -------------------------------------------------------
+          # 1. Validate Bicep files that have matching .bicepparam
+          # -------------------------------------------------------
+          while IFS= read -r -d '' paramfile; do
+            dir=$(dirname "$paramfile")
+            bicepfile=""
+
+            # Resolve the bicep file referenced in the .bicepparam
+            using_line=$(grep -m1 "^using " "$paramfile")
+            using_ref=$(echo "$using_line" | sed "s/using *['\"]\\([^'\"]*\\)['\"].*/\\1/" | xargs)
+            if [[ -n "$using_ref" ]]; then
+              bicepfile="$dir/$using_ref"
+            fi
+
+            if [[ ! -f "$bicepfile" ]]; then
+              echo "⚠️  Could not resolve bicep file for $paramfile — skipping"
+              continue
+            fi
+
+            deployment_name=$(sanitize_name "$(basename "$dir")")
+            result_file="$WHATIF_RESULTS_DIR/${deployment_name}.txt"
+
+            # Determine target scope from the bicep file
+            scope_line=$(grep -m1 'targetScope' "$bicepfile" || true)
+            target_scope=$(extract_quoted_value "$scope_line")
+
+            echo ""
+            echo "==========================================="
+            echo "📦 Deployment: $dir"
+            echo "   Bicep:  $bicepfile"
+            echo "   Params: $paramfile"
+            echo "   Scope:  ${target_scope:-resourceGroup}"
+            echo "==========================================="
+
+            if [[ "$target_scope" == "subscription" ]]; then
+              # Subscription-scoped deployment
+              loc_line=$(grep -m1 "param location" "$paramfile" || true)
+              location=$(extract_quoted_value "$loc_line")
+              location="${location:-westeurope}"
+
+              if az deployment sub what-if \
+                --location "$location" \
+                --template-file "$bicepfile" \
+                --parameters "$paramfile" \
+                --no-pretty-print \
+                > "$result_file" 2>&1; then
+                echo "✅ What-If succeeded for $dir"
+                summary="${summary}✅ ${dir}\n"
+              else
+                echo "❌ What-If FAILED for $dir"
+                summary="${summary}❌ ${dir}\n"
+                overall_status=1
+              fi
+            else
+              # Resource group-scoped deployment
+              resource_group="${AZURE_RESOURCE_GROUP:-rg-bicep-whatif-validation}"
+              resource_group_location="${AZURE_RESOURCE_GROUP_LOCATION:-westeurope}"
+
+              if [[ "$(az group exists --name "$resource_group")" != "true" ]]; then
+                echo "ℹ️  Resource group '$resource_group' does not exist. Creating it in '$resource_group_location'..."
+                az group create \
+                  --name "$resource_group" \
+                  --location "$resource_group_location" \
+                  --output none
+              fi
+
+              if az deployment group what-if \
+                --resource-group "$resource_group" \
+                --template-file "$bicepfile" \
+                --parameters "$paramfile" \
+                --no-pretty-print \
+                > "$result_file" 2>&1; then
+                echo "✅ What-If succeeded for $dir"
+                summary="${summary}✅ ${dir}\n"
+              else
+                echo "❌ What-If FAILED for $dir"
+                summary="${summary}❌ ${dir}\n"
+                overall_status=1
+              fi
+            fi
+          done < <(find . -name '*.bicepparam' -not -path './.git/*' -print0)
+
+          # -------------------------------------------------------
+          # 2. Bicep build validation for files without .bicepparam
+          # -------------------------------------------------------
+          while IFS= read -r -d '' bicepfile; do
+            dir=$(dirname "$bicepfile")
+            # Skip if this directory already has a .bicepparam file
+            if find "$dir" -maxdepth 1 -name '*.bicepparam' | grep -q .; then
+              continue
+            fi
+
+            deployment_name=$(sanitize_name "$(echo "$bicepfile" | sed 's|^\./||' | tr '/' '-' | sed 's/\.bicep$//')")
+            result_file="$WHATIF_RESULTS_DIR/${deployment_name}-build.txt"
+
+            echo ""
+            echo "==========================================="
+            echo "🔨 Build Validation: $bicepfile"
+            echo "==========================================="
+
+            if az bicep build --file "$bicepfile" --stdout > /dev/null 2> "$result_file"; then
+              echo "✅ Build succeeded for $bicepfile"
+              summary="${summary}✅ ${bicepfile} (build only)\n"
+            else
+              echo "❌ Build FAILED for $bicepfile"
+              summary="${summary}❌ ${bicepfile} (build only)\n"
+              overall_status=1
+            fi
+          done < <(find . -name '*.bicep' -not -path './.git/*' -not -path '*/modules/*' -print0)
+
+          # Save summary for the issue creation step
+          echo -e "$summary" > "$WHATIF_RESULTS_DIR/summary.txt"
+
+          if [[ $overall_status -ne 0 ]]; then
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit $overall_status
+
+      - name: Create GitHub Issue on Failure
+        if: failure() && steps.whatif.outputs.has_failures == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const resultsDir = process.env.WHATIF_RESULTS_DIR;
+            const MAX_DETAIL_LINES = 80;
+            const MAX_DETAIL_CHARS = 12000;
+            let summary = '';
+            let details = '';
+
+            function isFailureResultFile(fileName, content) {
+              const lowerFileName = fileName.toLowerCase();
+              const lowerContent = content.toLowerCase();
+              return [
+                'fail',
+                'error',
+                'exception',
+                'invalid',
+                'deploymentfailed',
+                'what-if operation failed'
+              ].some(marker => lowerFileName.includes(marker) || lowerContent.includes(marker));
+            }
+
+            function truncateDetail(content) {
+              const lines = content.split('\n');
+              let truncated = lines.slice(-MAX_DETAIL_LINES).join('\n');
+              if (truncated.length > MAX_DETAIL_CHARS) {
+                truncated = truncated.slice(-MAX_DETAIL_CHARS);
+              }
+
+              const wasTruncated = lines.length > MAX_DETAIL_LINES || content.length > MAX_DETAIL_CHARS;
+              return wasTruncated
+                ? `[truncated to last ${MAX_DETAIL_LINES} lines / ${MAX_DETAIL_CHARS} chars]\n${truncated}`
+                : truncated;
+            }
+
+            // Read summary
+            const summaryFile = path.join(resultsDir, 'summary.txt');
+            if (fs.existsSync(summaryFile)) {
+              summary = fs.readFileSync(summaryFile, 'utf8').trim();
+            }
+
+            // Read individual result files for failure details only
+            const files = fs.readdirSync(resultsDir)
+              .filter(f => f.endsWith('.txt') && f !== 'summary.txt')
+              .sort();
+            for (const file of files) {
+              const content = fs.readFileSync(path.join(resultsDir, file), 'utf8').trim();
+              if (content && isFailureResultFile(file, content)) {
+                const truncatedContent = truncateDetail(content);
+                details += `\n<details>\n<summary>📄 ${file}</summary>\n\n\`\`\`\n${truncatedContent}\n\`\`\`\n</details>\n`;
+              }
+            }
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const today = new Date().toISOString().split('T')[0];
+
+            const body = `## 🔴 Weekly Bicep What-If Validation Failed
+
+            **Date:** ${today}
+            **Workflow Run:** [View Logs](${runUrl})
+
+            ### Summary
+
+            ${summary}
+
+            ### Failure Details
+            ${details}
+
+            ### Next Steps
+            - Review the failed Bicep templates listed above
+            - Check for deprecated API versions, removed properties, or invalid configurations
+            - Fix the issues and push changes to the \`main\` branch
+            - The next scheduled run will verify the fixes
+
+            ---
+            *This issue was automatically created by the [Weekly Bicep What-If Validation](${runUrl}) workflow.*
+            `.replace(/^            /gm, '');
+
+            // Check for existing open issues with the same label to avoid duplicates
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'bicep-validation-failure',
+              per_page: 1
+            });
+
+            if (existingIssues.data.length > 0) {
+              // Update the existing issue instead of creating a new one
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssues.data[0].number,
+                body: body
+              });
+              console.log(`Updated existing issue #${existingIssues.data[0].number}`);
+            } else {
+              // Create a new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔴 Bicep What-If Validation Failed — ${today}`,
+                body: body,
+                labels: ['bicep-validation-failure']
+              });
+              console.log('Created new issue for Bicep validation failure');
+            }
