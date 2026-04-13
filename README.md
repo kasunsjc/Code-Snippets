@@ -5,7 +5,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **15 examples** | Kubernetes: 10 | Docker: 4 | Azure: 1 | *Last Updated: April 2026*
+> **16 examples** | Kubernetes: 10 | Docker: 4 | Azure: 1 | *Last Updated: April 2026*
 
 ## 📋 Table of Contents
 
@@ -20,12 +20,13 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 | 7 | [AKS-Node-Autoprovision](./AKS-Node-Autoprovision/) | Automatically provision AKS nodes based on workload requirements without managing node pools manu... | Kubernetes |
 | 8 | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) | Enhance AKS security by restricting access to node resource group resources. | Kubernetes |
 | 9 | [Agentic-CLI-AKS](./Agentic-CLI-AKS/) | > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not ... | Kubernetes |
-| 10 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
-| 11 | [Custom-AKS-Copilot-Agent](./Custom-AKS-Copilot-Agent/) | A custom GitHub Copilot agent specialized in Azure Kubernetes Service (AKS) and Kubernetes troubl... | Kubernetes |
-| 12 | [Docker-Hardened-Images](./Docker-Hardened-Images/) | Welcome to this comprehensive demo on **Docker Hardened Images**! This repository demonstrates Do... | Docker |
-| 13 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
-| 14 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
-| 15 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
+| 10 | [Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/) | This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot ... | Other |
+| 11 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
+| 12 | [Custom-AKS-Copilot-Agent](./Custom-AKS-Copilot-Agent/) | A custom GitHub Copilot agent specialized in Azure Kubernetes Service (AKS) and Kubernetes troubl... | Kubernetes |
+| 13 | [Docker-Hardened-Images](./Docker-Hardened-Images/) | Welcome to this comprehensive demo on **Docker Hardened Images**! This repository demonstrates Do... | Docker |
+| 14 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
+| 15 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
+| 16 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
 
 ---
 
@@ -69,6 +70,11 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 
 - **[ACR-Task](./ACR-Task/)** — Build container images directly in Azure without needing Docker installed locally.
   - 📄 README: Yes | 📁 Files: 5
+
+### Other
+
+- **[Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/)** — This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot common issues in Azure Kubernetes Service (AKS) clusters. Instead of manually running `kubectl` commands and digging through logs, you can ask Copilot natural language questions directly in the Azure Portal and get actionable insights.
+  - 📄 README: Yes | 📁 Files: 16
 
 ---
 
