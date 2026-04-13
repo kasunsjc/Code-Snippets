@@ -108,6 +108,15 @@ jobs:
             else
               # Resource group-scoped deployment
               resource_group="${AZURE_RESOURCE_GROUP:-rg-bicep-whatif-validation}"
+              resource_group_location="${AZURE_RESOURCE_GROUP_LOCATION:-westeurope}"
+
+              if [[ "$(az group exists --name "$resource_group")" != "true" ]]; then
+                echo "ℹ️  Resource group '$resource_group' does not exist. Creating it in '$resource_group_location'..."
+                az group create \
+                  --name "$resource_group" \
+                  --location "$resource_group_location" \
+                  --output none
+              fi
 
               if az deployment group what-if \
                 --resource-group "$resource_group" \
@@ -173,8 +182,36 @@ jobs:
             const path = require('path');
 
             const resultsDir = process.env.WHATIF_RESULTS_DIR;
+            const MAX_DETAIL_LINES = 80;
+            const MAX_DETAIL_CHARS = 12000;
             let summary = '';
             let details = '';
+
+            function isFailureResultFile(fileName, content) {
+              const lowerFileName = fileName.toLowerCase();
+              const lowerContent = content.toLowerCase();
+              return [
+                'fail',
+                'error',
+                'exception',
+                'invalid',
+                'deploymentfailed',
+                'what-if operation failed'
+              ].some(marker => lowerFileName.includes(marker) || lowerContent.includes(marker));
+            }
+
+            function truncateDetail(content) {
+              const lines = content.split('\n');
+              let truncated = lines.slice(-MAX_DETAIL_LINES).join('\n');
+              if (truncated.length > MAX_DETAIL_CHARS) {
+                truncated = truncated.slice(-MAX_DETAIL_CHARS);
+              }
+
+              const wasTruncated = lines.length > MAX_DETAIL_LINES || content.length > MAX_DETAIL_CHARS;
+              return wasTruncated
+                ? `[truncated to last ${MAX_DETAIL_LINES} lines / ${MAX_DETAIL_CHARS} chars]\n${truncated}`
+                : truncated;
+            }
 
             // Read summary
             const summaryFile = path.join(resultsDir, 'summary.txt');
@@ -182,12 +219,15 @@ jobs:
               summary = fs.readFileSync(summaryFile, 'utf8').trim();
             }
 
-            // Read individual result files for failure details
-            const files = fs.readdirSync(resultsDir).filter(f => f.endsWith('.txt') && f !== 'summary.txt');
+            // Read individual result files for failure details only
+            const files = fs.readdirSync(resultsDir)
+              .filter(f => f.endsWith('.txt') && f !== 'summary.txt')
+              .sort();
             for (const file of files) {
               const content = fs.readFileSync(path.join(resultsDir, file), 'utf8').trim();
-              if (content) {
-                details += `\n<details>\n<summary>📄 ${file}</summary>\n\n\`\`\`\n${content}\n\`\`\`\n</details>\n`;
+              if (content && isFailureResultFile(file, content)) {
+                const truncatedContent = truncateDetail(content);
+                details += `\n<details>\n<summary>📄 ${file}</summary>\n\n\`\`\`\n${truncatedContent}\n\`\`\`\n</details>\n`;
               }
             }
 
