@@ -20,10 +20,6 @@ print_message() {
     echo -e "${GREEN}==>${NC} $1"
 }
 
-print_error() {
-    echo -e "${RED}ERROR:${NC} $1"
-}
-
 print_warning() {
     echo -e "${YELLOW}WARNING:${NC} $1"
 }
@@ -38,6 +34,28 @@ confirm_deletion() {
     if [ "$confirmation" != "yes" ]; then
         print_message "Cleanup cancelled."
         exit 0
+    fi
+}
+
+abort_active_upgrades() {
+    print_message "Checking for active blue-green upgrades..."
+
+    PROVISIONING_STATE=$(az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name userpool \
+        --query provisioningState \
+        --output tsv 2>/dev/null || echo "NotFound")
+
+    if [ "$PROVISIONING_STATE" = "Upgrading" ]; then
+        print_warning "Active upgrade detected. Aborting..."
+        az aks nodepool operation-abort \
+            --name userpool \
+            --cluster-name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" 2>/dev/null || true
+        print_message "Upgrade aborted."
+    else
+        print_message "No active upgrades to abort."
     fi
 }
 
@@ -80,6 +98,7 @@ main() {
     print_message "Starting AKS Blue-Green Node Pool demo cleanup..."
 
     confirm_deletion
+    abort_active_upgrades
     remove_kubectl_context
     delete_resource_group
 

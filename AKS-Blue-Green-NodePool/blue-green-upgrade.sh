@@ -2,14 +2,20 @@
 set -euo pipefail
 
 # ============================================================
-# AKS Blue-Green Node Pool Upgrade Demo
+# AKS Blue-Green Node Pool Upgrade Demo (Preview Feature)
 # ============================================================
-# This script demonstrates the blue-green node pool upgrade
-# strategy for AKS. It walks through:
-#   1. Creating a new "green" node pool
-#   2. Migrating workloads from "blue" to "green"
-#   3. Cordoning and draining the "blue" node pool
-#   4. Removing the old "blue" node pool
+# This script demonstrates the AKS blue-green node pool upgrade
+# preview feature. Unlike manual blue-green deployments, this
+# uses the built-in AKS upgrade strategy that automatically:
+#   - Cordons the existing (blue) nodes
+#   - Creates a parallel (green) node pool
+#   - Drains workloads in configurable batches
+#   - Provides a soak period for validation
+#   - Supports rollback during the final soak period
+#
+# Prerequisites:
+#   - aks-preview CLI extension installed
+#   - Cluster deployed with deploy.sh
 #
 # Reference:
 # https://learn.microsoft.com/en-us/azure/aks/blue-green-node-pool-upgrade
@@ -25,6 +31,7 @@ NC='\033[0m'
 # Configuration
 RESOURCE_GROUP="aks-bluegreen-demo"
 CLUSTER_NAME="aks-bluegreen-cluster"
+NODEPOOL_NAME="userpool"
 
 # Functions
 print_message() {
@@ -54,11 +61,21 @@ wait_for_user() {
 }
 
 # ============================================================
-# Step 0: Verify Current State
+# Step 0: Verify Prerequisites and Current State
 # ============================================================
 step_verify_current_state() {
-    print_step "0" "Verify Current State"
+    print_step "0" "Verify Prerequisites and Current State"
 
+    print_message "Checking aks-preview extension..."
+    if ! az extension show --name aks-preview &> /dev/null; then
+        print_error "aks-preview extension is not installed. Run deploy.sh first."
+        exit 1
+    fi
+
+    AKS_PREVIEW_VERSION=$(az extension show --name aks-preview --query version -o tsv)
+    print_message "aks-preview version: $AKS_PREVIEW_VERSION"
+
+    echo ""
     print_message "Current node pools:"
     az aks nodepool list \
         --cluster-name "$CLUSTER_NAME" \
@@ -66,137 +83,246 @@ step_verify_current_state() {
         --output table
 
     echo ""
-    print_message "Nodes and their labels:"
-    kubectl get nodes -L environment
+    print_message "Current node pool upgrade settings:"
+    az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query "{name:name, kubernetesVersion:currentOrchestratorVersion, upgradeSettings:upgradeSettings}" \
+        --output json
 
     echo ""
-    print_message "Current pods running on blue nodes:"
-    kubectl get pods -n demo -o wide
+    print_message "Current Kubernetes version:"
+    CURRENT_VERSION=$(az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query currentOrchestratorVersion \
+        --output tsv)
+    print_message "  Node pool '$NODEPOOL_NAME' is running Kubernetes $CURRENT_VERSION"
 
     echo ""
-    print_message "Current state: Workloads are running on the BLUE node pool."
+    print_message "Available upgrade versions:"
+    az aks get-upgrades \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --output table 2>/dev/null || print_warning "Could not retrieve upgrade versions."
+
+    echo ""
+    print_message "Current pods:"
+    kubectl get pods -n demo -o wide 2>/dev/null || print_warning "No demo namespace found."
+
+    echo ""
+    print_message "Current nodes:"
+    kubectl get nodes -o wide
 }
 
 # ============================================================
-# Step 1: Create Green Node Pool
+# Step 1: Review Blue-Green Settings
 # ============================================================
-step_create_green_pool() {
-    print_step "1" "Create Green Node Pool"
+step_review_settings() {
+    print_step "1" "Review Blue-Green Upgrade Settings"
 
-    print_message "Adding a new 'green' node pool to the cluster..."
-    print_warning "This may take 3-5 minutes..."
+    print_message "The node pool '$NODEPOOL_NAME' is configured with blue-green strategy."
+    echo ""
+    echo "  The blue-green upgrade process will:"
+    echo ""
+    echo "  1. Cordon existing (blue) nodes — mark as unschedulable"
+    echo "  2. Create a new (green) node pool — with the target version"
+    echo "  3. Drain workloads in batches — respecting PodDisruptionBudgets"
+    echo "  4. Pause between batches — for observation (batch soak)"
+    echo "  5. Final soak period — for validation before committing"
+    echo "  6. Delete blue nodes — after soak period expires"
+    echo ""
 
-    az aks nodepool add \
+    print_message "Current blue-green upgrade settings:"
+    az aks nodepool show \
         --cluster-name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
-        --name green \
-        --node-count 3 \
-        --node-vm-size Standard_D2s_v4 \
-        --os-sku AzureLinux \
-        --labels environment=green \
-        --mode User \
-        --output table
-
-    print_message "Green node pool created successfully!"
+        --name "$NODEPOOL_NAME" \
+        --query "upgradeSettings" \
+        --output json
 
     echo ""
-    print_message "Updated node pools:"
+    print_message "You can customize these settings before upgrading:"
+    echo ""
+    echo "  az aks nodepool update \\"
+    echo "      --cluster-name $CLUSTER_NAME \\"
+    echo "      --resource-group $RESOURCE_GROUP \\"
+    echo "      --name $NODEPOOL_NAME \\"
+    echo "      --drain-batch-size '50%' \\"
+    echo "      --drain-timeout-bg 30 \\"
+    echo "      --batch-soak-duration 5 \\"
+    echo "      --final-soak-duration 60"
+}
+
+# ============================================================
+# Step 2: Start Blue-Green Upgrade
+# ============================================================
+step_start_upgrade() {
+    print_step "2" "Start Blue-Green Upgrade"
+
+    # Determine target version
+    print_message "Determining target Kubernetes version..."
+
+    CURRENT_VERSION=$(az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query currentOrchestratorVersion \
+        --output tsv)
+
+    # Get available upgrade target
+    TARGET_VERSION=$(az aks get-upgrades \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query "controlPlaneProfile.upgrades[0].kubernetesVersion" \
+        --output tsv 2>/dev/null || echo "")
+
+    if [ -z "$TARGET_VERSION" ] || [ "$TARGET_VERSION" = "None" ]; then
+        print_warning "No Kubernetes version upgrade available."
+        print_message "Performing a node image upgrade instead..."
+        echo ""
+        print_message "Starting blue-green node image upgrade for '$NODEPOOL_NAME'..."
+        print_warning "This will create a green pool, drain blue pool in batches, and soak."
+        read -p "Continue? (yes/no): " confirmation
+
+        if [ "$confirmation" != "yes" ]; then
+            print_message "Upgrade skipped."
+            return
+        fi
+
+        az aks nodepool upgrade \
+            --cluster-name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$NODEPOOL_NAME" \
+            --node-image-only \
+            --no-wait
+
+        print_message "Blue-green node image upgrade initiated!"
+    else
+        print_message "Current version: $CURRENT_VERSION"
+        print_message "Target version:  $TARGET_VERSION"
+        echo ""
+        print_warning "This will initiate a blue-green upgrade."
+        print_warning "A parallel green node pool will be created (doubles capacity temporarily)."
+        read -p "Continue? (yes/no): " confirmation
+
+        if [ "$confirmation" != "yes" ]; then
+            print_message "Upgrade skipped."
+            return
+        fi
+
+        print_message "Starting blue-green upgrade to Kubernetes $TARGET_VERSION..."
+
+        az aks nodepool upgrade \
+            --cluster-name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$NODEPOOL_NAME" \
+            --kubernetes-version "$TARGET_VERSION" \
+            --no-wait
+
+        print_message "Blue-green upgrade initiated!"
+    fi
+
+    echo ""
+    print_message "The upgrade is running in the background. Monitor with:"
+    echo "  az aks nodepool show -g $RESOURCE_GROUP --cluster-name $CLUSTER_NAME -n $NODEPOOL_NAME --query provisioningState -o tsv"
+    echo "  kubectl get nodes -o wide"
+}
+
+# ============================================================
+# Step 3: Monitor Upgrade Progress
+# ============================================================
+step_monitor_upgrade() {
+    print_step "3" "Monitor Upgrade Progress"
+
+    print_message "Checking node pool provisioning state..."
+
+    PROVISIONING_STATE=$(az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query provisioningState \
+        --output tsv)
+
+    print_message "Provisioning state: $PROVISIONING_STATE"
+
+    echo ""
+    print_message "Node pools:"
     az aks nodepool list \
         --cluster-name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --output table
 
     echo ""
-    print_message "All nodes with environment labels:"
-    kubectl get nodes -L environment
+    print_message "Nodes (look for both blue and green nodes):"
+    kubectl get nodes -o wide
+
+    echo ""
+    print_message "Pod status:"
+    kubectl get pods -n demo -o wide 2>/dev/null || print_warning "No demo namespace found."
+
+    echo ""
+    print_message "During the upgrade you can:"
+    echo ""
+    echo "  Monitor continuously:"
+    echo "    watch -n 10 kubectl get nodes -o wide"
+    echo ""
+    echo "  Check pod migrations:"
+    echo "    watch -n 10 kubectl get pods -n demo -o wide"
+    echo ""
+    echo "  Pause/abort the upgrade:"
+    echo "    az aks nodepool operation-abort -g $RESOURCE_GROUP --cluster-name $CLUSTER_NAME -n $NODEPOOL_NAME"
 }
 
 # ============================================================
-# Step 2: Migrate Workloads to Green
+# Step 4: Demonstrate Abort and Rollback
 # ============================================================
-step_migrate_workloads() {
-    print_step "2" "Migrate Workloads from Blue to Green"
+step_demonstrate_rollback() {
+    print_step "4" "Abort and Rollback (Optional)"
 
-    print_message "Updating sample-app nodeSelector from 'blue' to 'green'..."
-
-    kubectl patch deployment sample-app -n demo --type='json' \
-        -p='[{"op": "replace", "path": "/spec/template/spec/nodeSelector/environment", "value": "green"}]'
-
-    print_message "Waiting for rollout to complete..."
-    kubectl rollout status deployment/sample-app -n demo --timeout=120s
-
+    print_message "If you need to abort the upgrade and rollback:"
     echo ""
-    print_message "Pods are now running on green nodes:"
-    kubectl get pods -n demo -o wide
-
+    echo "  Step 1 — Abort the ongoing upgrade:"
+    echo "    az aks nodepool operation-abort \\"
+    echo "        --name $NODEPOOL_NAME \\"
+    echo "        --cluster-name $CLUSTER_NAME \\"
+    echo "        --resource-group $RESOURCE_GROUP"
     echo ""
-    print_message "Workloads successfully migrated to the GREEN node pool!"
-}
+    echo "  Step 2 — Rollback to the original blue pool:"
+    echo "    az aks nodepool rollback \\"
+    echo "        --name $NODEPOOL_NAME \\"
+    echo "        --cluster-name $CLUSTER_NAME \\"
+    echo "        --resource-group $RESOURCE_GROUP"
+    echo ""
+    echo "  ⚠️  Rollback is only available during the final soak period."
+    echo "  Once the soak period expires and the blue pool is deleted,"
+    echo "  rollback is no longer possible."
+    echo ""
 
-# ============================================================
-# Step 3: Cordon and Drain Blue Nodes
-# ============================================================
-step_cordon_drain_blue() {
-    print_step "3" "Cordon and Drain Blue Node Pool"
+    read -p "Do you want to abort the current upgrade? (yes/no): " confirmation
 
-    print_message "Cordoning blue nodes (preventing new pod scheduling)..."
+    if [ "$confirmation" = "yes" ]; then
+        print_message "Aborting upgrade..."
+        az aks nodepool operation-abort \
+            --name "$NODEPOOL_NAME" \
+            --cluster-name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" 2>&1 || print_warning "No active upgrade to abort."
 
-    BLUE_NODES=$(kubectl get nodes -l environment=blue -o jsonpath='{.items[*].metadata.name}')
+        echo ""
+        read -p "Do you also want to rollback? (yes/no): " rollback_confirmation
 
-    if [ -z "$BLUE_NODES" ]; then
-        print_warning "No blue nodes found. Skipping cordon/drain."
-        return
+        if [ "$rollback_confirmation" = "yes" ]; then
+            print_message "Rolling back..."
+            az aks nodepool rollback \
+                --name "$NODEPOOL_NAME" \
+                --cluster-name "$CLUSTER_NAME" \
+                --resource-group "$RESOURCE_GROUP" 2>&1 || print_warning "Rollback not available at this stage."
+        fi
+    else
+        print_message "Skipping abort/rollback."
     fi
-
-    for node in $BLUE_NODES; do
-        print_message "  Cordoning node: $node"
-        kubectl cordon "$node"
-    done
-
-    echo ""
-    print_message "Draining blue nodes (evicting remaining pods)..."
-
-    for node in $BLUE_NODES; do
-        print_message "  Draining node: $node"
-        kubectl drain "$node" \
-            --ignore-daemonsets \
-            --delete-emptydir-data \
-            --force \
-            --timeout=120s 2>&1 | grep -E "evict|drain|cordon" || true
-    done
-
-    echo ""
-    print_message "Blue nodes cordoned and drained!"
-
-    echo ""
-    print_message "Node status (blue nodes should show SchedulingDisabled):"
-    kubectl get nodes -L environment
-}
-
-# ============================================================
-# Step 4: Remove Blue Node Pool
-# ============================================================
-step_remove_blue_pool() {
-    print_step "4" "Remove Blue Node Pool"
-
-    print_warning "This will permanently delete the blue node pool."
-    read -p "Continue? (yes/no): " confirmation
-
-    if [ "$confirmation" != "yes" ]; then
-        print_message "Skipping blue node pool removal."
-        return
-    fi
-
-    print_message "Deleting the blue node pool..."
-    print_warning "This may take 2-3 minutes..."
-
-    az aks nodepool delete \
-        --cluster-name "$CLUSTER_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --name blue \
-        --no-wait
-
-    print_message "Blue node pool deletion initiated!"
 }
 
 # ============================================================
@@ -205,32 +331,44 @@ step_remove_blue_pool() {
 step_verify_final_state() {
     print_step "5" "Verify Final State"
 
-    print_message "Final node pools:"
+    print_message "Final node pool state:"
+    az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query "{name:name, provisioningState:provisioningState, kubernetesVersion:currentOrchestratorVersion, count:count}" \
+        --output json
+
+    echo ""
+    print_message "Node pools:"
     az aks nodepool list \
         --cluster-name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --output table
 
     echo ""
-    print_message "Final nodes:"
-    kubectl get nodes -L environment
+    print_message "Nodes:"
+    kubectl get nodes -o wide
 
     echo ""
-    print_message "Pods running on green nodes:"
-    kubectl get pods -n demo -o wide
+    print_message "Pod status:"
+    kubectl get pods -n demo -o wide 2>/dev/null || true
 
     echo ""
     echo "=========================================="
-    echo "   Blue-Green Upgrade Complete!"
+    echo "   Blue-Green Upgrade Demo Complete!"
     echo "=========================================="
     echo ""
-    echo "  ✅ Green node pool is now active"
-    echo "  ✅ Workloads migrated successfully"
-    echo "  ✅ Blue node pool removed"
+    echo "  The AKS blue-green node pool upgrade"
+    echo "  preview feature automates the entire"
+    echo "  blue-green lifecycle:"
     echo ""
-    echo "  The 'green' pool is now your production"
-    echo "  node pool. For the next upgrade cycle,"
-    echo "  create a new 'blue' pool and repeat."
+    echo "  1. Cordon blue → Create green"
+    echo "  2. Drain in batches → Soak between batches"
+    echo "  3. Final soak → Commit or rollback"
+    echo ""
+    echo "  No manual nodeSelector patching, cordoning,"
+    echo "  or draining required!"
     echo ""
     echo "=========================================="
     echo ""
@@ -240,26 +378,26 @@ step_verify_final_state() {
 # Main Execution
 # ============================================================
 main() {
-    print_message "Starting AKS Blue-Green Node Pool Upgrade Demo"
+    print_message "AKS Blue-Green Node Pool Upgrade Demo (Preview)"
     print_message "================================================"
     echo ""
-    print_message "This demo walks through a blue-green node pool"
-    print_message "upgrade strategy step by step."
+    print_message "This demo demonstrates the AKS preview feature"
+    print_message "for automated blue-green node pool upgrades."
     echo ""
 
     step_verify_current_state
     wait_for_user
 
-    step_create_green_pool
+    step_review_settings
     wait_for_user
 
-    step_migrate_workloads
+    step_start_upgrade
     wait_for_user
 
-    step_cordon_drain_blue
+    step_monitor_upgrade
     wait_for_user
 
-    step_remove_blue_pool
+    step_demonstrate_rollback
     wait_for_user
 
     step_verify_final_state

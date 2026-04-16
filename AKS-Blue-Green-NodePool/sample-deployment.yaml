@@ -14,8 +14,6 @@ spec:
       labels:
         app: sample-app
     spec:
-      nodeSelector:
-        environment: blue
       containers:
       - name: nginx
         image: nginx:1.27
@@ -43,3 +41,13 @@ spec:
     protocol: TCP
   selector:
     app: sample-app
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: sample-app-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: sample-app

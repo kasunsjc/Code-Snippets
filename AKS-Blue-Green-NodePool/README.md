@@ -1,32 +1,49 @@
-# AKS Blue-Green Node Pool Deployment
+# AKS Blue-Green Node Pool Upgrade (Preview)
 
-Demonstrate the blue-green node pool upgrade strategy for Azure Kubernetes Service (AKS). This approach enables zero-downtime upgrades by creating a new node pool, migrating workloads, and removing the old pool.
+Demonstrate the AKS blue-green node pool upgrade preview feature on Azure Kubernetes Service (AKS). This built-in feature automates the blue-green upgrade lifecycle — creating a parallel green pool, draining workloads in batches, providing soak periods for validation, and supporting rollback.
 
 ## 📋 Overview
 
-Blue-green deployment at the node pool level lets you upgrade AKS node pools without disrupting running workloads. Instead of performing in-place upgrades, you provision a new ("green") node pool alongside the existing ("blue") pool, migrate your workloads, and then decommission the old pool.
+Blue-green node pool upgrades are an **AKS preview feature** that provides a built-in upgrade strategy for node pools. Unlike manual blue-green deployments where you create pools, patch nodeSelectors, and drain nodes yourself, this feature handles the entire process automatically via `az aks nodepool upgrade`.
 
-### Why Blue-Green Node Pool Upgrades?
+### How It Works
+
+1. **Cordon blue nodes** — Existing nodes are marked as unschedulable
+2. **Create green pool** — A parallel node pool is provisioned with the new configuration
+3. **Drain in batches** — Workloads are progressively drained from blue nodes and rescheduled on green nodes, respecting PodDisruptionBudgets
+4. **Batch soak** — Pause between drain batches for observation
+5. **Final soak** — Validation period before committing (rollback is available during this period)
+6. **Commit** — Blue pool is deleted and green becomes the active pool
+
+### Key Benefits
 
 | Benefit | Description |
 |---------|-------------|
-| **Zero downtime** | Workloads continue running on blue while green is provisioned |
-| **Easy rollback** | If something goes wrong, keep blue and remove green |
-| **Controlled migration** | Move workloads at your own pace with nodeSelector |
-| **Version flexibility** | Upgrade Kubernetes version, VM SKU, or OS SKU per pool |
+| **Automated lifecycle** | No manual nodeSelector patching, cordoning, or draining |
+| **Batch-based draining** | Configurable batch sizes with soak periods |
+| **Built-in rollback** | Rollback to blue pool during the final soak period |
+| **PDB-aware** | Respects PodDisruptionBudgets during drain |
+| **Pause/abort** | Abort an in-progress upgrade at any time |
 
 ## 📁 Contents
 
 ```
 AKS-Blue-Green-NodePool/
 ├── README.md                    # This documentation
-├── main.bicep                   # Bicep template for AKS cluster with blue node pool
+├── main.bicep                   # Bicep template for AKS cluster with user node pool
 ├── main.bicepparam              # Bicep parameter file
-├── deploy.sh                    # One-command deployment script
-├── blue-green-upgrade.sh        # Interactive blue-green upgrade walkthrough
-├── sample-deployment.yaml       # Sample workload with nodeSelector
+├── deploy.sh                    # Deployment + blue-green strategy configuration
+├── blue-green-upgrade.sh        # Interactive upgrade demo walkthrough
+├── sample-deployment.yaml       # Sample workload with PodDisruptionBudget
 └── cleanup.sh                   # Resource cleanup script
 ```
+
+## ⚙️ Prerequisites
+
+- Azure CLI 2.64.0+
+- `aks-preview` CLI extension (installed automatically by `deploy.sh`)
+- Azure subscription with sufficient quota for doubling node capacity
+- `kubectl` installed locally
 
 ## 🚀 Quick Start
 
@@ -36,11 +53,20 @@ AKS-Blue-Green-NodePool/
 ./deploy.sh
 ```
 
-This script handles everything: prerequisite checks, resource group creation, Bicep deployment, credential setup, sample app deployment, and verification.
+This script handles everything:
+1. Installs/updates the `aks-preview` CLI extension
+2. Creates a resource group and deploys the AKS cluster via Bicep
+3. Configures the user node pool with `--upgrade-strategy bluegreen`
+4. Sets blue-green properties (batch size, soak durations, drain timeout)
+5. Deploys a sample application with a PodDisruptionBudget
+6. Verifies the deployment
 
 ### Option B: Manual Deploy
 
 ```bash
+# Install aks-preview extension
+az extension add --name aks-preview
+
 # Create resource group
 az group create --name aks-bluegreen-demo --location northeurope
 
@@ -50,6 +76,17 @@ az deployment group create \
     --template-file main.bicep \
     --parameters main.bicepparam
 
+# Configure blue-green upgrade strategy on the node pool
+az aks nodepool update \
+    --cluster-name aks-bluegreen-cluster \
+    --resource-group aks-bluegreen-demo \
+    --name userpool \
+    --upgrade-strategy bluegreen \
+    --drain-batch-size "50%" \
+    --drain-timeout-bg 30 \
+    --batch-soak-duration 5 \
+    --final-soak-duration 60
+
 # Get cluster credentials
 az aks get-credentials --resource-group aks-bluegreen-demo --name aks-bluegreen-cluster
 
@@ -58,7 +95,7 @@ kubectl create ns demo
 kubectl apply -f sample-deployment.yaml -n demo
 ```
 
-## 🔄 Blue-Green Upgrade Walkthrough
+## 🔄 Blue-Green Upgrade Demo
 
 ### Run the Interactive Demo
 
@@ -66,140 +103,127 @@ kubectl apply -f sample-deployment.yaml -n demo
 ./blue-green-upgrade.sh
 ```
 
-The script walks you through each step interactively. Below is the manual walkthrough.
+The script walks through each step interactively. Below is the manual walkthrough.
 
-### Step 0: Verify Current State
+### Step 1: Configure Blue-Green Settings
+
+Customize the upgrade behavior on your node pool:
 
 ```bash
-# View node pools
-az aks nodepool list \
+az aks nodepool update \
     --cluster-name aks-bluegreen-cluster \
     --resource-group aks-bluegreen-demo \
-    --output table
-
-# Nodes with labels
-kubectl get nodes -L environment
-
-# Pods running on blue nodes
-kubectl get pods -n demo -o wide
+    --name userpool \
+    --upgrade-strategy bluegreen \
+    --drain-batch-size "50%" \
+    --drain-timeout-bg 30 \
+    --batch-soak-duration 5 \
+    --final-soak-duration 60
 ```
 
-### Step 1: Create the Green Node Pool
+### Step 2: Start Blue-Green Upgrade
 
-Create a new node pool with updated configuration (e.g., new Kubernetes version, VM SKU, or OS):
+Upgrade the node pool to a new Kubernetes version:
 
 ```bash
-az aks nodepool add \
+az aks nodepool upgrade \
+    --name userpool \
     --cluster-name aks-bluegreen-cluster \
     --resource-group aks-bluegreen-demo \
-    --name green \
-    --node-count 3 \
-    --node-vm-size Standard_D2s_v4 \
-    --os-sku AzureLinux \
-    --labels environment=green \
-    --mode User
+    --kubernetes-version <target-version>
 ```
 
-Verify both pools exist:
+Or perform a node image upgrade:
 
 ```bash
-az aks nodepool list \
+az aks nodepool upgrade \
+    --name userpool \
     --cluster-name aks-bluegreen-cluster \
     --resource-group aks-bluegreen-demo \
-    --output table
+    --node-image-only
 ```
 
-### Step 2: Migrate Workloads to Green
-
-Update the deployment's `nodeSelector` to target the green pool:
+You can also start a blue-green upgrade on a node pool not yet configured with the strategy:
 
 ```bash
-kubectl patch deployment sample-app -n demo --type='json' \
-    -p='[{"op": "replace", "path": "/spec/template/spec/nodeSelector/environment", "value": "green"}]'
-```
-
-Wait for the rollout and verify pods moved:
-
-```bash
-kubectl rollout status deployment/sample-app -n demo
-kubectl get pods -n demo -o wide
-```
-
-### Step 3: Cordon and Drain Blue Nodes
-
-Prevent new scheduling and evict remaining pods from the blue pool:
-
-```bash
-# Cordon blue nodes
-BLUE_NODES=$(kubectl get nodes -l environment=blue -o jsonpath='{.items[*].metadata.name}')
-for node in $BLUE_NODES; do
-    kubectl cordon "$node"
-done
-
-# Drain blue nodes
-for node in $BLUE_NODES; do
-    kubectl drain "$node" --ignore-daemonsets --delete-emptydir-data --force
-done
-```
-
-### Step 4: Delete Blue Node Pool
-
-After confirming all workloads have migrated successfully:
-
-```bash
-az aks nodepool delete \
+az aks nodepool upgrade \
+    --name userpool \
     --cluster-name aks-bluegreen-cluster \
     --resource-group aks-bluegreen-demo \
-    --name blue
+    --kubernetes-version <target-version> \
+    --upgrade-strategy bluegreen
 ```
 
-### Step 5: Verify Final State
+### Step 3: Monitor Progress
 
 ```bash
-# Only green and system pools remain
-az aks nodepool list \
+# Check provisioning state
+az aks nodepool show \
+    -g aks-bluegreen-demo \
     --cluster-name aks-bluegreen-cluster \
-    --resource-group aks-bluegreen-demo \
-    --output table
+    -n userpool \
+    --query provisioningState -o tsv
 
-# All workloads on green nodes
-kubectl get pods -n demo -o wide
+# Watch nodes (blue and green will both be visible during upgrade)
+watch -n 10 kubectl get nodes -o wide
+
+# Watch pod migrations
+watch -n 10 kubectl get pods -n demo -o wide
 ```
 
-## 🔁 Next Upgrade Cycle
+### Step 4: Pause/Abort (if needed)
 
-For the next upgrade, repeat the process with reversed roles:
+```bash
+az aks nodepool operation-abort \
+    --name userpool \
+    --cluster-name aks-bluegreen-cluster \
+    --resource-group aks-bluegreen-demo
+```
 
-1. Create a new **blue** pool with updated configuration
-2. Migrate workloads from **green** to **blue**
-3. Cordon, drain, and delete the **green** pool
+### Step 5: Rollback (during final soak period only)
 
-This creates a continuous cycle of blue ↔ green upgrades.
+```bash
+az aks nodepool rollback \
+    --name userpool \
+    --cluster-name aks-bluegreen-cluster \
+    --resource-group aks-bluegreen-demo
+```
 
-## ⚡ Upgrade Scenarios
+> ⚠️ Rollback is **only available during the final soak period**. Once the soak expires and the blue pool is deleted, rollback is no longer possible.
 
-| Scenario | Green Pool Configuration |
-|----------|-------------------------|
-| **Kubernetes version upgrade** | `--kubernetes-version 1.31` |
-| **VM SKU change** | `--node-vm-size Standard_D4s_v4` |
-| **OS SKU change** | `--os-sku AzureLinux` |
-| **Node image update** | New pool automatically gets latest image |
-| **Scale change** | `--node-count 5 --enable-cluster-autoscaler --min-count 3 --max-count 10` |
+## ⚙️ Blue-Green Upgrade Properties
 
-## ⚠️ Important Considerations
+| Property | CLI Flag | Description | Default |
+|----------|----------|-------------|---------|
+| `drainBatchSize` | `--drain-batch-size` | Nodes to drain per batch (integer or percentage) | 10% |
+| `drainTimeoutInMinutes` | `--drain-timeout-bg` | Max time to wait for pod termination per node | 30 min |
+| `batchSoakDurationInMinutes` | `--batch-soak-duration` | Pause between drain batches | 15 min |
+| `finalSoakDurationInMinutes` | `--final-soak-duration` | Validation period after all nodes drained | 60 min |
 
-- **System node pool** is not part of the blue-green rotation — it handles system pods
-- **DaemonSets** run on all nodes automatically and don't need manual migration
-- **PersistentVolumes** with `ReadWriteOnce` access mode may need special handling when migrating across zones
-- **Pod Disruption Budgets** should be configured to ensure smooth draining
-- **Cluster Autoscaler** can be enabled on both pools during migration to handle load spikes
-- Ensure the green pool has enough capacity before migrating workloads
-- Test the green pool with a canary deployment before full migration
+## 🔄 Supported Upgrade Scenarios
+
+| Scenario | Command |
+|----------|---------|
+| **Kubernetes version** | `--kubernetes-version 1.31` |
+| **Node image only** | `--node-image-only` |
+| **Auto-upgrade channels** | Works with configured auto-upgrade channels |
+| **Planned maintenance** | Compatible with maintenance windows |
+
+## ⚠️ Limitations and Considerations
+
+- **Preview feature** — Requires `aks-preview` CLI extension
+- **Double capacity** — Requires temporarily doubling node pool capacity (increased cost)
+- **No automated rollback** — Rollback must be manually initiated during the final soak period
+- **No VM pools** — Not supported with virtual machine node pools
+- **No maxUnavailable** — The `maxUnavailable` setting doesn't apply to blue-green upgrades
+- **Stateful workloads** — Plan carefully for data consistency during migration
+- **API version** — Requires API version `2025-08-02-preview` or later
 
 ## 📋 Requirements
 
-- Azure CLI 2.61.0+
-- Azure subscription with permissions to create AKS clusters
+- Azure CLI 2.64.0+
+- `aks-preview` Azure CLI extension
+- Azure subscription with quota for doubling node capacity
 - `kubectl` installed locally
 
 ## 🧹 Cleanup
@@ -208,7 +232,7 @@ This creates a continuous cycle of blue ↔ green upgrades.
 ./cleanup.sh
 ```
 
-This removes the kubectl context and deletes the resource group with all resources. Or manually:
+This aborts any active upgrades, removes the kubectl context, and deletes the resource group. Or manually:
 
 ```bash
 az group delete --name aks-bluegreen-demo --yes --no-wait
@@ -216,10 +240,11 @@ az group delete --name aks-bluegreen-demo --yes --no-wait
 
 ## 📚 Learn More
 
-- [Blue-Green Node Pool Upgrade](https://learn.microsoft.com/en-us/azure/aks/blue-green-node-pool-upgrade)
+- [Blue-Green Node Pool Upgrades (Preview)](https://learn.microsoft.com/en-us/azure/aks/blue-green-node-pool-upgrade)
+- [Manual Blue-Green Node Pool Upgrades](https://learn.microsoft.com/en-us/azure/aks/how-does-upgrade-happen#blue-green-node-pool-upgrades-manual)
 - [Upgrade AKS Node Pools](https://learn.microsoft.com/en-us/azure/aks/node-image-upgrade)
-- [AKS Node Pool Overview](https://learn.microsoft.com/en-us/azure/aks/create-node-pools)
-- [Pod Disruption Budgets](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/)
+- [Roll Back Node Pool Versions](https://learn.microsoft.com/en-us/azure/aks/roll-back-node-pool-version)
+- [AKS Auto-Upgrade Channels](https://learn.microsoft.com/en-us/azure/aks/auto-upgrade-cluster)
 
 ## 📄 License
 

@@ -2,7 +2,14 @@
 set -euo pipefail
 
 # ============================================================
-# Deploy AKS with Blue-Green Node Pool Strategy
+# Deploy AKS with Blue-Green Node Pool Upgrade Strategy (Preview)
+# ============================================================
+# This script deploys an AKS cluster and configures the user
+# node pool with the blue-green upgrade strategy using the
+# aks-preview CLI extension.
+#
+# Reference:
+# https://learn.microsoft.com/en-us/azure/aks/blue-green-node-pool-upgrade
 # ============================================================
 
 # Colors for output
@@ -15,6 +22,7 @@ NC='\033[0m'
 RESOURCE_GROUP="aks-bluegreen-demo"
 LOCATION="northeurope"
 CLUSTER_NAME="aks-bluegreen-cluster"
+NODEPOOL_NAME="userpool"
 DEPLOYMENT_NAME="bluegreen-deployment-$(date +%Y%m%d-%H%M%S)"
 
 # Functions
@@ -53,6 +61,21 @@ check_prerequisites() {
     print_message "Prerequisites check passed!"
 }
 
+install_aks_preview() {
+    print_message "Installing/updating aks-preview CLI extension..."
+
+    if az extension show --name aks-preview &> /dev/null; then
+        az extension update --name aks-preview --only-show-errors || true
+        print_message "aks-preview extension updated!"
+    else
+        az extension add --name aks-preview --only-show-errors
+        print_message "aks-preview extension installed!"
+    fi
+
+    AKS_PREVIEW_VERSION=$(az extension show --name aks-preview --query version -o tsv)
+    print_message "aks-preview extension version: $AKS_PREVIEW_VERSION"
+}
+
 create_resource_group() {
     print_message "Creating resource group: $RESOURCE_GROUP in $LOCATION..."
 
@@ -78,6 +101,23 @@ deploy_bicep() {
     print_message "Deployment completed successfully!"
 }
 
+configure_bluegreen_strategy() {
+    print_message "Configuring blue-green upgrade strategy on node pool: $NODEPOOL_NAME..."
+
+    az aks nodepool update \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --upgrade-strategy bluegreen \
+        --drain-batch-size "50%" \
+        --drain-timeout-bg 30 \
+        --batch-soak-duration 5 \
+        --final-soak-duration 60 \
+        --output table
+
+    print_message "Blue-green upgrade strategy configured!"
+}
+
 configure_aks_access() {
     print_message "Configuring AKS cluster access..."
 
@@ -90,7 +130,7 @@ configure_aks_access() {
 }
 
 deploy_sample_app() {
-    print_message "Deploying sample application to blue node pool..."
+    print_message "Deploying sample application..."
 
     kubectl create ns demo 2>/dev/null || true
     kubectl apply -f sample-deployment.yaml -n demo
@@ -112,11 +152,20 @@ verify_deployment() {
         --output table
 
     echo ""
-    echo "Nodes with labels:"
-    kubectl get nodes --show-labels | grep -E "NAME|environment"
+    echo "Node Pool Upgrade Strategy:"
+    az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query "{name:name, upgradeSettings:upgradeSettings}" \
+        --output json
 
     echo ""
-    echo "Pods on blue nodes:"
+    echo "Nodes:"
+    kubectl get nodes -o wide
+
+    echo ""
+    echo "Sample app pods:"
     kubectl get pods -n demo -o wide
 
     print_message "Verification complete!"
@@ -146,17 +195,23 @@ display_summary() {
     echo "Kubernetes Version:    $K8S_VERSION"
     echo ""
     echo "=========================================="
-    echo "   Node Pools"
+    echo "   Node Pool Configuration"
     echo "=========================================="
     echo ""
-    echo "  ✅ systempool  — System node pool"
-    echo "  🔵 blue        — User node pool (active)"
+    echo "  ✅ systempool  — System node pool (rolling)"
+    echo "  🔵 userpool    — User node pool (blue-green)"
+    echo ""
+    echo "  Blue-Green Upgrade Settings:"
+    echo "    Drain Batch Size:        50%"
+    echo "    Drain Timeout:           30 minutes"
+    echo "    Batch Soak Duration:     5 minutes"
+    echo "    Final Soak Duration:     60 minutes"
     echo ""
     echo "=========================================="
     echo "   Next Steps"
     echo "=========================================="
     echo ""
-    echo "1. Verify the sample app is running on blue nodes:"
+    echo "1. Verify the sample app is running:"
     echo "   kubectl get pods -n demo -o wide"
     echo ""
     echo "2. Run the blue-green upgrade demo:"
@@ -173,8 +228,10 @@ main() {
     print_message "Starting AKS Blue-Green Node Pool deployment..."
 
     check_prerequisites
+    install_aks_preview
     create_resource_group
     deploy_bicep
+    configure_bluegreen_strategy
     configure_aks_access
     deploy_sample_app
     verify_deployment
