@@ -79,8 +79,11 @@ install_aks_preview() {
 select_kubernetes_version() {
     print_message "Fetching available Kubernetes versions in $LOCATION..."
 
-    # Get available versions and store in an array
-    mapfile -t AVAILABLE_VERSIONS < <(az aks get-versions \
+    # Get available versions and store in an array (avoid mapfile for macOS Bash 3.x compatibility)
+    AVAILABLE_VERSIONS=()
+    while IFS= read -r line; do
+        AVAILABLE_VERSIONS+=("$line")
+    done < <(az aks get-versions \
         --location "$LOCATION" \
         --query "values[].patchVersions.keys(@)[]" \
         --output tsv 2>/dev/null | sort -V)

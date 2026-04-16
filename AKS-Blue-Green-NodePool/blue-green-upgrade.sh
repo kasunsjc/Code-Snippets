@@ -183,8 +183,11 @@ step_select_upgrade_version() {
     echo ""
     print_message "Fetching available upgrade versions..."
 
-    # Get available upgrade versions for the control plane
-    mapfile -t UPGRADE_VERSIONS < <(az aks get-upgrades \
+    # Get available upgrade versions for the control plane (avoid mapfile for macOS Bash 3.x compatibility)
+    UPGRADE_VERSIONS=()
+    while IFS= read -r line; do
+        UPGRADE_VERSIONS+=("$line")
+    done < <(az aks get-upgrades \
         --name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --query "controlPlaneProfile.upgrades[].kubernetesVersion" \
