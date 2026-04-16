@@ -76,6 +76,42 @@ install_aks_preview() {
     print_message "aks-preview extension version: $AKS_PREVIEW_VERSION"
 }
 
+select_kubernetes_version() {
+    print_message "Fetching available Kubernetes versions in $LOCATION..."
+
+    # Get available versions and store in an array
+    mapfile -t AVAILABLE_VERSIONS < <(az aks get-versions \
+        --location "$LOCATION" \
+        --query "values[].patchVersions.keys(@)[]" \
+        --output tsv 2>/dev/null | sort -V)
+
+    if [ ${#AVAILABLE_VERSIONS[@]} -eq 0 ]; then
+        print_error "Could not retrieve available Kubernetes versions."
+        exit 1
+    fi
+
+    echo ""
+    print_message "Available Kubernetes versions in $LOCATION:"
+    echo ""
+    for i in "${!AVAILABLE_VERSIONS[@]}"; do
+        printf "  [%2d] %s\n" "$((i + 1))" "${AVAILABLE_VERSIONS[$i]}"
+    done
+    echo ""
+
+    while true; do
+        read -p "Select the Kubernetes version to deploy (enter number 1-${#AVAILABLE_VERSIONS[@]}): " selection
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#AVAILABLE_VERSIONS[@]}" ]; then
+            SELECTED_K8S_VERSION="${AVAILABLE_VERSIONS[$((selection - 1))]}"
+            break
+        else
+            print_error "Invalid selection. Please enter a number between 1 and ${#AVAILABLE_VERSIONS[@]}."
+        fi
+    done
+
+    print_message "Selected Kubernetes version: $SELECTED_K8S_VERSION"
+}
+
 create_resource_group() {
     print_message "Creating resource group: $RESOURCE_GROUP in $LOCATION..."
 
@@ -89,6 +125,7 @@ create_resource_group() {
 
 deploy_bicep() {
     print_message "Starting Bicep deployment: $DEPLOYMENT_NAME..."
+    print_message "Deploying with Kubernetes version: $SELECTED_K8S_VERSION"
     print_warning "This deployment may take 5-10 minutes..."
 
     az deployment group create \
@@ -96,6 +133,7 @@ deploy_bicep() {
         --resource-group "$RESOURCE_GROUP" \
         --template-file main.bicep \
         --parameters main.bicepparam \
+        --parameters kubernetesVersion="$SELECTED_K8S_VERSION" \
         --output table
 
     print_message "Deployment completed successfully!"
@@ -192,7 +230,7 @@ display_summary() {
     echo "Resource Group:        $RESOURCE_GROUP"
     echo "AKS Cluster:           $CLUSTER_NAME"
     echo "Cluster FQDN:          $CLUSTER_FQDN"
-    echo "Kubernetes Version:    $K8S_VERSION"
+    echo "Kubernetes Version:    $K8S_VERSION (user-selected at deploy time)"
     echo ""
     echo "=========================================="
     echo "   Node Pool Configuration"
@@ -229,6 +267,7 @@ main() {
 
     check_prerequisites
     install_aks_preview
+    select_kubernetes_version
     create_resource_group
     deploy_bicep
     configure_bluegreen_strategy

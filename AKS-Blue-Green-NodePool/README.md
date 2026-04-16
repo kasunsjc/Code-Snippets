@@ -55,11 +55,12 @@ AKS-Blue-Green-NodePool/
 
 This script handles everything:
 1. Installs/updates the `aks-preview` CLI extension
-2. Creates a resource group and deploys the AKS cluster via Bicep
-3. Configures the user node pool with `--upgrade-strategy bluegreen`
-4. Sets blue-green properties (batch size, soak durations, drain timeout)
-5. Deploys a sample application with a PodDisruptionBudget
-6. Verifies the deployment
+2. **Prompts you to select a Kubernetes version** from the available versions in the region
+3. Creates a resource group and deploys the AKS cluster via Bicep with the selected version
+4. Configures the user node pool with `--upgrade-strategy bluegreen`
+5. Sets blue-green properties (batch size, soak durations, drain timeout)
+6. Deploys a sample application with a PodDisruptionBudget
+7. Verifies the deployment
 
 ### Option B: Manual Deploy
 
@@ -123,7 +124,20 @@ az aks nodepool update \
 
 ### Step 2: Start Blue-Green Upgrade
 
-**Important:** For Kubernetes version upgrades, you must upgrade the control plane first. The node pool version cannot exceed the control plane version.
+The `blue-green-upgrade.sh` script **prompts you to select the target version** from the available upgrade paths for your cluster. This ensures you always pick a valid version and avoids version incompatibility errors.
+
+The script automatically handles:
+1. Listing available upgrade versions for your cluster
+2. Letting you choose the target version (or a node image upgrade)
+3. Upgrading the control plane first to the selected version
+4. Upgrading the node pool via the blue-green strategy
+
+```bash
+# Interactive — lists versions and lets you choose:
+./blue-green-upgrade.sh
+```
+
+Or manually:
 
 ```bash
 # Step 2a: Upgrade the control plane to target version first

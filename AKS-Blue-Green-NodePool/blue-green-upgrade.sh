@@ -157,12 +157,12 @@ step_review_settings() {
 }
 
 # ============================================================
-# Step 2: Upgrade Control Plane (if needed)
+# Step 2: Select Target Upgrade Version
 # ============================================================
-step_upgrade_control_plane() {
-    print_step "2" "Upgrade Control Plane (if needed)"
+step_select_upgrade_version() {
+    print_step "2" "Select Target Upgrade Version"
 
-    print_message "Checking current control plane and node pool versions..."
+    print_message "Checking current cluster and node pool versions..."
 
     CONTROL_PLANE_VERSION=$(az aks show \
         --name "$CLUSTER_NAME" \
@@ -177,108 +177,77 @@ step_upgrade_control_plane() {
         --query currentOrchestratorVersion \
         --output tsv)
 
-    # Get available upgrade target for the control plane
-    TARGET_VERSION=$(az aks get-upgrades \
-        --name "$CLUSTER_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --query "controlPlaneProfile.upgrades[0].kubernetesVersion" \
-        --output tsv 2>/dev/null || echo "")
-
     print_message "Control plane version: $CONTROL_PLANE_VERSION"
     print_message "Node pool version:     $NODEPOOL_VERSION"
-    print_message "Available target:      ${TARGET_VERSION:-None}"
 
-    if [ -z "$TARGET_VERSION" ] || [ "$TARGET_VERSION" = "None" ]; then
-        print_warning "No Kubernetes version upgrade available for the control plane."
-        print_message "You can still perform a node image upgrade in the next step."
+    echo ""
+    print_message "Fetching available upgrade versions..."
+
+    # Get available upgrade versions for the control plane
+    mapfile -t UPGRADE_VERSIONS < <(az aks get-upgrades \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query "controlPlaneProfile.upgrades[].kubernetesVersion" \
+        --output tsv 2>/dev/null | sort -V)
+
+    if [ ${#UPGRADE_VERSIONS[@]} -eq 0 ]; then
+        print_warning "No Kubernetes version upgrades available."
+        print_message "You can still perform a node image upgrade."
+        echo ""
+        read -p "Perform a node image upgrade instead? (yes/no): " img_confirmation
+
+        if [ "$img_confirmation" = "yes" ]; then
+            TARGET_UPGRADE_VERSION=""
+            UPGRADE_TYPE="node-image"
+        else
+            print_message "Upgrade skipped."
+            TARGET_UPGRADE_VERSION=""
+            UPGRADE_TYPE="none"
+        fi
         return
     fi
 
     echo ""
-    print_warning "AKS requires the control plane version >= node pool version."
-    print_warning "The control plane must be upgraded BEFORE the node pool."
-    print_message "Upgrading control plane from $CONTROL_PLANE_VERSION to $TARGET_VERSION..."
+    print_message "Available upgrade versions:"
     echo ""
-    read -p "Continue with control plane upgrade? (yes/no): " confirmation
-
-    if [ "$confirmation" != "yes" ]; then
-        print_message "Control plane upgrade skipped."
-        return
-    fi
-
-    print_warning "This may take 5-10 minutes..."
-
-    az aks upgrade \
-        --name "$CLUSTER_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --kubernetes-version "$TARGET_VERSION" \
-        --control-plane-only \
-        --yes
-
-    print_message "Control plane upgraded to $TARGET_VERSION!"
-
+    for i in "${!UPGRADE_VERSIONS[@]}"; do
+        printf "  [%2d] %s\n" "$((i + 1))" "${UPGRADE_VERSIONS[$i]}"
+    done
+    printf "  [%2d] Node image upgrade only (keep current Kubernetes version)\n" "$((${#UPGRADE_VERSIONS[@]} + 1))"
     echo ""
-    print_message "Verifying control plane version:"
-    az aks show \
-        --name "$CLUSTER_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --query "{name:name, kubernetesVersion:kubernetesVersion}" \
-        --output json
+
+    while true; do
+        read -p "Select the target version (enter number 1-$((${#UPGRADE_VERSIONS[@]} + 1))): " selection
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "$((${#UPGRADE_VERSIONS[@]} + 1))" ]; then
+            if [ "$selection" -le "${#UPGRADE_VERSIONS[@]}" ]; then
+                TARGET_UPGRADE_VERSION="${UPGRADE_VERSIONS[$((selection - 1))]}"
+                UPGRADE_TYPE="kubernetes"
+                print_message "Selected target version: $TARGET_UPGRADE_VERSION"
+            else
+                TARGET_UPGRADE_VERSION=""
+                UPGRADE_TYPE="node-image"
+                print_message "Selected: Node image upgrade only"
+            fi
+            break
+        else
+            print_error "Invalid selection. Please enter a number between 1 and $((${#UPGRADE_VERSIONS[@]} + 1))."
+        fi
+    done
 }
 
 # ============================================================
-# Step 3: Start Blue-Green Node Pool Upgrade
+# Step 3: Upgrade Control Plane and Node Pool
 # ============================================================
 step_start_upgrade() {
-    print_step "3" "Start Blue-Green Node Pool Upgrade"
+    print_step "3" "Upgrade Control Plane and Node Pool"
 
-    # Determine target version
-    print_message "Determining upgrade target..."
+    if [ "$UPGRADE_TYPE" = "none" ]; then
+        print_message "No upgrade selected. Skipping."
+        return
+    fi
 
-    CONTROL_PLANE_VERSION=$(az aks show \
-        --name "$CLUSTER_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --query kubernetesVersion \
-        --output tsv)
-
-    NODEPOOL_VERSION=$(az aks nodepool show \
-        --cluster-name "$CLUSTER_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --name "$NODEPOOL_NAME" \
-        --query currentOrchestratorVersion \
-        --output tsv)
-
-    print_message "Control plane version: $CONTROL_PLANE_VERSION"
-    print_message "Node pool version:     $NODEPOOL_VERSION"
-
-    # Check if control plane is ahead of the node pool (K8s version upgrade possible)
-    if [ "$CONTROL_PLANE_VERSION" != "$NODEPOOL_VERSION" ]; then
-        echo ""
-        print_message "Control plane ($CONTROL_PLANE_VERSION) is ahead of node pool ($NODEPOOL_VERSION)."
-        print_message "Starting blue-green Kubernetes version upgrade for '$NODEPOOL_NAME'..."
-        print_warning "A parallel green node pool will be created (doubles capacity temporarily)."
-        echo ""
-        read -p "Continue? (yes/no): " confirmation
-
-        if [ "$confirmation" != "yes" ]; then
-            print_message "Upgrade skipped."
-            return
-        fi
-
-        print_message "Starting blue-green upgrade to Kubernetes $CONTROL_PLANE_VERSION..."
-
-        az aks nodepool upgrade \
-            --cluster-name "$CLUSTER_NAME" \
-            --resource-group "$RESOURCE_GROUP" \
-            --name "$NODEPOOL_NAME" \
-            --kubernetes-version "$CONTROL_PLANE_VERSION" \
-            --no-wait
-
-        print_message "Blue-green Kubernetes version upgrade initiated!"
-    else
-        print_message "Node pool is already at the control plane version ($CONTROL_PLANE_VERSION)."
-        print_message "Performing a node image upgrade instead..."
-        echo ""
+    if [ "$UPGRADE_TYPE" = "node-image" ]; then
         print_message "Starting blue-green node image upgrade for '$NODEPOOL_NAME'..."
         print_warning "This will create a green pool, drain blue pool in batches, and soak."
         echo ""
@@ -297,6 +266,56 @@ step_start_upgrade() {
             --no-wait
 
         print_message "Blue-green node image upgrade initiated!"
+    else
+        # Kubernetes version upgrade: control plane first, then node pool
+        print_message "Target version: $TARGET_UPGRADE_VERSION"
+        print_message "Current control plane: $CONTROL_PLANE_VERSION"
+        print_message "Current node pool:     $NODEPOOL_VERSION"
+        echo ""
+        print_warning "AKS requires the control plane version >= node pool version."
+        print_warning "The control plane will be upgraded first, then the node pool."
+        print_warning "A parallel green node pool will be created (doubles capacity temporarily)."
+        echo ""
+        read -p "Continue with upgrade to $TARGET_UPGRADE_VERSION? (yes/no): " confirmation
+
+        if [ "$confirmation" != "yes" ]; then
+            print_message "Upgrade skipped."
+            return
+        fi
+
+        # Step 1: Upgrade control plane
+        print_message "Upgrading control plane to $TARGET_UPGRADE_VERSION..."
+        print_warning "This may take 5-10 minutes..."
+
+        az aks upgrade \
+            --name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --kubernetes-version "$TARGET_UPGRADE_VERSION" \
+            --control-plane-only \
+            --yes
+
+        print_message "Control plane upgraded to $TARGET_UPGRADE_VERSION!"
+
+        echo ""
+        print_message "Verifying control plane version:"
+        az aks show \
+            --name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query "{name:name, kubernetesVersion:kubernetesVersion}" \
+            --output json
+
+        # Step 2: Upgrade node pool via blue-green strategy
+        echo ""
+        print_message "Starting blue-green node pool upgrade to $TARGET_UPGRADE_VERSION..."
+
+        az aks nodepool upgrade \
+            --cluster-name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$NODEPOOL_NAME" \
+            --kubernetes-version "$TARGET_UPGRADE_VERSION" \
+            --no-wait
+
+        print_message "Blue-green Kubernetes version upgrade initiated!"
     fi
 
     echo ""
@@ -466,7 +485,7 @@ main() {
     step_review_settings
     wait_for_user
 
-    step_upgrade_control_plane
+    step_select_upgrade_version
     wait_for_user
 
     step_start_upgrade
