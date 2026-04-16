@@ -123,9 +123,18 @@ az aks nodepool update \
 
 ### Step 2: Start Blue-Green Upgrade
 
-Upgrade the node pool to a new Kubernetes version:
+**Important:** For Kubernetes version upgrades, you must upgrade the control plane first. The node pool version cannot exceed the control plane version.
 
 ```bash
+# Step 2a: Upgrade the control plane to target version first
+az aks upgrade \
+    --name aks-bluegreen-cluster \
+    --resource-group aks-bluegreen-demo \
+    --kubernetes-version <target-version> \
+    --control-plane-only \
+    --yes
+
+# Step 2b: Then upgrade the node pool using blue-green strategy
 az aks nodepool upgrade \
     --name userpool \
     --cluster-name aks-bluegreen-cluster \
@@ -212,6 +221,7 @@ az aks nodepool rollback \
 ## ⚠️ Limitations and Considerations
 
 - **Preview feature** — Requires `aks-preview` CLI extension
+- **Control plane first** — For Kubernetes version upgrades, the control plane must be upgraded to the target version before the node pool (node pool version cannot exceed control plane version)
 - **Double capacity** — Requires temporarily doubling node pool capacity (increased cost)
 - **No automated rollback** — Rollback must be manually initiated during the final soak period
 - **No VM pools** — Not supported with virtual machine node pools

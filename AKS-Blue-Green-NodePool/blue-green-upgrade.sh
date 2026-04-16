@@ -157,34 +157,131 @@ step_review_settings() {
 }
 
 # ============================================================
-# Step 2: Start Blue-Green Upgrade
+# Step 2: Upgrade Control Plane (if needed)
 # ============================================================
-step_start_upgrade() {
-    print_step "2" "Start Blue-Green Upgrade"
+step_upgrade_control_plane() {
+    print_step "2" "Upgrade Control Plane (if needed)"
 
-    # Determine target version
-    print_message "Determining target Kubernetes version..."
+    print_message "Checking current control plane and node pool versions..."
 
-    CURRENT_VERSION=$(az aks nodepool show \
+    CONTROL_PLANE_VERSION=$(az aks show \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query kubernetesVersion \
+        --output tsv)
+
+    NODEPOOL_VERSION=$(az aks nodepool show \
         --cluster-name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --name "$NODEPOOL_NAME" \
         --query currentOrchestratorVersion \
         --output tsv)
 
-    # Get available upgrade target
+    # Get available upgrade target for the control plane
     TARGET_VERSION=$(az aks get-upgrades \
         --name "$CLUSTER_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --query "controlPlaneProfile.upgrades[0].kubernetesVersion" \
         --output tsv 2>/dev/null || echo "")
 
+    print_message "Control plane version: $CONTROL_PLANE_VERSION"
+    print_message "Node pool version:     $NODEPOOL_VERSION"
+    print_message "Available target:      ${TARGET_VERSION:-None}"
+
     if [ -z "$TARGET_VERSION" ] || [ "$TARGET_VERSION" = "None" ]; then
-        print_warning "No Kubernetes version upgrade available."
+        print_warning "No Kubernetes version upgrade available for the control plane."
+        print_message "You can still perform a node image upgrade in the next step."
+        return
+    fi
+
+    echo ""
+    print_warning "AKS requires the control plane version >= node pool version."
+    print_warning "The control plane must be upgraded BEFORE the node pool."
+    print_message "Upgrading control plane from $CONTROL_PLANE_VERSION to $TARGET_VERSION..."
+    echo ""
+    read -p "Continue with control plane upgrade? (yes/no): " confirmation
+
+    if [ "$confirmation" != "yes" ]; then
+        print_message "Control plane upgrade skipped."
+        return
+    fi
+
+    print_warning "This may take 5-10 minutes..."
+
+    az aks upgrade \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --kubernetes-version "$TARGET_VERSION" \
+        --control-plane-only \
+        --yes
+
+    print_message "Control plane upgraded to $TARGET_VERSION!"
+
+    echo ""
+    print_message "Verifying control plane version:"
+    az aks show \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query "{name:name, kubernetesVersion:kubernetesVersion}" \
+        --output json
+}
+
+# ============================================================
+# Step 3: Start Blue-Green Node Pool Upgrade
+# ============================================================
+step_start_upgrade() {
+    print_step "3" "Start Blue-Green Node Pool Upgrade"
+
+    # Determine target version
+    print_message "Determining upgrade target..."
+
+    CONTROL_PLANE_VERSION=$(az aks show \
+        --name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query kubernetesVersion \
+        --output tsv)
+
+    NODEPOOL_VERSION=$(az aks nodepool show \
+        --cluster-name "$CLUSTER_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$NODEPOOL_NAME" \
+        --query currentOrchestratorVersion \
+        --output tsv)
+
+    print_message "Control plane version: $CONTROL_PLANE_VERSION"
+    print_message "Node pool version:     $NODEPOOL_VERSION"
+
+    # Check if control plane is ahead of the node pool (K8s version upgrade possible)
+    if [ "$CONTROL_PLANE_VERSION" != "$NODEPOOL_VERSION" ]; then
+        echo ""
+        print_message "Control plane ($CONTROL_PLANE_VERSION) is ahead of node pool ($NODEPOOL_VERSION)."
+        print_message "Starting blue-green Kubernetes version upgrade for '$NODEPOOL_NAME'..."
+        print_warning "A parallel green node pool will be created (doubles capacity temporarily)."
+        echo ""
+        read -p "Continue? (yes/no): " confirmation
+
+        if [ "$confirmation" != "yes" ]; then
+            print_message "Upgrade skipped."
+            return
+        fi
+
+        print_message "Starting blue-green upgrade to Kubernetes $CONTROL_PLANE_VERSION..."
+
+        az aks nodepool upgrade \
+            --cluster-name "$CLUSTER_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --name "$NODEPOOL_NAME" \
+            --kubernetes-version "$CONTROL_PLANE_VERSION" \
+            --no-wait
+
+        print_message "Blue-green Kubernetes version upgrade initiated!"
+    else
+        print_message "Node pool is already at the control plane version ($CONTROL_PLANE_VERSION)."
         print_message "Performing a node image upgrade instead..."
         echo ""
         print_message "Starting blue-green node image upgrade for '$NODEPOOL_NAME'..."
         print_warning "This will create a green pool, drain blue pool in batches, and soak."
+        echo ""
         read -p "Continue? (yes/no): " confirmation
 
         if [ "$confirmation" != "yes" ]; then
@@ -200,29 +297,6 @@ step_start_upgrade() {
             --no-wait
 
         print_message "Blue-green node image upgrade initiated!"
-    else
-        print_message "Current version: $CURRENT_VERSION"
-        print_message "Target version:  $TARGET_VERSION"
-        echo ""
-        print_warning "This will initiate a blue-green upgrade."
-        print_warning "A parallel green node pool will be created (doubles capacity temporarily)."
-        read -p "Continue? (yes/no): " confirmation
-
-        if [ "$confirmation" != "yes" ]; then
-            print_message "Upgrade skipped."
-            return
-        fi
-
-        print_message "Starting blue-green upgrade to Kubernetes $TARGET_VERSION..."
-
-        az aks nodepool upgrade \
-            --cluster-name "$CLUSTER_NAME" \
-            --resource-group "$RESOURCE_GROUP" \
-            --name "$NODEPOOL_NAME" \
-            --kubernetes-version "$TARGET_VERSION" \
-            --no-wait
-
-        print_message "Blue-green upgrade initiated!"
     fi
 
     echo ""
@@ -232,10 +306,10 @@ step_start_upgrade() {
 }
 
 # ============================================================
-# Step 3: Monitor Upgrade Progress
+# Step 4: Monitor Upgrade Progress
 # ============================================================
 step_monitor_upgrade() {
-    print_step "3" "Monitor Upgrade Progress"
+    print_step "4" "Monitor Upgrade Progress"
 
     print_message "Checking node pool provisioning state..."
 
@@ -277,10 +351,10 @@ step_monitor_upgrade() {
 }
 
 # ============================================================
-# Step 4: Demonstrate Abort and Rollback
+# Step 5: Demonstrate Abort and Rollback
 # ============================================================
 step_demonstrate_rollback() {
-    print_step "4" "Abort and Rollback (Optional)"
+    print_step "5" "Abort and Rollback (Optional)"
 
     print_message "If you need to abort the upgrade and rollback:"
     echo ""
@@ -326,10 +400,10 @@ step_demonstrate_rollback() {
 }
 
 # ============================================================
-# Step 5: Verify Final State
+# Step 6: Verify Final State
 # ============================================================
 step_verify_final_state() {
-    print_step "5" "Verify Final State"
+    print_step "6" "Verify Final State"
 
     print_message "Final node pool state:"
     az aks nodepool show \
@@ -363,9 +437,10 @@ step_verify_final_state() {
     echo "  preview feature automates the entire"
     echo "  blue-green lifecycle:"
     echo ""
-    echo "  1. Cordon blue → Create green"
-    echo "  2. Drain in batches → Soak between batches"
-    echo "  3. Final soak → Commit or rollback"
+    echo "  1. Upgrade control plane to target version"
+    echo "  2. Cordon blue → Create green"
+    echo "  3. Drain in batches → Soak between batches"
+    echo "  4. Final soak → Commit or rollback"
     echo ""
     echo "  No manual nodeSelector patching, cordoning,"
     echo "  or draining required!"
@@ -389,6 +464,9 @@ main() {
     wait_for_user
 
     step_review_settings
+    wait_for_user
+
+    step_upgrade_control_plane
     wait_for_user
 
     step_start_upgrade
