@@ -51,9 +51,9 @@ param enableAutoScaling bool = true
 @minValue(1)
 param minNodeCount int = 1
 
-@description('Maximum node count when auto-scaling is enabled.')
+@description('Maximum node count when auto-scaling is enabled. Set high enough to accommodate blue-green upgrades which temporarily double node pool capacity.')
 @maxValue(100)
-param maxNodeCount int = 5
+param maxNodeCount int = 10
 
 @description('SSH public key for node access. Leave empty to auto-generate.')
 param sshPublicKey string = ''
