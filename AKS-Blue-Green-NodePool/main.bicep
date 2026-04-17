@@ -6,6 +6,7 @@
 //   - A user node pool (blue-green strategy configured via CLI)
 //   - System-assigned managed identity
 //   - Azure CNI with overlay mode
+//   - Container Insights with Log Analytics workspace
 // ============================================================
 // The blue-green upgrade strategy is configured post-deployment
 // using the aks-preview CLI extension. See deploy.sh for the
@@ -62,6 +63,20 @@ param sshPublicKey string = ''
 param adminUsername string = 'azureuser'
 
 // ============================================================
+// Log Analytics Workspace (Container Insights)
+// ============================================================
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+  name: '${clusterName}-logs'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    retentionInDays: 30
+  }
+}
+
+// ============================================================
 // AKS Cluster with System + User Node Pools
 // ============================================================
 resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
@@ -74,6 +89,14 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
     dnsPrefix: dnsPrefix
     kubernetesVersion: kubernetesVersion
     enableRBAC: true
+    addonProfiles: {
+      omsagent: {
+        enabled: true
+        config: {
+          logAnalyticsWorkspaceResourceID: logAnalytics.id
+        }
+      }
+    }
     agentPoolProfiles: [
       {
         name: 'systempool'
@@ -134,3 +157,6 @@ output kubernetesVersion string = aksCluster.properties.kubernetesVersion
 
 @description('Command to get cluster credentials.')
 output getCredentialsCommand string = 'az aks get-credentials --resource-group ${resourceGroup().name} --name ${aksCluster.name}'
+
+@description('The Log Analytics workspace resource ID.')
+output logAnalyticsWorkspaceId string = logAnalytics.id
