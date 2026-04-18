@@ -217,6 +217,22 @@ Both strategies require these role assignments for the ALB managed identity:
 | AppGW for Containers Configuration Manager | Resource group (BYO) or MC resource group (managed) | `fbc52c3f-28ad-4303-a892-8a056630b8f1` |
 | Network Contributor | ALB subnet | `4d97b98b-1d4f-4787-a291-c67834d212e7` |
 
+## Important Limitations
+
+> **Note:** Application Gateway for Containers is evolving rapidly. Review the [official documentation](https://learn.microsoft.com/azure/application-gateway/for-containers/overview) for the latest status.
+
+| Limitation | Details |
+|------------|---------|
+| **Listener ports restricted to 80 and 443** | Gateway listeners only support port 80 (HTTP) and port 443 (HTTPS). Custom ports are not allowed. |
+| **Associations limited to 1** | Each AGFC resource currently supports only **one** association (one subnet). Multiple associations are planned but not yet available. |
+| **Private IP addresses not supported** | Frontends only expose a public FQDN. Private IP (internal-only) frontends are not currently supported. |
+| **Subnet requires /24 or larger** | The ALB association subnet must have at least 256 available addresses. If sharing the subnet across multiple AGFC resources, calculate as `n × 256`. |
+| **Backend communication is HTTP/1.1** | AGFC communicates with backends over HTTP/1.1 only (except gRPC, which uses HTTP/2). Client-to-frontend always supports HTTP/2. |
+| **60-second default request timeout** | The request timeout is 60 seconds by default. Long-running downloads or streaming may fail unless the timeout is increased. |
+| **Regional availability** | AGFC is available in a [subset of Azure regions](https://learn.microsoft.com/azure/application-gateway/for-containers/overview#supported-regions) only. |
+| **ReferenceGrant** | Only `v1alpha1` of the Gateway API `ReferenceGrant` resource is supported. |
+| **Frontends cannot be shared** | A frontend belongs exclusively to one AGFC resource and cannot be shared across multiple AGFC instances. |
+
 ## Troubleshooting
 
 ### ALB Controller pods not running
