@@ -25,21 +25,19 @@ spec:
     spec:
       containers:
         - name: backend-v1
-          image: mcr.microsoft.com/dotnet/samples:aspnetapp
+          image: hashicorp/http-echo:0.2.3
+          args:
+            - "-text=backend-v1"
+            - "-listen=:8080"
           ports:
             - containerPort: 8080
-          env:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 10m
+              memory: 16Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 100m
+              memory: 64Mi
 ---
 apiVersion: v1
 kind: Service
@@ -73,21 +71,19 @@ spec:
     spec:
       containers:
         - name: backend-v2
-          image: mcr.microsoft.com/dotnet/samples:aspnetapp
+          image: hashicorp/http-echo:0.2.3
+          args:
+            - "-text=backend-v2"
+            - "-listen=:8080"
           ports:
             - containerPort: 8080
-          env:
-            - name: POD_NAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 10m
+              memory: 16Mi
             limits:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 100m
+              memory: 64Mi
 ---
 apiVersion: v1
 kind: Service
