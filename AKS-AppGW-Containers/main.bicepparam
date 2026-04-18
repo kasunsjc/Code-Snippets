@@ -4,7 +4,7 @@ using './main.bicep'
 param namePrefix = 'agfc'
 param environment = 'dev'
 param location = 'northeurope'
-param kubernetesVersion = '1.31.2'
+param kubernetesVersion = '1.34.2'
 param systemNodeCount = 2
 param systemNodeVmSize = 'Standard_D2s_v3'
 param enableMonitoring = true
