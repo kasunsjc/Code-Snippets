@@ -50,6 +50,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
   }
   properties: {
     dnsPrefix: aksClusterName
+    nodeResourceGroup: 'rg-${aksClusterName}-nodes'
     kubernetesVersion: kubernetesVersion
     agentPoolProfiles: [
       {

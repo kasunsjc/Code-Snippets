@@ -120,6 +120,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
     type: 'SystemAssigned'
   }
   properties: {
+    nodeResourceGroup: 'rg-${clusterName}-nodes'
     agentPoolProfiles: [
       {
         name: 'systempool'

@@ -14,7 +14,7 @@ az group create --name $ResourceGroupName --location $Location
 
 # Create an AKS cluster
 
-az aks create --resource-group $ResourceGroupName --name $ClusterName --location $Location --enable-app-routing --generate-ssh-keys
+az aks create --resource-group $ResourceGroupName --name $ClusterName --location $Location --node-resource-group "rg-${ClusterName}-nodes" --enable-app-routing --generate-ssh-keys
 
 # Get the credentials for the AKS cluster
 

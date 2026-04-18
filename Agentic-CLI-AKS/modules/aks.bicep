@@ -24,6 +24,9 @@ param logAnalyticsWorkspaceId string
 @description('Enable monitoring')
 param enableMonitoring bool
 
+@description('Custom node resource group name')
+param nodeResourceGroupName string
+
 @description('Tags for the cluster')
 param tags object
 
@@ -38,6 +41,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   properties: {
     kubernetesVersion: kubernetesVersion
     dnsPrefix: clusterName
+    nodeResourceGroup: nodeResourceGroupName
     enableRBAC: true
     
     agentPoolProfiles: [

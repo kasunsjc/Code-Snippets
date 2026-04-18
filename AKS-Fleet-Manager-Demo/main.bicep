@@ -113,6 +113,7 @@ module aksDev1 'modules/aks-member.bicep' = {
     clusterName: devCluster1Name
     location: clusterLocation1
     kubernetesVersion: devKubernetesVersion
+    nodeResourceGroupName: 'rg-${devCluster1Name}-nodes'
     subnetId: vnet1.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: union(tags, { Environment: 'dev', Cluster: 'dev-1', Region: clusterLocation1 })
@@ -127,6 +128,7 @@ module aksDev2 'modules/aks-member.bicep' = {
     clusterName: devCluster2Name
     location: clusterLocation2
     kubernetesVersion: devKubernetesVersion
+    nodeResourceGroupName: 'rg-${devCluster2Name}-nodes'
     subnetId: vnet2.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: union(tags, { Environment: 'dev', Cluster: 'dev-2-standalone', Region: clusterLocation2, Standalone: 'true' })
@@ -145,6 +147,7 @@ module aksAcc1 'modules/aks-member.bicep' = {
     clusterName: accCluster1Name
     location: clusterLocation1
     kubernetesVersion: accKubernetesVersion
+    nodeResourceGroupName: 'rg-${accCluster1Name}-nodes'
     subnetId: vnet1.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: union(tags, { Environment: 'acc', Cluster: 'acc-1', Region: clusterLocation1 })
@@ -159,6 +162,7 @@ module aksAcc2 'modules/aks-member.bicep' = {
     clusterName: accCluster2Name
     location: clusterLocation2
     kubernetesVersion: accKubernetesVersion
+    nodeResourceGroupName: 'rg-${accCluster2Name}-nodes'
     subnetId: vnet2.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: union(tags, { Environment: 'acc', Cluster: 'acc-2', Region: clusterLocation2 })
@@ -177,6 +181,7 @@ module aksProd1 'modules/aks-member.bicep' = {
     clusterName: prodCluster1Name
     location: clusterLocation1
     kubernetesVersion: prodKubernetesVersion
+    nodeResourceGroupName: 'rg-${prodCluster1Name}-nodes'
     subnetId: vnet1.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: union(tags, { Environment: 'prod', Cluster: 'prod-1', Region: clusterLocation1 })
@@ -191,6 +196,7 @@ module aksProd2 'modules/aks-member.bicep' = {
     clusterName: prodCluster2Name
     location: clusterLocation2
     kubernetesVersion: prodKubernetesVersion
+    nodeResourceGroupName: 'rg-${prodCluster2Name}-nodes'
     subnetId: vnet2.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     tags: union(tags, { Environment: 'prod', Cluster: 'prod-2', Region: clusterLocation2 })
