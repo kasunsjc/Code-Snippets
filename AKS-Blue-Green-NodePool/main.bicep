@@ -124,7 +124,11 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
       networkPluginMode: 'overlay'
     }
     autoUpgradeProfile: {
-      upgradeChannel: 'stable'
+      // Disabled for blue-green demo: auto-upgrade conflicts with manual
+      // upgrades and must be off for nodepool rollback to succeed.
+      // See: https://learn.microsoft.com/en-us/azure/aks/auto-upgrade-cluster
+      upgradeChannel: 'none'
+      nodeOSUpgradeChannel: 'None'
     }
     linuxProfile: sshPublicKey != '' ? {
       adminUsername: adminUsername

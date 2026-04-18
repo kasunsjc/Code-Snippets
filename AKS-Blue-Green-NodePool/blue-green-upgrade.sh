@@ -396,6 +396,9 @@ step_demonstrate_rollback() {
     echo "  Once the soak period expires and the blue pool is deleted,"
     echo "  rollback is no longer possible."
     echo ""
+    echo "  ⚠️  Auto-upgrade (upgradeChannel) and nodeOSUpgradeChannel must"
+    echo "  be disabled before rollback. This script handles that automatically."
+    echo ""
 
     read -p "Do you want to abort the current upgrade? (yes/no): " confirmation
 
@@ -410,11 +413,76 @@ step_demonstrate_rollback() {
         read -p "Do you also want to rollback? (yes/no): " rollback_confirmation
 
         if [ "$rollback_confirmation" = "yes" ]; then
+            # Check and disable auto-upgrade if enabled (required for rollback)
+            UPGRADE_CHANNEL=$(az aks show \
+                --name "$CLUSTER_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --query "autoUpgradeProfile.upgradeChannel" \
+                --output tsv 2>/dev/null || echo "none")
+
+            NODE_OS_CHANNEL=$(az aks show \
+                --name "$CLUSTER_NAME" \
+                --resource-group "$RESOURCE_GROUP" \
+                --query "autoUpgradeProfile.nodeOSUpgradeChannel" \
+                --output tsv 2>/dev/null || echo "None")
+
+            CHANNELS_CHANGED=false
+
+            if [ "$UPGRADE_CHANNEL" != "none" ]; then
+                print_warning "Auto-upgrade is enabled (upgradeChannel=$UPGRADE_CHANNEL). Disabling for rollback..."
+                az aks update \
+                    --name "$CLUSTER_NAME" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --auto-upgrade-channel none \
+                    --output none
+                CHANNELS_CHANGED=true
+                print_message "Auto-upgrade disabled."
+            fi
+
+            if [ "$NODE_OS_CHANNEL" != "None" ] && [ "$NODE_OS_CHANNEL" != "Unmanaged" ]; then
+                print_warning "nodeOSUpgradeChannel is enabled ($NODE_OS_CHANNEL). Disabling for rollback..."
+                az aks update \
+                    --name "$CLUSTER_NAME" \
+                    --resource-group "$RESOURCE_GROUP" \
+                    --node-os-upgrade-channel None \
+                    --output none
+                CHANNELS_CHANGED=true
+                print_message "nodeOSUpgradeChannel disabled."
+            fi
+
             print_message "Rolling back..."
             az aks nodepool rollback \
                 --name "$NODEPOOL_NAME" \
                 --cluster-name "$CLUSTER_NAME" \
                 --resource-group "$RESOURCE_GROUP" 2>&1 || print_warning "Rollback not available at this stage."
+
+            if [ "$CHANNELS_CHANGED" = true ]; then
+                echo ""
+                read -p "Re-enable auto-upgrade channels? (yes/no): " reenable_confirmation
+                if [ "$reenable_confirmation" = "yes" ]; then
+                    if [ "$UPGRADE_CHANNEL" != "none" ]; then
+                        print_message "Re-enabling upgradeChannel=$UPGRADE_CHANNEL..."
+                        az aks update \
+                            --name "$CLUSTER_NAME" \
+                            --resource-group "$RESOURCE_GROUP" \
+                            --auto-upgrade-channel "$UPGRADE_CHANNEL" \
+                            --output none
+                    fi
+                    if [ "$NODE_OS_CHANNEL" != "None" ] && [ "$NODE_OS_CHANNEL" != "Unmanaged" ]; then
+                        print_message "Re-enabling nodeOSUpgradeChannel=$NODE_OS_CHANNEL..."
+                        az aks update \
+                            --name "$CLUSTER_NAME" \
+                            --resource-group "$RESOURCE_GROUP" \
+                            --node-os-upgrade-channel "$NODE_OS_CHANNEL" \
+                            --output none
+                    fi
+                    print_message "Auto-upgrade channels re-enabled."
+                else
+                    print_warning "Auto-upgrade channels remain disabled. Re-enable manually if needed:"
+                    echo "  az aks update --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP --auto-upgrade-channel stable"
+                    echo "  az aks update --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP --node-os-upgrade-channel NodeImage"
+                fi
+            fi
         fi
     else
         print_message "Skipping abort/rollback."
