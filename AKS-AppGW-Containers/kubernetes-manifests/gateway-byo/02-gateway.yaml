@@ -1,0 +1,27 @@
+# Gateway resource — BYO (Bring Your Own) strategy
+# AGFC resource, frontend, and association are pre-created in Azure via Bicep.
+# The Gateway references the existing AGFC by its resource ID.
+#
+# This template uses environment variable placeholders processed by envsubst:
+#   $AGFC_ID        — full Azure resource ID of the traffic controller
+#   $FRONTEND_NAME  — name of the pre-created frontend
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-01
+  namespace: test-infra
+  annotations:
+    alb.networking.azure.io/alb-id: $AGFC_ID
+spec:
+  gatewayClassName: azure-alb-external
+  listeners:
+    - name: http-listener
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+  addresses:
+    - type: alb.networking.azure.io/alb-frontend
+      value: $FRONTEND_NAME
