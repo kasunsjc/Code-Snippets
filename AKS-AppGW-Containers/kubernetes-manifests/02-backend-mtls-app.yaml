@@ -1,0 +1,92 @@
+# Backend mTLS application — nginx configured for mutual TLS
+# Requires TLS secrets created by generate-tls-certs.sh (backend-mtls mode)
+#
+# This deploys an nginx pod that:
+#   - Listens on port 443 with TLS (server cert: backend.com)
+#   - Requires client certificate verification (using the CA cert)
+# The AGFC gateway presents its client cert (gateway-client-cert) to this backend.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mtls-app-nginx-cm
+  namespace: test-infra
+data:
+  default.conf: |
+    server {
+        listen 443 ssl;
+        server_name backend.com;
+
+        ssl_certificate     /etc/ssl/certs/backend/tls.crt;
+        ssl_certificate_key /etc/ssl/certs/backend/tls.key;
+
+        ssl_client_certificate /etc/ssl/certs/ca/ca.crt;
+        ssl_verify_client on;
+
+        location / {
+            return 200 "backend-mtls: client cert verified\n";
+            add_header Content-Type text/plain;
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mtls-app
+  namespace: test-infra
+  labels:
+    app: mtls-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mtls-app
+  template:
+    metadata:
+      labels:
+        app: mtls-app
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports:
+            - containerPort: 443
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+            - name: backend-cert
+              mountPath: /etc/ssl/certs/backend
+              readOnly: true
+            - name: ca-cert
+              mountPath: /etc/ssl/certs/ca
+              readOnly: true
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: mtls-app-nginx-cm
+        - name: backend-cert
+          secret:
+            secretName: backend.com
+        - name: ca-cert
+          secret:
+            secretName: ca.bundle
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mtls-app
+  namespace: test-infra
+spec:
+  selector:
+    app: mtls-app
+  ports:
+    - protocol: TCP
+      port: 443
+      targetPort: 443

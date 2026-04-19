@@ -108,6 +108,80 @@ curl http://$FQDN/bar
 curl http://$FQDN/some/thing?great=example -H "magic: foo"
 ```
 
+## Additional Gateway API Examples
+
+The following examples build on the base deployment and demonstrate advanced AGFC features.
+
+### Example 1 — Traffic Splitting / Weighted Round Robin
+
+Split traffic across backends using weighted routing. Useful for canary and blue-green deployments.
+
+```bash
+# Apply the traffic-splitting HTTPRoute (uses existing gateway-01)
+# Managed strategy
+kubectl apply -f kubernetes-manifests/gateway-managed/04-traffic-splitting.yaml
+
+# BYO strategy
+kubectl apply -f kubernetes-manifests/gateway-byo/04-traffic-splitting.yaml
+
+# Test — expect ~80% backend-v1, ~20% backend-v2
+watch -n 1 curl http://$FQDN
+```
+
+> **Tip:** Edit the `weight` values in the HTTPRoute to shift traffic. Set backend-v2 to `100` and backend-v1 to `0` for a full cutover.
+
+### Example 2 — SSL/TLS Offloading
+
+Gateway terminates TLS on port 443 and forwards plain HTTP to backends.
+
+```bash
+# 1. Generate the listener TLS secret
+chmod +x kubernetes-manifests/generate-tls-certs.sh
+./kubernetes-manifests/generate-tls-certs.sh ssl-offloading
+
+# 2. Deploy the HTTPS gateway + route
+# Managed strategy
+kubectl apply -f kubernetes-manifests/gateway-managed/05-ssl-offloading.yaml
+
+# BYO strategy (requires envsubst)
+envsubst < kubernetes-manifests/gateway-byo/05-ssl-offloading.yaml | kubectl apply -f -
+
+# 3. Wait for the gateway to get an address
+kubectl get gateway gateway-02-ssl -n test-infra -w
+
+# 4. Test
+SSL_FQDN=$(kubectl get gateway gateway-02-ssl -n test-infra -o jsonpath='{.status.addresses[0].value}')
+curl --insecure https://$SSL_FQDN/
+```
+
+### Example 3 — Backend mTLS
+
+End-to-end encryption with mutual TLS. AGFC terminates the client TLS connection, then establishes a new mTLS connection to the backend — presenting a client certificate for authentication.
+
+```bash
+# 1. Generate all mTLS certificates (CA, frontend, backend, client)
+chmod +x kubernetes-manifests/generate-tls-certs.sh
+./kubernetes-manifests/generate-tls-certs.sh backend-mtls
+
+# 2. Deploy the mTLS nginx backend app
+kubectl apply -f kubernetes-manifests/02-backend-mtls-app.yaml
+
+# 3. Deploy the HTTPS gateway + route + BackendTLSPolicy
+# Managed strategy
+kubectl apply -f kubernetes-manifests/gateway-managed/06-backend-mtls.yaml
+
+# BYO strategy (requires envsubst)
+envsubst < kubernetes-manifests/gateway-byo/06-backend-mtls.yaml | kubectl apply -f -
+
+# 4. Wait for the gateway and verify the BackendTLSPolicy
+kubectl get gateway gateway-03-mtls -n test-infra -w
+kubectl get backendtlspolicy mtls-app-tls-policy -n test-infra -o yaml
+
+# 5. Test
+MTLS_FQDN=$(kubectl get gateway gateway-03-mtls -n test-infra -o jsonpath='{.status.addresses[0].value}')
+curl --insecure https://$MTLS_FQDN/
+```
+
 ## Clean Up
 
 ```bash
@@ -131,12 +205,20 @@ AKS-AppGW-Containers/
 │   └── log-analytics.bicep                   # Log Analytics workspace
 └── kubernetes-manifests/
     ├── 01-sample-apps.yaml                   # Backend v1 and v2 (shared)
+    ├── 02-backend-mtls-app.yaml              # mTLS nginx backend (for example 3)
+    ├── generate-tls-certs.sh                 # Generate TLS certs for examples 2 & 3
     ├── gateway-managed/
     │   ├── 02-gateway.yaml                   # Gateway with ALB managed annotations
-    │   └── 03-httproute.yaml                 # Path + header routing
+    │   ├── 03-httproute.yaml                 # Path + header routing
+    │   ├── 04-traffic-splitting.yaml         # Weighted round robin (80/20)
+    │   ├── 05-ssl-offloading.yaml            # HTTPS Gateway + TLS termination
+    │   └── 06-backend-mtls.yaml              # HTTPS Gateway + BackendTLSPolicy
     └── gateway-byo/
         ├── 02-gateway.yaml                   # Gateway with alb-id + frontend address
-        └── 03-httproute.yaml                 # Path + header routing
+        ├── 03-httproute.yaml                 # Path + header routing
+        ├── 04-traffic-splitting.yaml         # Weighted round robin (80/20)
+        ├── 05-ssl-offloading.yaml            # HTTPS Gateway + TLS termination (BYO)
+        └── 06-backend-mtls.yaml              # HTTPS Gateway + BackendTLSPolicy (BYO)
 ```
 
 ## How the Two Strategies Differ
@@ -181,11 +263,18 @@ The Gateway resource creates a listener on Application Gateway for Containers. T
 
 HTTPRoutes define how traffic is routed from the Gateway to backend services. This demo includes:
 
-| Rule | Match | Backend |
-|------|-------|---------|
+| Route | Match | Backend |
+|-------|-------|---------|
 | Path-based | `/bar` prefix | backend-v2 |
 | Header + query + path | header `magic: foo`, query `great=example`, path `/some/thing` | backend-v2 |
 | Default | everything else | backend-v1 |
+| Traffic split | all traffic (weighted) | 80% backend-v1, 20% backend-v2 |
+| SSL offloading | HTTPS on port 443 → HTTP backend | backend-v1 |
+| Backend mTLS | HTTPS → mTLS to backend | mtls-app (nginx with client cert verification) |
+
+### BackendTLSPolicy
+
+The `BackendTLSPolicy` CRD (API group `alb.networking.azure.io/v1`) configures mTLS between AGFC and backend services. It specifies the client certificate AGFC presents, the CA bundle to verify the backend, and the expected SNI/SAN.
 
 ## Deployment Details
 
@@ -269,4 +358,7 @@ kubectl get applicationloadbalancer alb-test -n alb-test-infra -o yaml
 - [Create AGFC — Managed by ALB Controller](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-create-application-gateway-for-containers-managed-by-alb-controller)
 - [Create AGFC — Bring Your Own Deployment](https://learn.microsoft.com/azure/application-gateway/for-containers/quickstart-create-application-gateway-for-containers-byo-deployment)
 - [Path, Header & Query String Routing](https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-path-header-query-string-routing-gateway-api)
+- [Traffic Splitting (Weighted Round Robin)](https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-traffic-splitting-gateway-api)
+- [SSL/TLS Offloading](https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-ssl-offloading-gateway-api)
+- [Backend mTLS](https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-backend-mtls-gateway-api)
 - [Kubernetes Gateway API Spec](https://gateway-api.sigs.k8s.io/)

@@ -1,0 +1,25 @@
+# Traffic Splitting / Weighted Round Robin — ALB managed
+# Splits traffic between backend-v1 (80%) and backend-v2 (20%)
+# Uses the existing gateway-01 and sample apps from 01-sample-apps.yaml
+#
+# Useful for canary deployments — gradually shift weight to the new version.
+# Adjust the weight values to control the traffic ratio.
+#
+# Ref: https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-traffic-splitting-gateway-api
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: traffic-split-route
+  namespace: test-infra
+spec:
+  parentRefs:
+    - name: gateway-01
+  rules:
+    - backendRefs:
+        - name: backend-v1
+          port: 8080
+          weight: 80
+        - name: backend-v2
+          port: 8080
+          weight: 20
