@@ -286,8 +286,11 @@ deploy_sample_apps() {
 
 deploy_gateway_managed() {
     print_message "Deploying Gateway and HTTPRoutes (ALB managed strategy)..."
-    kubectl apply -f kubernetes-manifests/gateway-managed/
+    kubectl apply -f kubernetes-manifests/gateway-managed/02-gateway.yaml
+    kubectl apply -f kubernetes-manifests/gateway-managed/03-httproute.yaml
     print_message "Gateway API resources deployed (ALB managed)."
+    print_info "Additional examples (traffic splitting, SSL offloading, backend mTLS) can be deployed separately."
+    print_info "See README.md for instructions."
 }
 
 deploy_gateway_byo() {
