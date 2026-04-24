@@ -29,35 +29,38 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
         vnetAddressPrefix
       ]
     }
-    subnets: [
+  }
+}
+
+resource aksSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
+  parent: vnet
+  name: 'aks-subnet'
+  properties: {
+    addressPrefix: aksSubnetPrefix
+    privateEndpointNetworkPolicies: 'Disabled'
+    privateLinkServiceNetworkPolicies: 'Enabled'
+  }
+}
+
+resource albSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' = {
+  parent: vnet
+  name: 'subnet-alb'
+  properties: {
+    addressPrefix: albSubnetPrefix
+    delegations: [
       {
-        name: 'aks-subnet'
+        name: 'Microsoft.ServiceNetworking.trafficControllers'
         properties: {
-          addressPrefix: aksSubnetPrefix
-          privateEndpointNetworkPolicies: 'Disabled'
-          privateLinkServiceNetworkPolicies: 'Enabled'
-        }
-      }
-      {
-        name: 'subnet-alb'
-        properties: {
-          addressPrefix: albSubnetPrefix
-          delegations: [
-            {
-              name: 'Microsoft.ServiceNetworking.trafficControllers'
-              properties: {
-                serviceName: 'Microsoft.ServiceNetworking/trafficControllers'
-              }
-            }
-          ]
+          serviceName: 'Microsoft.ServiceNetworking/trafficControllers'
         }
       }
     ]
   }
+  dependsOn: [aksSubnet]
 }
 
 output vnetId string = vnet.id
 output vnetName string = vnet.name
-output aksSubnetId string = vnet.properties.subnets[0].id
-output albSubnetId string = vnet.properties.subnets[1].id
-output albSubnetName string = vnet.properties.subnets[1].name
+output aksSubnetId string = aksSubnet.id
+output albSubnetId string = albSubnet.id
+output albSubnetName string = albSubnet.name

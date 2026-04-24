@@ -10,7 +10,7 @@
 #   ./deploy.sh managed      # Deploys with 'managed' strategy
 #   ./deploy.sh byo          # Deploys with 'byo' strategy
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -71,6 +71,11 @@ check_prerequisites() {
         exit 1
     fi
 
+    if [[ "$DEPLOYMENT_STRATEGY" == "byo" ]] && ! command -v envsubst &> /dev/null; then
+        print_error "envsubst is required for the 'byo' deployment strategy. Please install it first."
+        exit 1
+    fi
+
     print_message "All prerequisites met."
 }
 
@@ -87,8 +92,26 @@ register_providers() {
     az feature register --namespace "Microsoft.ContainerService" --name "ApplicationLoadBalancerPreview" 2>/dev/null || true
 
     print_info "Waiting for feature registration (this may take a few minutes)..."
-    az feature show --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview" --query "properties.state" -o tsv 2>/dev/null || true
-    az feature show --namespace "Microsoft.ContainerService" --name "ApplicationLoadBalancerPreview" --query "properties.state" -o tsv 2>/dev/null || true
+    local features=("ManagedGatewayAPIPreview" "ApplicationLoadBalancerPreview")
+    local timeout=1800
+    local interval=30
+    for feature in "${features[@]}"; do
+        local elapsed=0
+        while true; do
+            local state
+            state=$(az feature show --namespace "Microsoft.ContainerService" --name "$feature" --query "properties.state" -o tsv 2>/dev/null || echo "Unknown")
+            print_info "Feature '$feature' state: $state"
+            if [[ "$state" == "Registered" ]]; then
+                break
+            fi
+            if [[ $elapsed -ge $timeout ]]; then
+                print_warning "Timed out waiting for feature '$feature' to register. Current state: $state. Continuing anyway..."
+                break
+            fi
+            sleep $interval
+            elapsed=$((elapsed + interval))
+        done
+    done
 
     az extension add --name alb --upgrade 2>/dev/null || true
     az extension add --name aks-preview --upgrade 2>/dev/null || true

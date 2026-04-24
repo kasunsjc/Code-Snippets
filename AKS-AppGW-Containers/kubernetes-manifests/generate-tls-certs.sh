@@ -8,7 +8,12 @@
 set -euo pipefail
 
 NAMESPACE="test-infra"
-CERT_DIR="$(mktemp -d)"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    CERT_DIR="$(mktemp -d -t agfc-certs)"
+else
+    CERT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/agfc-certs.XXXXXX")"
+fi
+trap 'rm -rf "$CERT_DIR"' EXIT
 SCENARIO="${1:-all}"
 
 echo "=== Generating TLS certificates in $CERT_DIR ==="
@@ -111,5 +116,4 @@ esac
 
 echo ""
 echo "=== Done — cleaning up temp files ==="
-rm -rf "$CERT_DIR"
 echo "Certificates created successfully in namespace $NAMESPACE"

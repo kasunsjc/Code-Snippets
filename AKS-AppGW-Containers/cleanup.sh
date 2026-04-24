@@ -2,7 +2,7 @@
 
 # Cleanup script for AKS with Application Gateway for Containers Demo
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'

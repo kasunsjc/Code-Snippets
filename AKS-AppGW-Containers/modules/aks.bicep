@@ -57,7 +57,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
         maxPods: 250
         enableAutoScaling: true
         minCount: 1
-        maxCount: 3
+        maxCount: max(systemNodeCount, 3)
       }
     ]
 
