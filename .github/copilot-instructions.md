@@ -16,3 +16,9 @@
 - Ensure shell scripts use `set -e` for strict error handling.
 - Test scripts and templates locally before committing when possible.
 - Use consistent indentation (spaces, not tabs) across all file types.
+
+## AKS Conventions
+
+- Always specify a **readable, custom node resource group name** instead of relying on AKS defaults (e.g., `MC_<rg>_<cluster>_<region>`).
+- Use the `nodeResourceGroup` property in Bicep or the `--node-resource-group` flag in Azure CLI.
+- Follow the naming pattern: `rg-<project>-<env>-nodes` (e.g., `rg-agfc-demo-dev-nodes`).

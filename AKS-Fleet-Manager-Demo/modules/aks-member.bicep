@@ -15,6 +15,9 @@ param subnetId string
 @description('Log Analytics Workspace ID')
 param logAnalyticsWorkspaceId string
 
+@description('Custom node resource group name')
+param nodeResourceGroupName string
+
 @description('Resource tags')
 param tags object = {}
 
@@ -37,6 +40,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-02-01' = {
   properties: {
     dnsPrefix: clusterName
     kubernetesVersion: kubernetesVersion
+    nodeResourceGroup: nodeResourceGroupName
     enableRBAC: true
     networkProfile: {
       networkPlugin: 'azure'

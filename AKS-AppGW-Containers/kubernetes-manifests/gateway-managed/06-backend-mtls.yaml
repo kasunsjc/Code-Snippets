@@ -1,0 +1,75 @@
+# Backend mTLS — ALB managed
+# End-to-end encryption with mutual TLS between AGFC and the backend.
+#
+# Prerequisites:
+#   1. Run generate-tls-certs.sh backend-mtls (creates all required secrets)
+#   2. Apply 02-backend-mtls-app.yaml (deploys the mTLS nginx backend)
+#
+# Flow:
+#   Client --[HTTPS]--> AGFC (terminates TLS with frontend.com cert)
+#          --[mTLS]---> Backend (AGFC presents gateway-client-cert, backend verifies via CA)
+#
+# Ref: https://learn.microsoft.com/azure/application-gateway/for-containers/how-to-backend-mtls-gateway-api
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: gateway-03-mtls
+  namespace: test-infra
+  annotations:
+    alb.networking.azure.io/alb-namespace: alb-test-infra
+    alb.networking.azure.io/alb-name: alb-test
+spec:
+  gatewayClassName: azure-alb-external
+  listeners:
+    - name: https-listener
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Same
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: frontend.com
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mtls-route
+  namespace: test-infra
+spec:
+  parentRefs:
+    - name: gateway-03-mtls
+  rules:
+    - backendRefs:
+        - name: mtls-app
+          port: 443
+---
+apiVersion: alb.networking.azure.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: mtls-app-tls-policy
+  namespace: test-infra
+spec:
+  targetRef:
+    group: ""
+    kind: Service
+    name: mtls-app
+    namespace: test-infra
+  default:
+    sni: backend.com
+    ports:
+      - port: 443
+    clientCertificateRef:
+      name: gateway-client-cert
+      group: ""
+      kind: Secret
+    verify:
+      caCertificateRef:
+        name: ca.bundle
+        group: ""
+        kind: Secret
+      subjectAltName: backend.com

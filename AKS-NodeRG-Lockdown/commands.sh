@@ -47,7 +47,7 @@ az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
 # Create a AKS Cluster without Node Resource Group lockdown
 
 echo "Creating AKS Cluster with default Node Resource Group"
-az aks create --name "$CLUSTER_NAME" --location $LOCATION --resource-group $RESOURCE_GROUP_NAME --generate-ssh-keys
+az aks create --name "$CLUSTER_NAME" --location $LOCATION --resource-group $RESOURCE_GROUP_NAME --node-resource-group "rg-${CLUSTER_NAME}-nodes" --generate-ssh-keys
 
 echo "Sleeping for 60 seconds to allow the cluster to be created"
 sleep 60
@@ -55,4 +55,4 @@ sleep 60
 # Create a AKS cluster with Node Resource Group Lockdown
 
 echo "Creating AKS Cluster with Node Resource Group Lockdown"
-az aks create --name "$CLUSTER_NAME-lockdown" --location $LOCATION --resource-group $RESOURCE_GROUP_NAME --nrg-lockdown-restriction-level ReadOnly --generate-ssh-keys
+az aks create --name "$CLUSTER_NAME-lockdown" --location $LOCATION --resource-group $RESOURCE_GROUP_NAME --node-resource-group "rg-${CLUSTER_NAME}-lockdown-nodes" --nrg-lockdown-restriction-level ReadOnly --generate-ssh-keys

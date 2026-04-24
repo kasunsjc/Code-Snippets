@@ -35,7 +35,7 @@ az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
 
 # Create an AKS cluster with Node autoprovisioning
 
-az aks create --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP_NAME --node-provisioning-mode Auto --network-plugin azure --network-plugin-mode overlay --network-dataplane cilium --generate-ssh-keys --location $LOCATION
+az aks create --name $CLUSTER_NAME --resource-group $RESOURCE_GROUP_NAME --node-resource-group "rg-${CLUSTER_NAME}-nodes" --node-provisioning-mode Auto --network-plugin azure --network-plugin-mode overlay --network-dataplane cilium --generate-ssh-keys --location $LOCATION
 
 # Create Nodepool with autoprovisioning
 

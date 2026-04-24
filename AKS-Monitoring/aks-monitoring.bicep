@@ -28,6 +28,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
       clientId: 'msi'
     }
     kubernetesVersion: '1.30.7'
+    nodeResourceGroup: 'rg-${name}-nodes'
     autoUpgradeProfile: {
       upgradeChannel: 'stable'
     }

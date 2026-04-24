@@ -1,0 +1,99 @@
+# Sample backend applications for Application Gateway for Containers demo
+# Creates two backend services to demonstrate Gateway API routing
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-infra
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-v1
+  namespace: test-infra
+  labels:
+    app: backend-v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-v1
+  template:
+    metadata:
+      labels:
+        app: backend-v1
+    spec:
+      containers:
+        - name: backend-v1
+          image: hashicorp/http-echo:0.2.3
+          args:
+            - "-text=backend-v1"
+            - "-listen=:8080"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-v1
+  namespace: test-infra
+spec:
+  selector:
+    app: backend-v1
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-v2
+  namespace: test-infra
+  labels:
+    app: backend-v2
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-v2
+  template:
+    metadata:
+      labels:
+        app: backend-v2
+    spec:
+      containers:
+        - name: backend-v2
+          image: hashicorp/http-echo:0.2.3
+          args:
+            - "-text=backend-v2"
+            - "-listen=:8080"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-v2
+  namespace: test-infra
+spec:
+  selector:
+    app: backend-v2
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

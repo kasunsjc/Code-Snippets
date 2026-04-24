@@ -223,6 +223,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2025-01-01' = {
   }
   properties: {
     dnsPrefix: dnsPrefix
+    nodeResourceGroup: 'rg-${clusterName}-nodes'
     kubernetesVersion: kubernetesVersion
     enableRBAC: true
     azureMonitorProfile: {

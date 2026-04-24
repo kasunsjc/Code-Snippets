@@ -1,5 +1,7 @@
-// Main Bicep template for BYO CNI AKS with Cilium Demo
-// Deploys AKS cluster with networkPlugin 'none' for Cilium CNI
+// Main Bicep template for AKS with Application Gateway for Containers
+// Supports two deployment strategies:
+//   - 'byo'     : Bring Your Own — AGFC resource, frontend, and association created in Azure via Bicep
+//   - 'managed' : Managed by ALB Controller — lifecycle managed via ApplicationLoadBalancer CRD in Kubernetes
 
 targetScope = 'resourceGroup'
 
@@ -9,7 +11,7 @@ param location string = resourceGroup().location
 @description('The name prefix for all resources')
 @minLength(3)
 @maxLength(10)
-param namePrefix string = 'byocni'
+param namePrefix string = 'agfc'
 
 @description('Environment name (dev, test, prod)')
 @allowed([
@@ -30,21 +32,20 @@ param systemNodeCount int = 2
 @description('System node pool VM size')
 param systemNodeVmSize string = 'Standard_D2s_v3'
 
-@description('User node pool count')
-@minValue(1)
-@maxValue(10)
-param userNodeCount int = 2
-
-@description('User node pool VM size')
-param userNodeVmSize string = 'Standard_D4s_v3'
-
 @description('Enable Azure Monitor Container Insights')
 param enableMonitoring bool = true
+
+@description('Deployment strategy: byo (Bring Your Own) or managed (ALB Controller managed)')
+@allowed([
+  'byo'
+  'managed'
+])
+param deploymentStrategy string = 'managed'
 
 @description('Tags to apply to all resources')
 param tags object = {
   Environment: environment
-  Project: 'BYO-CNI-AKS-Cilium'
+  Project: 'AKS-AppGW-Containers'
   ManagedBy: 'Bicep'
 }
 
@@ -52,6 +53,7 @@ param tags object = {
 var aksClusterName = '${namePrefix}-aks-${environment}'
 var logAnalyticsName = '${namePrefix}-logs-${environment}'
 var vnetName = '${namePrefix}-vnet-${environment}'
+var agfcName = '${namePrefix}-agfc-${environment}'
 
 // Log Analytics Workspace
 module logAnalytics 'modules/log-analytics.bicep' = {
@@ -63,7 +65,7 @@ module logAnalytics 'modules/log-analytics.bicep' = {
   }
 }
 
-// Virtual Network
+// Virtual Network with ALB delegated subnet
 module vnet 'modules/vnet.bicep' = {
   name: 'vnet-deployment'
   params: {
@@ -73,7 +75,7 @@ module vnet 'modules/vnet.bicep' = {
   }
 }
 
-// AKS Cluster with BYO CNI
+// AKS Cluster with Azure CNI Overlay, OIDC, Workload Identity
 module aks 'modules/aks.bicep' = {
   name: 'aks-deployment'
   params: {
@@ -83,8 +85,6 @@ module aks 'modules/aks.bicep' = {
     nodeResourceGroupName: 'rg-${namePrefix}-${environment}-nodes'
     systemNodeCount: systemNodeCount
     systemNodeVmSize: systemNodeVmSize
-    userNodeCount: userNodeCount
-    userNodeVmSize: userNodeVmSize
     subnetId: vnet.outputs.aksSubnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     enableMonitoring: enableMonitoring
@@ -92,10 +92,25 @@ module aks 'modules/aks.bicep' = {
   }
 }
 
+// Application Gateway for Containers (BYO strategy only)
+// For 'managed' strategy, the AGFC resource is created via ApplicationLoadBalancer CRD in Kubernetes
+module agfc 'modules/agfc.bicep' = if (deploymentStrategy == 'byo') {
+  name: 'agfc-deployment'
+  params: {
+    agfcName: agfcName
+    location: location
+    albSubnetId: vnet.outputs.albSubnetId
+    tags: tags
+  }
+}
+
 // Outputs
 output aksClusterName string = aks.outputs.clusterName
 output aksClusterFqdn string = aks.outputs.clusterFqdn
-output aksResourceId string = aks.outputs.aksResourceId
-output resourceGroupName string = resourceGroup().name
-output logAnalyticsWorkspaceId string = logAnalytics.outputs.workspaceId
+output nodeResourceGroup string = aks.outputs.nodeResourceGroup
+output albSubnetId string = vnet.outputs.albSubnetId
 output vnetName string = vnet.outputs.vnetName
+output deploymentStrategy string = deploymentStrategy
+output agfcName string = deploymentStrategy == 'byo' ? agfc.outputs.agfcName : 'managed-by-alb-controller'
+output agfcId string = deploymentStrategy == 'byo' ? agfc.outputs.agfcId : ''
+output frontendName string = deploymentStrategy == 'byo' ? agfc.outputs.frontendName : ''

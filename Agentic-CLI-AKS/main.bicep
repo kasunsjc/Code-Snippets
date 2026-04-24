@@ -99,6 +99,7 @@ module aks 'modules/aks.bicep' = {
     clusterName: aksClusterName
     location: location
     kubernetesVersion: kubernetesVersion
+    nodeResourceGroupName: 'rg-${namePrefix}-${environment}-${uniqueSuffix}-nodes'
     nodeCount: nodeCount
     nodeVmSize: nodeVmSize
     subnetId: vnet.outputs.aksSubnetId
