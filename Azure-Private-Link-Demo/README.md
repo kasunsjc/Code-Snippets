@@ -105,10 +105,10 @@ Two **completely isolated** VNets in a single resource group (so the lab is chea
 
 - Azure subscription with permission to create networking and compute resources.
 - Azure CLI ≥ 2.60, signed in (`az login`) and the right subscription set (`az account set --subscription <id>`).
-- An SSH public key. The script will offer to generate `~/.ssh/id_rsa` if you don't have one.
+- `openssl` and `curl` (used by `deploy.sh` to generate a password and detect your public IP).
 - About **€2–€5/day** if you leave it running (2× B2s VMs + 1× B2s jumpbox + 1× ILB + 1× PLS + 2× PE).
 
----
+> **Auth model.** For lab simplicity these VMs use **password authentication**. `deploy.sh` auto-generates an Azure-compliant password (20 chars, mixed case + digits + special) and stores it in `./.vm-password` (chmod 600, gitignored). The jumpbox NSG is locked down to your detected public IP automatically.
 
 ## 4. Deploy
 
@@ -119,21 +119,24 @@ chmod +x deploy.sh cleanup.sh
 # Optional overrides
 export RESOURCE_GROUP_NAME=rg-private-link-demo
 export LOCATION=northeurope
+# export ADMIN_PASSWORD='YourOwnSecret!23'   # otherwise auto-generated
+# export ALLOWED_SSH_SOURCE_IP=203.0.113.10/32 # otherwise auto-detected
 
 ./deploy.sh
 ```
 
 The script will:
 1. Create the resource group.
-2. Read `~/.ssh/id_rsa.pub` (or generate one) and pass it to the template via the `SSH_PUBLIC_KEY` env var consumed by [main.bicepparam](main.bicepparam).
-3. Run `az deployment group create` against [main.bicep](main.bicep).
-4. Print the jumpbox public IP, the PE private IP, and copy-pasteable next steps.
+2. Generate (or reuse) an Azure-compliant VM password and save it to `./.vm-password`.
+3. Detect your public IP via `api.ipify.org` and lock the jumpbox NSG to `<ip>/32`.
+4. Run `az deployment group create` against [main.bicep](main.bicep).
+5. Print the jumpbox public IP, the VM credentials, the PE private IP, and copy-pasteable next steps.
 
 ---
 
 ## 5. Walk-through — the exercises that matter
 
-> SSH to the jumpbox first: `ssh azureuser@<jumpboxPublicIp>`. All commands below are run **from the jumpbox** unless stated otherwise.
+> SSH to the jumpbox first: `ssh azureuser@<jumpboxPublicIp>` and paste the password printed by `deploy.sh` (also stored in `./.vm-password`). All commands below are run **from the jumpbox** unless stated otherwise.
 
 ### Exercise A — Reach a service in another VNet without peering
 

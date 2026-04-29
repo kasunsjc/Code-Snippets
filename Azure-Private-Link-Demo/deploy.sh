@@ -15,23 +15,73 @@ fail()  { echo -e "${RED}ERROR:${NC} $1"; exit 1; }
 RESOURCE_GROUP_NAME="${RESOURCE_GROUP_NAME:-rg-private-link-demo}"
 LOCATION="${LOCATION:-northeurope}"
 DEPLOYMENT_NAME="plk-demo-$(date +%Y%m%d-%H%M%S)"
-SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/id_rsa.pub}"
+ADMIN_USERNAME="${ADMIN_USERNAME:-azureuser}"
+PASSWORD_FILE="${PASSWORD_FILE:-./.vm-password}"
 
 # Pre-flight
 command -v az >/dev/null || fail "Azure CLI not installed."
 az account show >/dev/null 2>&1 || fail "Not logged in. Run 'az login' first."
 
-if [[ ! -f "$SSH_KEY_PATH" ]]; then
-    warn "SSH public key not found at $SSH_KEY_PATH"
-    read -rp "Generate a new SSH key pair now? [y/N] " ans
-    [[ "$ans" =~ ^[Yy]$ ]] || fail "Provide an SSH public key via SSH_KEY_PATH env var."
-    ssh-keygen -t rsa -b 4096 -f "${SSH_KEY_PATH%.pub}" -N "" -C "private-link-demo"
-fi
+# -----------------------------------------------------------------------------
+# Generate (or reuse) an Azure-compliant VM password.
+#
+# Azure Linux VM password rules:
+#   - 12 to 72 characters
+#   - Must satisfy 3 of 4: lowercase, uppercase, digit, special character
+#   - Must NOT contain the username, or any of these reserved strings:
+#     abc@123, P@$$w0rd, P@ssw0rd, P@ssword123, Pa$$word, pass@word1,
+#     Password!, Password1, Password22, iloveyou!
+#
+# We deterministically build a 20-char password that always satisfies all four
+# character classes, using openssl for the random body.
+# -----------------------------------------------------------------------------
+generate_password() {
+    local rand specials body
+    # 14 chars of url-safe base64 -> guaranteed mix of upper/lower/digit
+    rand=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 14)
+    # Pick 2 special chars from a safe set (no shell-meta hassles).
+    specials='!@#%&*-_=+'
+    local s1=${specials:$((RANDOM % ${#specials})):1}
+    local s2=${specials:$((RANDOM % ${#specials})):1}
+    # Compose: ensure at least one of each class by prefixing fixed anchors.
+    body="Pl${s1}${rand}${s2}9"
+    echo "$body"
+}
 
-export SSH_PUBLIC_KEY="$(cat "$SSH_KEY_PATH")"
+if [[ -n "${ADMIN_PASSWORD:-}" ]]; then
+    info "Using ADMIN_PASSWORD from environment."
+elif [[ -f "$PASSWORD_FILE" ]]; then
+    ADMIN_PASSWORD=$(<"$PASSWORD_FILE")
+    info "Reusing password from $PASSWORD_FILE"
+else
+    ADMIN_PASSWORD=$(generate_password)
+    umask 077
+    echo -n "$ADMIN_PASSWORD" > "$PASSWORD_FILE"
+    ok "Generated new VM password and stored it at $PASSWORD_FILE (chmod 600)."
+fi
+export ADMIN_PASSWORD
+
+# Sanity check: length 12-72.
+len=${#ADMIN_PASSWORD}
+if (( len < 12 || len > 72 )); then
+    fail "ADMIN_PASSWORD length ($len) is outside Azure's 12-72 range."
+fi
 
 ok "Subscription: $(az account show --query name -o tsv)"
 ok "Resource group: $RESOURCE_GROUP_NAME (region: $LOCATION)"
+
+# Detect the caller's public IP so we can lock down the jumpbox NSG to it.
+# Override by exporting ALLOWED_SSH_SOURCE_IP (e.g. "203.0.113.0/24" or "Internet").
+if [[ -z "${ALLOWED_SSH_SOURCE_IP:-}" ]]; then
+    MY_IP=$(curl -s --max-time 5 https://api.ipify.org || true)
+    if [[ -n "$MY_IP" ]]; then
+        ALLOWED_SSH_SOURCE_IP="${MY_IP}/32"
+        info "Detected public IP: $MY_IP — locking jumpbox SSH to $ALLOWED_SSH_SOURCE_IP"
+    else
+        ALLOWED_SSH_SOURCE_IP="Internet"
+        warn "Could not detect public IP; falling back to 'Internet' (NOT recommended)."
+    fi
+fi
 
 # Resource group
 if ! az group show -n "$RESOURCE_GROUP_NAME" >/dev/null 2>&1; then
@@ -47,6 +97,7 @@ az deployment group create \
     --template-file main.bicep \
     --parameters main.bicepparam \
     --parameters location="$LOCATION" \
+    --parameters allowedSshSourceIp="$ALLOWED_SSH_SOURCE_IP" \
     -o none
 
 # Outputs
@@ -101,11 +152,18 @@ Resource group:           $RESOURCE_GROUP_NAME
   Storage account:        $ST_NAME
   Private FQDN:           $ST_FQDN
 
+[VM credentials]
+  Username:               $ADMIN_USERNAME
+  Password:               $ADMIN_PASSWORD
+  (also saved to:         $PASSWORD_FILE)
+
 ------------------------------------------------------------------------
   Hands-on next steps
 ------------------------------------------------------------------------
-1. SSH into the consumer jumpbox:
-     ssh azureuser@$JUMP_IP
+1. SSH into the consumer jumpbox (password auth):
+     ssh $ADMIN_USERNAME@$JUMP_IP
+     # paste the password above when prompted
+     # (or: sshpass -p "\$(cat $PASSWORD_FILE)" ssh $ADMIN_USERNAME@$JUMP_IP)
 
 2. From the jumpbox, hit the provider service through the Private Endpoint:
      curl http://$PE_NIC_IP                     # by IP

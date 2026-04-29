@@ -19,9 +19,9 @@ param namePrefix string
 @description('Admin username for backend VMs.')
 param adminUsername string
 
-@description('SSH public key for backend VMs.')
+@description('Admin password for backend VMs (Azure complexity rules apply).')
 @secure()
-param sshPublicKey string
+param adminPassword string
 
 @description('VM size for backend VMs.')
 param vmSize string
@@ -214,17 +214,10 @@ resource backendVMs 'Microsoft.Compute/virtualMachines@2024-07-01' = [for i in r
     osProfile: {
       computerName: '${namePrefix}-be-${i}'
       adminUsername: adminUsername
+      adminPassword: adminPassword
       customData: base64(cloudInit)
       linuxConfiguration: {
-        disablePasswordAuthentication: true
-        ssh: {
-          publicKeys: [
-            {
-              path: '/home/${adminUsername}/.ssh/authorized_keys'
-              keyData: sshPublicKey
-            }
-          ]
-        }
+        disablePasswordAuthentication: false
       }
     }
     storageProfile: {

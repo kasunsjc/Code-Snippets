@@ -21,12 +21,15 @@ param namePrefix string
 @description('Admin username for the jumpbox VM.')
 param adminUsername string
 
-@description('SSH public key.')
+@description('Admin password for the jumpbox VM (Azure complexity rules apply).')
 @secure()
-param sshPublicKey string
+param adminPassword string
 
 @description('VM size for the jumpbox.')
 param vmSize string
+
+@description('Source IP/CIDR allowed to SSH to the jumpbox. Use your public IP (e.g. 203.0.113.10/32). Defaults to the entire Internet which is NOT recommended for password auth.')
+param allowedSshSourceIp string = 'Internet'
 
 @description('Resource ID of the Private Link Service to connect to.')
 param privateLinkServiceId string
@@ -59,7 +62,7 @@ resource jumpboxNsg 'Microsoft.Network/networkSecurityGroups@2024-01-01' = {
           access: 'Allow'
           direction: 'Inbound'
           protocol: 'Tcp'
-          sourceAddressPrefix: 'Internet'
+          sourceAddressPrefix: allowedSshSourceIp
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '22'
@@ -157,17 +160,10 @@ resource jumpbox 'Microsoft.Compute/virtualMachines@2024-07-01' = {
     osProfile: {
       computerName: '${namePrefix}-jumpbox'
       adminUsername: adminUsername
+      adminPassword: adminPassword
       customData: base64(jumpboxCloudInit)
       linuxConfiguration: {
-        disablePasswordAuthentication: true
-        ssh: {
-          publicKeys: [
-            {
-              path: '/home/${adminUsername}/.ssh/authorized_keys'
-              keyData: sshPublicKey
-            }
-          ]
-        }
+        disablePasswordAuthentication: false
       }
     }
     storageProfile: {

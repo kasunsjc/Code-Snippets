@@ -23,12 +23,17 @@ param namePrefix string = 'plkdemo'
 @description('Admin username for the Linux VMs.')
 param adminUsername string = 'azureuser'
 
-@description('SSH public key (OpenSSH format) for VM access.')
+@description('Admin password for the Linux VMs. Must satisfy Azure complexity rules: 12-72 chars, with 3 of {lowercase, uppercase, digit, special}.')
 @secure()
-param sshPublicKey string
+@minLength(12)
+@maxLength(72)
+param adminPassword string
 
 @description('VM size for jumpbox and backend VMs.')
 param vmSize string = 'Standard_B2s'
+
+@description('Source IP/CIDR allowed to SSH to the jumpbox. Recommended: your public IP /32. Default: Internet (lab only).')
+param allowedSshSourceIp string = 'Internet'
 
 // ----- Provider side --------------------------------------------------------
 module provider 'modules/provider.bicep' = {
@@ -37,7 +42,7 @@ module provider 'modules/provider.bicep' = {
     location: location
     namePrefix: namePrefix
     adminUsername: adminUsername
-    sshPublicKey: sshPublicKey
+    adminPassword: adminPassword
     vmSize: vmSize
   }
 }
@@ -49,8 +54,9 @@ module consumer 'modules/consumer.bicep' = {
     location: location
     namePrefix: namePrefix
     adminUsername: adminUsername
-    sshPublicKey: sshPublicKey
+    adminPassword: adminPassword
     vmSize: vmSize
+    allowedSshSourceIp: allowedSshSourceIp
     privateLinkServiceId: provider.outputs.privateLinkServiceId
   }
 }
