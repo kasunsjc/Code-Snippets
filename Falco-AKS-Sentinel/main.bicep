@@ -4,10 +4,11 @@
 // Deploys:
 //   - Log Analytics workspace (Sentinel-enabled)
 //   - Microsoft Sentinel onboarding
-//   - Logic App (HTTP webhook → Log Analytics custom table)
+//   - Logic App (HTTP webhook → Log Analytics custom table FalcoLogs_CL)
 //   - API connection for Azure Log Analytics Data Collector
 //   - AKS cluster (small, dev-grade) with Container Insights
-//   - Sentinel scheduled analytics rule for Falco alerts
+//   - Sentinel scheduled analytics rules loaded from
+//     sentinel-analytics-rules.json
 // ============================================================
 
 @description('Azure region for all resources.')
@@ -37,11 +38,14 @@ param nodeVmSize string = 'Standard_DS2_v2'
 @maxValue(730)
 param retentionInDays int = 30
 
+@description('Custom log type / table name (Log Analytics appends _CL).')
+param customLogType string = 'FalcoLogs'
+
 var workspaceName = '${projectName}-law'
-var logicAppName = '${projectName}-falco-ingest'
+var logicAppName = 'logic-falco-webhook'
 var laConnectionName = '${projectName}-la-connection'
-var customLogTableName = 'FalcoAlerts_CL'
 var nodeResourceGroup = 'rg-${projectName}-nodes'
+var sentinelRules = loadJsonContent('sentinel-analytics-rules.json')
 
 // ============================================================
 // Log Analytics Workspace
@@ -61,9 +65,7 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 }
 
 // ============================================================
-// Microsoft Sentinel onboarding (legacy solution alias works
-// across all regions and is supported alongside the newer
-// Microsoft.SecurityInsights/onboardingStates resource).
+// Microsoft Sentinel onboarding
 // ============================================================
 resource sentinel 'Microsoft.OperationsManagement/solutions@2015-11-01-preview' = {
   name: 'SecurityInsights(${workspace.name})'
@@ -81,7 +83,6 @@ resource sentinel 'Microsoft.OperationsManagement/solutions@2015-11-01-preview' 
 
 // ============================================================
 // API Connection — Azure Log Analytics Data Collector
-// (used by the Logic App to write to the custom log table)
 // ============================================================
 resource laConnection 'Microsoft.Web/connections@2018-07-01-preview' = {
   name: laConnectionName
@@ -100,7 +101,8 @@ resource laConnection 'Microsoft.Web/connections@2018-07-01-preview' = {
 
 // ============================================================
 // Logic App — HTTP trigger → Send Data to Log Analytics
-// falcosidekick will POST Falco alerts here as JSON.
+// Trigger name "When_an_HTTP_request_is_received" matches the
+// upstream aks-labs workflow that retrieves the callback URL.
 // ============================================================
 resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
   name: logicAppName
@@ -128,7 +130,7 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
         }
       }
       triggers: {
-        manual: {
+        When_an_HTTP_request_is_received: {
           type: 'Request'
           kind: 'Http'
           inputs: {
@@ -161,7 +163,7 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
             method: 'post'
             path: '/api/logs'
             queries: {
-              'Log-Type': 'FalcoAlerts'
+              'Log-Type': customLogType
             }
             body: '@triggerBody()'
           }
@@ -226,34 +228,27 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
 }
 
 // ============================================================
-// Sentinel Scheduled Analytics Rule — Falco Alerts
-// Creates an incident for Critical / Error / Warning alerts.
+// Sentinel scheduled analytics rules
+// Loaded from sentinel-analytics-rules.json (5 rules).
 // ============================================================
-resource falcoAnalyticRule 'Microsoft.SecurityInsights/alertRules@2023-12-01-preview' = {
+resource falcoAnalyticRules 'Microsoft.SecurityInsights/alertRules@2023-12-01-preview' = [for (rule, idx) in sentinelRules: {
   scope: workspace
-  name: guid(workspace.id, 'FalcoRuntimeAlerts')
+  name: guid(workspace.id, 'falco-rule', string(idx), rule.displayName)
   kind: 'Scheduled'
   properties: {
-    displayName: 'Falco — Runtime Security Alert (AKS)'
-    description: 'Creates an incident when Falco reports a Critical, Error, or Warning rule violation from an AKS cluster.'
-    severity: 'Medium'
-    enabled: true
-    query: '''${customLogTableName}
-| where priority_s in ("Critical","Error","Warning","Emergency","Alert")
-| extend RuleName = tostring(rule_s), Output = tostring(output_s), Priority = tostring(priority_s), Source = tostring(source_s), Hostname = tostring(hostname_s)
-| project TimeGenerated, Priority, RuleName, Source, Hostname, Output, output_fields_s, tags_s'''
-    queryFrequency: 'PT5M'
-    queryPeriod: 'PT15M'
-    triggerOperator: 'GreaterThan'
-    triggerThreshold: 0
-    suppressionDuration: 'PT1H'
-    suppressionEnabled: false
-    tactics: [
-      'Execution'
-      'PrivilegeEscalation'
-      'DefenseEvasion'
-      'Persistence'
-    ]
+    displayName: rule.displayName
+    description: rule.description
+    severity: rule.severity
+    enabled: rule.enabled
+    query: rule.query
+    queryFrequency: rule.queryFrequency
+    queryPeriod: rule.queryPeriod
+    triggerOperator: rule.triggerOperator
+    triggerThreshold: rule.triggerThreshold
+    suppressionDuration: rule.suppressionDuration
+    suppressionEnabled: rule.suppressionEnabled
+    tactics: rule.tactics
+    techniques: rule.techniques
     incidentConfiguration: {
       createIncident: true
       groupingConfiguration: {
@@ -270,7 +265,7 @@ resource falcoAnalyticRule 'Microsoft.SecurityInsights/alertRules@2023-12-01-pre
   dependsOn: [
     sentinel
   ]
-}
+}]
 
 // ============================================================
 // Outputs
@@ -281,4 +276,4 @@ output workspaceName string = workspace.name
 output aksClusterName string = aksCluster.name
 output aksResourceGroup string = resourceGroup().name
 output logicAppName string = logicApp.name
-output customLogTable string = customLogTableName
+output customLogTable string = '${customLogType}_CL'

@@ -1,0 +1,181 @@
+# Falco Helm Chart Values
+# This configuration deploys Falco with:
+# - Modern eBPF driver (no kernel module needed)
+# - JSON output for easy parsing
+# - HTTP output to Falcosidekick
+# - Enhanced security rules
+
+# Driver configuration - use eBPF for modern kernels
+driver:
+  kind: modern_ebpf
+  
+# Enable Falcosidekick for log forwarding
+falcosidekick:
+  enabled: true
+  webui:
+    enabled: false
+  
+  config:
+    # Minimum priority to send alerts (only CRITICAL and ERROR)
+    # Priority levels: emergency, alert, critical, error, warning, notice, informational, debug
+    customfields:
+      filtered: "true"
+    
+    # Webhook configuration - will be set via Helm values during deployment
+    webhook:
+      address: "${LOGIC_APP_WEBHOOK_URL}"
+      # The webhook URL will be set by the deployment script
+      # Only send high-priority alerts (critical and error)
+      minimumpriority: "error"
+
+# Falco configuration
+falco:
+  # JSON output for easier parsing
+  json_output: true
+  json_include_output_property: true
+  json_include_tags_property: true
+  
+  # Log settings
+  log_stderr: true
+  log_syslog: false
+  log_level: info
+  
+  # Priority threshold
+  priority: debug
+  
+  # Buffered output
+  buffered_outputs: false
+  
+  # Output channels
+  outputs:
+    rate: 1
+    max_burst: 1000
+  
+  # HTTP output to Falcosidekick
+  http_output:
+    enabled: true
+    url: "http://falco-falcosidekick:2801"
+  
+  # File output (for debugging)
+  file_output:
+    enabled: false
+  
+  # Program output
+  program_output:
+    enabled: false
+  
+  # Grpc output
+  grpc:
+    enabled: false
+  
+  # Grpc output over unix socket
+  grpc_output:
+    enabled: false
+
+# Rules configuration
+customRules:
+  # Custom rules for AKS/Azure scenarios
+  aks-custom-rules.yaml: |-
+    # Macro to exclude system namespaces
+    - macro: system_namespace
+      condition: k8s.ns.name in (kube-system, kube-public, kube-node-lease, calico-system, tigera-operator)
+    
+    - rule: Unauthorized Process in Container
+      desc: Detect unauthorized processes in containers
+      condition: >
+        spawned_process and container and
+        not system_namespace and
+        not proc.name in (known_processes)
+      output: >
+        Unauthorized process started in container
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+        container_name=%container.name namespace=%k8s.ns.name image=%container.image.repository:%container.image.tag)
+      priority: WARNING
+      tags: [container, process, security]
+    
+    - rule: Sensitive File Access
+      desc: Detect access to sensitive files
+      condition: >
+        open_read and container and
+        not system_namespace and
+        fd.name in (/etc/shadow, /etc/passwd, /etc/sudoers, /root/.ssh/id_rsa,
+        /root/.ssh/id_dsa, /root/.ssh/authorized_keys)
+      output: >
+        Sensitive file accessed in container
+        (user=%user.name file=%fd.name container_id=%container.id
+        container_name=%container.name namespace=%k8s.ns.name image=%container.image.repository:%container.image.tag)
+      priority: CRITICAL
+      tags: [filesystem, security, credentials]
+    
+    - rule: Kubernetes Secret Access
+      desc: Detect access to Kubernetes secrets
+      condition: >
+        open_read and container and
+        not system_namespace and
+        fd.name pmatch (/var/run/secrets/kubernetes.io)
+      output: >
+        Kubernetes secret accessed
+        (user=%user.name file=%fd.name container_id=%container.id
+        container_name=%container.name namespace=%k8s.ns.name image=%container.image.repository:%container.image.tag)
+      priority: WARNING
+      tags: [kubernetes, secrets, security]
+    
+    - rule: Package Management in Container
+      desc: Detect package management tools in running containers
+      condition: >
+        spawned_process and container and
+        not system_namespace and
+        proc.name in (apt, apt-get, yum, dnf, apk, pip, npm)
+      output: >
+        Package management tool executed in container
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+        container_name=%container.name namespace=%k8s.ns.name image=%container.image.repository:%container.image.tag)
+      priority: WARNING
+      tags: [container, process, package_management]
+    
+    - rule: Reverse Shell Detected
+      desc: Detect potential reverse shell connections
+      condition: >
+        spawned_process and container and
+        not system_namespace and
+        ((proc.name = "bash" and proc.args contains "-i") or
+         (proc.name = "sh" and proc.args contains "-i") or
+         (proc.name = "nc" and (proc.args contains "-e" or proc.args contains "-c")) or
+         (proc.name = "ncat" and (proc.args contains "-e" or proc.args contains "-c" or proc.args contains "--sh-exec")) or
+         (proc.name = "python" and proc.args contains "socket") or
+         (proc.name = "perl" and proc.args contains "socket") or
+         (proc.name = "ruby" and proc.args contains "socket"))
+      output: >
+        Potential reverse shell detected
+        (user=%user.name command=%proc.cmdline container_id=%container.id
+        container_name=%container.name namespace=%k8s.ns.name image=%container.image.repository:%container.image.tag)
+      priority: CRITICAL
+      tags: [network, shell, security]
+
+# Resource limits
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+
+# Tolerations for system nodes
+tolerations:
+  - effect: NoSchedule
+    key: CriticalAddonsOnly
+    operator: Equal
+    value: "true"
+
+# Service account
+serviceAccount:
+  create: true
+  name: falco
+
+# RBAC
+rbac:
+  create: true
+
+# Priority class
+priorityClassName: system-node-critical
