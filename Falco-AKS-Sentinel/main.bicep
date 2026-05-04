@@ -43,7 +43,7 @@ param customLogType string = 'FalcoLogs'
 
 var workspaceName = '${projectName}-law'
 var logicAppName = 'logic-falco-webhook'
-var laConnectionName = '${projectName}-la-connection'
+var laConnectionName = 'azureloganalyticsdatacollector-${uniqueString(resourceGroup().id)}'
 var nodeResourceGroup = 'rg-${projectName}-nodes'
 var sentinelRules = loadJsonContent('sentinel-analytics-rules.json')
 
@@ -84,11 +84,11 @@ resource sentinel 'Microsoft.OperationsManagement/solutions@2015-11-01-preview' 
 // ============================================================
 // API Connection — Azure Log Analytics Data Collector
 // ============================================================
-resource laConnection 'Microsoft.Web/connections@2018-07-01-preview' = {
+resource laConnection 'Microsoft.Web/connections@2016-06-01' = {
   name: laConnectionName
   location: location
   properties: {
-    displayName: 'Falco → Log Analytics'
+    displayName: 'Log Analytics Data Collector'
     api: {
       id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'azureloganalyticsdatacollector')
     }
@@ -109,17 +109,6 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
   location: location
   properties: {
     state: 'Enabled'
-    parameters: {
-      '$connections': {
-        value: {
-          azureloganalyticsdatacollector: {
-            connectionId: laConnection.id
-            connectionName: laConnectionName
-            id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'azureloganalyticsdatacollector')
-          }
-        }
-      }
-    }
     definition: {
       '$schema': 'https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#'
       contentVersion: '1.0.0.0'
@@ -134,24 +123,15 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
           type: 'Request'
           kind: 'Http'
           inputs: {
+            method: 'POST'
             schema: {
               type: 'object'
-              properties: {
-                output: { type: 'string' }
-                priority: { type: 'string' }
-                rule: { type: 'string' }
-                source: { type: 'string' }
-                tags: { type: 'array' }
-                time: { type: 'string' }
-                output_fields: { type: 'object' }
-                hostname: { type: 'string' }
-              }
             }
           }
         }
       }
       actions: {
-        Send_Data_to_Log_Analytics: {
+        Send_Data: {
           runAfter: {}
           type: 'ApiConnection'
           inputs: {
@@ -161,24 +141,24 @@ resource logicApp 'Microsoft.Logic/workflows@2019-05-01' = {
               }
             }
             method: 'post'
-            path: '/api/logs'
-            queries: {
+            body: '@{triggerBody()}'
+            headers: {
               'Log-Type': customLogType
             }
-            body: '@triggerBody()'
+            path: '/api/logs'
           }
         }
-        Response: {
-          runAfter: {
-            Send_Data_to_Log_Analytics: [ 'Succeeded' ]
-          }
-          type: 'Response'
-          kind: 'Http'
-          inputs: {
-            statusCode: 200
-            body: {
-              status: 'accepted'
-            }
+      }
+      outputs: {}
+    }
+    parameters: {
+      '$connections': {
+        value: {
+          azureloganalyticsdatacollector: {
+            id: subscriptionResourceId('Microsoft.Web/locations/managedApis', location, 'azureloganalyticsdatacollector')
+            connectionId: laConnection.id
+            connectionName: laConnection.name
+            connectionProperties: {}
           }
         }
       }
@@ -277,3 +257,5 @@ output aksClusterName string = aksCluster.name
 output aksResourceGroup string = resourceGroup().name
 output logicAppName string = logicApp.name
 output customLogTable string = '${customLogType}_CL'
+#disable-next-line outputs-should-not-contain-secrets
+output webhookUrl string = listCallbackUrl('${logicApp.id}/triggers/When_an_HTTP_request_is_received', '2019-05-01').value

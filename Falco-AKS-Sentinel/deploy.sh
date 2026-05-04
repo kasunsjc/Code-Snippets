@@ -56,23 +56,12 @@ get_outputs() {
   LOGIC_APP_NAME=$(echo "$OUTPUTS" | jq -r .logicAppName.value)
   AKS_NAME=$(echo "$OUTPUTS" | jq -r .aksClusterName.value)
   CUSTOM_TABLE=$(echo "$OUTPUTS" | jq -r .customLogTable.value)
-}
-
-get_webhook_url() {
-  log "Fetching Logic App webhook URL (trigger: When_an_HTTP_request_is_received)..."
-  LOGIC_APP_ID=$(az resource show \
-    -g "$RESOURCE_GROUP" -n "$LOGIC_APP_NAME" \
-    --resource-type Microsoft.Logic/workflows \
-    --query id -o tsv)
-
-  WEBHOOK_URL=$(az rest --method post \
-    --uri "https://management.azure.com${LOGIC_APP_ID}/triggers/When_an_HTTP_request_is_received/listCallbackUrl?api-version=2016-06-01" \
-    --query value -o tsv)
-
-  if [[ -z "$WEBHOOK_URL" ]]; then
-    err "Could not retrieve webhook URL"; exit 1
+  # webhookUrl is emitted directly by main.bicep via listCallbackUrl()
+  WEBHOOK_URL=$(echo "$OUTPUTS" | jq -r .webhookUrl.value)
+  if [[ -z "$WEBHOOK_URL" || "$WEBHOOK_URL" == "null" ]]; then
+    err "webhookUrl output missing from deployment. Check the Logic App deployment."; exit 1
   fi
-  log "Webhook URL acquired: ${WEBHOOK_URL:0:60}..."
+  log "Webhook URL acquired from deployment output: ${WEBHOOK_URL:0:60}..."
 }
 
 get_aks_credentials() {
@@ -172,7 +161,6 @@ main() {
   create_rg
   deploy_bicep
   get_outputs
-  get_webhook_url
   get_aks_credentials
   create_namespace
   install_falco
