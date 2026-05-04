@@ -41,6 +41,9 @@ param retentionInDays int = 30
 @description('Custom log type / table name (Log Analytics appends _CL).')
 param customLogType string = 'FalcoLogs'
 
+@description('Enable Sentinel analytics rules. Set to false at initial deploy (FalcoLogs_CL table does not yet exist). Re-deploy with true once Falco is running and data has appeared in Log Analytics.')
+param rulesEnabled bool = false
+
 var workspaceName = '${projectName}-law'
 var logicAppName = 'logic-falco-webhook'
 var laConnectionName = 'azureloganalyticsdatacollector-${uniqueString(resourceGroup().id)}'
@@ -235,7 +238,7 @@ resource falcoAnalyticRules 'Microsoft.SecurityInsights/alertRules@2023-12-01-pr
     // Rules are created disabled: FalcoLogs_CL table does not exist until Falco
     // sends its first event via the Logic App webhook. Enable rules after Falco
     // is running and data has appeared in the workspace.
-    enabled: false
+    enabled: rulesEnabled
     query: rule.query
     queryFrequency: rule.queryFrequency
     queryPeriod: rule.queryPeriod

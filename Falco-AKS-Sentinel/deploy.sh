@@ -118,6 +118,18 @@ list_sentinel_rules() {
     || warn "Install the Sentinel CLI extension to list rules: az extension add --name sentinel"
 }
 
+enable_sentinel_rules() {
+  log "Enabling Sentinel analytics rules via Bicep re-deploy (rulesEnabled=true)..."
+  az deployment group create \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "falco-enable-rules-$(date +%Y%m%d-%H%M%S)" \
+    --template-file "$SCRIPT_DIR/main.bicep" \
+    --parameters "$SCRIPT_DIR/main.bicepparam" \
+    --parameters rulesEnabled=true \
+    --output none
+  log "All Sentinel rules enabled."
+}
+
 print_summary() {
   cat <<EOF
 
@@ -152,12 +164,7 @@ print_summary() {
 
   # 5) Enable Sentinel analytics rules (disabled at deploy time; table must exist first)
   #    Run this AFTER step 4 confirms data is arriving in Log Analytics:
-  az sentinel alert-rule list -g $RESOURCE_GROUP --workspace-name $WORKSPACE_NAME \
-    --query "[].name" -o tsv | while read -r RULE_ID; do
-    az rest --method patch \
-      --uri "https://management.azure.com/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE_NAME/providers/Microsoft.SecurityInsights/alertRules/\${RULE_ID}?api-version=2023-12-01-preview" \
-      --body '{"kind":"Scheduled","properties":{"enabled":true}}'
-  done
+  $SCRIPT_DIR/deploy.sh --enable-rules   # or run enable_sentinel_rules() directly
 
   # 6) Open Microsoft Sentinel → Incidents
   echo "https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Incidents"
@@ -177,5 +184,11 @@ main() {
   list_sentinel_rules
   print_summary
 }
+
+# Support --enable-rules flag to re-enable Sentinel rules after data arrives
+if [[ "${1:-}" == "--enable-rules" ]]; then
+  enable_sentinel_rules
+  exit 0
+fi
 
 main "$@"
