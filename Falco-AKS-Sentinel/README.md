@@ -1,188 +1,413 @@
-# Falco Runtime Security on AKS → Microsoft Sentinel
+# Falco on AKS with Azure Sentinel Integration Demo
 
-End-to-end demo that runs **OSS [Falco](https://falco.org)** as a DaemonSet on AKS, ships every alert through **falcosidekick** to a **Logic App** webhook, lands the events in a **Log Analytics** custom table (`FalcoLogs_CL`), and lets **Microsoft Sentinel** turn them into **incidents** via 5 scheduled analytics rules.
+This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstrating Falco runtime security on Azure Kubernetes Service (AKS) with Azure Sentinel integration.
 
-> Inspired by and aligned with [`kasunsjc/aks-labs/apps/falco`](https://github.com/kasunsjc/aks-labs/tree/main/apps/falco) and the [`deploy-falco.yml`](https://github.com/kasunsjc/aks-labs/blob/main/.github/workflows/deploy-falco.yml) workflow. Custom Falco rules, Sentinel analytics rules, and Helm values are reused directly from that repository so KQL queries reference the exact same field names (`output_fields_k8s_pod_name_s`, `priority_s`, `rule_s`, …).
+## 📋 Overview
 
-## Architecture
+This demo showcases:
+- **Falco**: Open-source cloud-native runtime security tool for threat detection
+- **AKS**: Managed Kubernetes cluster on Azure (v1.33)
+- **Azure Logic App**: HTTP webhook receiver for Falco alerts
+- **Azure Log Analytics**: Centralized logging and monitoring with auto-created custom tables
+- **Azure Sentinel**: SIEM solution with automated analytics rule deployment
+
+## 🏗️ Architecture
+
+![High-Level Architecture](Diagram.png)
+
+### Component Flow
 
 ```
-┌───────────────────────────┐
-│  AKS workload (attacker)  │
-└─────────────┬─────────────┘
-              │ syscalls
-              ▼
-┌───────────────────────────┐
-│  Falco DaemonSet (eBPF)   │ + custom AKS rules:
-│                           │   - Unauthorized Process
-│                           │   - Sensitive File Access
-│                           │   - Kubernetes Secret Access
-│                           │   - Package Management
-│                           │   - Reverse Shell
-└─────────────┬─────────────┘
-              │ HTTP (JSON)
-              ▼
-┌───────────────────────────┐
-│  falcosidekick → webhook  │
-└─────────────┬─────────────┘
-              │ HTTPS POST
-              ▼
-┌───────────────────────────┐
-│ Azure Logic App           │
-│  trigger:                 │
-│  When_an_HTTP_request_    │
-│    is_received            │
-│  action: Send Data to LAW │
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│  Log Analytics            │
-│  Table: FalcoLogs_CL      │
-└─────────────┬─────────────┘
-              ▼
-┌───────────────────────────┐
-│ Microsoft Sentinel        │
-│  5 scheduled rules →      │
-│  incidents                │
-└───────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    Azure Subscription                        │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │              AKS Cluster                                │ │
+│  │  ┌──────────────┐        ┌──────────────┐             │ │
+│  │  │    Falco     │───────▶│ Falcosidekick│             │ │
+│  │  │  (DaemonSet) │        │  (Forwarder) │             │ │
+│  │  └──────────────┘        └──────┬───────┘             │ │
+│  │                                  │ HTTP POST            │ │
+│  └──────────────────────────────────┼──────────────────────┘ │
+│                                     │                        │
+│  ┌──────────────────────────────────▼──────────────────────┐ │
+│  │         Logic App (HTTP Webhook)                        │ │
+│  │  ┌─────────────────────────────────────────────────┐   │ │
+│  │  │  Receives Falco JSON, forwards to Log Analytics │   │ │
+│  │  └─────────────────────┬───────────────────────────┘   │ │
+│  └────────────────────────┼─────────────────────────────────┘ │
+│                           │ Data Collector API               │
+│  ┌────────────────────────▼─────────────────────────────────┐ │
+│  │         Log Analytics Workspace                         │ │
+│  │  ┌─────────────────────────────────────────────────┐   │ │
+│  │  │  FalcoLogs_CL (Auto-created Custom Table)       │   │ │
+│  │  │  - Flattened JSON fields with _s suffix         │   │ │
+│  │  │  - output_fields_k8s_pod_name_s                 │   │ │
+│  │  │  - output_fields_container_id_s                 │   │ │
+│  │  └─────────────────────────────────────────────────┘   │ │
+│  └──────────────────────────────────────────────────────────┘ │
+│                                     │                        │
+│  ┌──────────────────────────────────▼──────────────────────┐ │
+│  │         Azure Sentinel                                  │ │
+│  │  ┌─────────────────────────────────────────────────┐   │ │
+│  │  │  5 Analytics Rules (Auto-imported)              │   │ │
+│  │  │  - Critical Security Alerts                     │   │
+│  │  │  - Suspicious Process Execution                 │   │
+│  │  │  - Sensitive File Access                        │   │
+│  │  │  - Reverse Shell Detection                      │   │
+│  │  │  - Multiple Alerts from Same Pod                │   │
+│  │  └─────────────────────────────────────────────────┘   │ │
+│  │  ┌─────────────────────────────────────────────────┐   │ │
+│  │  │  Incidents & Investigations                     │   │
+│  │  └─────────────────────────────────────────────────┘   │ │
+│  └──────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## What gets deployed
+## 🚀 Quick Start
 
-| Resource | Purpose |
-|---|---|
-| `Microsoft.OperationalInsights/workspaces` | Log Analytics workspace (Sentinel-enabled) |
-| `Microsoft.OperationsManagement/solutions` | Microsoft Sentinel onboarding |
-| `Microsoft.Web/connections` | Azure Log Analytics Data Collector API connection |
-| `Microsoft.Logic/workflows` | HTTP webhook → ingest into `FalcoLogs_CL` |
-| `Microsoft.ContainerService/managedClusters` | Small AKS cluster (Cilium overlay, OMS addon, custom node RG `rg-falcosec-nodes`) |
-| `Microsoft.SecurityInsights/alertRules` × 5 | All scheduled rules from [sentinel-analytics-rules.json](sentinel-analytics-rules.json) |
+### Prerequisites
 
-Falco itself (DaemonSet + falcosidekick) is installed by `deploy.sh` via the official Helm chart using [values.yaml](values.yaml).
+Before you begin, ensure you have the following installed:
 
-## Sentinel analytics rules (created by Bicep)
+**For Bash deployment:**
+- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (version 2.30+)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
+- [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
+- [jq](https://stedolan.github.io/jq/) (for Sentinel rules import)
 
-| Rule | Severity | Detects |
-|---|---|---|
-| Falco — Critical Security Alert | High | Any `priority == Critical` event |
-| Falco — Suspicious Process Execution | Medium | Rules containing `Process` / `Execution` |
-| Falco — Sensitive File Access | High | `/etc/shadow`, SSH keys, K8s secrets |
-| Falco — Reverse Shell Detection | High | `bash -i`, `nc -e`, scripted reverse shells |
-| Falco — Multiple Alerts from Same Pod | High | ≥5 alerts from the same pod in 10 minutes |
+**For PowerShell deployment:**
+- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (version 2.30+) - for Bicep deployment
+- [Azure PowerShell modules](https://docs.microsoft.com/en-us/powershell/azure/install-az-ps):
+  - Az.Accounts
+  - Az.Resources
+  - Az.OperationalInsights
+  - Az.Aks
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
+- [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
+- [PowerShell 7+](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell) (recommended)
 
-## Prerequisites
+**Common requirements:**
+- An active Azure subscription
+- Appropriate permissions to create resources in Azure
 
-- Azure CLI ≥ `2.60` (`az login` already done)
-- `kubectl`, `helm`, `jq`, `envsubst` (gettext)
-- Subscription contributor + permission to create Log Analytics workspaces and Sentinel alert rules
-- ~12 minutes for end-to-end provisioning
+### Installation
 
-## Deploy
+1. **Clone the repository**:
+   ```bash
+   cd Code
+   ```
+
+2. **Make scripts executable** (Bash only):
+   ```bash
+   chmod +x scripts/*.sh
+   ```
+
+3. **Review and customize parameters** (optional):
+   Edit `main.bicepparam` to customize:
+   - Cluster name
+   - Location
+   - Node configuration
+   - Tags
+
+4. **Deploy the infrastructure**:
+   
+   **Option A - Using Bash:**
+   ```bash
+   ./scripts/deploy.sh
+   ```
+   
+   **Option B - Using PowerShell:**
+   ```powershell
+   ./scripts/Deploy-FalcoDemo.ps1
+   ```
+
+   Both scripts will:
+   - Create a resource group in East US
+   - Deploy AKS cluster (v1.33, 3 nodes, Azure RBAC enabled)
+   - Create Log Analytics workspace with Sentinel enabled
+   - Deploy Logic App with HTTP webhook for log ingestion
+   - Install Falco with Falcosidekick on the cluster
+   - Configure Falcosidekick to send logs to Logic App webhook
+   - Auto-create FalcoLogs_CL custom table via Data Collector API
+   - **Automatically import 5 Sentinel analytics rules**
+
+5. **Verify the deployment**:
+   ```bash
+   # Check Falco pods
+   kubectl get pods -n falco
+   
+   # View Falco logs
+   kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=50
+   
+   # View Falcosidekick logs
+   kubectl logs -n falco -l app.kubernetes.io/name=falcosidekick --tail=50
+   ```
+
+## 📁 Repository Structure
+
+```
+.
+├── main.bicep                          # Main Bicep template
+├── main.bicepparam                     # Parameters file
+├── modules/
+│   ├── aks-cluster.bicep              # AKS cluster with RBAC
+│   ├── log-analytics.bicep            # Log Analytics & Sentinel
+│   └── logic-app.bicep                # Logic App webhook & Data Collector
+├── k8s/
+│   ├── falco-namespace.yaml           # Falco namespace
+│   ├── falco-values.yaml              # Falco Helm values
+│   ├── falcosidekick-config.yaml      # Falcosidekick configuration
+│   └── sentinel-analytics-rules.json  # Sentinel analytics rules
+├── scripts/
+│   ├── deploy.sh                      # Bash deployment script
+│   ├── cleanup.sh                     # Bash cleanup script
+│   ├── Deploy-FalcoDemo.ps1          # PowerShell deployment script
+│   └── Remove-FalcoDemo.ps1          # PowerShell cleanup script
+└── README.md                          # This file
+```
+
+## 🔧 Configuration Details
+
+### AKS Cluster Configuration
+
+- **Kubernetes Version**: 1.33
+- **Node Size**: Standard_DS2_v2
+- **Node Count**: 3 nodes (system pool)
+- **Network Plugin**: Azure CNI
+- **Features Enabled**:
+  - Azure RBAC for Kubernetes authorization (automatic role assignment for deploying user)
+  - Azure Monitor for containers (diagnostic settings configured)
+  - Container Insights integration
+
+### Falco Configuration
+
+- **Driver**: Modern eBPF (no kernel module required)
+- **Output Format**: JSON
+- **Priority**: Debug level and above
+- **Custom Rules**: Included for AKS-specific scenarios
+  - Unauthorized process execution
+  - Sensitive file access
+  - Kubernetes secret access
+  - Package management detection
+  - Reverse shell detection
+
+### Logic App Integration
+
+- **Trigger**: HTTP webhook (receives JSON from Falcosidekick)
+- **Action**: Azure Log Analytics Data Collector API
+- **Authentication**: Workspace customer ID + shared key
+- **Data Format**: Raw JSON passthrough (no transformation)
+
+### Log Analytics & Sentinel
+
+- **Retention**: 30 days
+- **Custom Table**: `FalcoLogs_CL` (auto-created by Data Collector API)
+- **Table Structure**: Flattened JSON with `_s` suffix for strings
+  - `output_fields_k8s_pod_name_s`
+  - `output_fields_k8s_ns_name_s`
+  - `output_fields_container_id_s`
+  - `output_fields_user_name_s`
+  - `priority_s`, `rule_s`, `hostname_s`, `output_s`
+- **Analytics Rules**: 5 automatically imported rules with corrected KQL queries
+- **Pricing Tier**: Pay-as-you-go (PerGB2018)
+
+## 🧪 Testing the Setup
+
+### 1. Generate Test Alerts
+
+Run a test pod and trigger Falco rules:
 
 ```bash
-cd Falco-AKS-Sentinel
-chmod +x deploy.sh cleanup.sh sample-attacks/trigger-events.sh
+# Create a test pod
+kubectl run test-pod --image=alpine --rm -it -- sh
 
-# Optional overrides
-export RESOURCE_GROUP=rg-falco-sentinel-demo
-export LOCATION=northeurope
-export PROJECT_NAME=falcosec
+# Inside the pod, try these commands to trigger alerts:
+# Trigger sensitive file access
+cat /etc/shadow
 
-./deploy.sh
+# Trigger package management
+apk add curl
+
+# Trigger unauthorized process
+nc -l -p 8080
 ```
 
-`deploy.sh` will:
+### 2. View Logs in Azure
 
-1. Create the resource group.
-2. `az deployment group create` against [main.bicep](main.bicep) (loads the rule list from JSON via `loadJsonContent`).
-3. Read the Logic App callback URL for trigger `When_an_HTTP_request_is_received`.
-4. `az aks get-credentials`, `kubectl apply -f namespace.yaml`.
-5. `envsubst` the webhook URL into [values.yaml](values.yaml), then `helm upgrade --install`.
+Navigate to Log Analytics workspace and run:
 
-## Run the demo
-
-```bash
-# 1) Deploy a privileged attacker pod
-kubectl apply -f sample-attacks/attack-pod.yaml
-
-# 2) Generate suspicious behaviour (reads /etc/shadow, writes /etc, exec shell, package mgr)
-./sample-attacks/trigger-events.sh
-
-# 3) Stream Falco detections live
-kubectl logs -n falco -l app.kubernetes.io/name=falco -f
-
-# 4) Watch falcosidekick forward to Logic App
-kubectl logs -n falco -l app.kubernetes.io/name=falcosidekick -f
-```
-
-## Verify in Log Analytics & Sentinel
-
-The first event creates the `FalcoLogs_CL` custom table — expect **2–10 minutes** of ingestion latency the first time.
-
-```bash
-WS_ID=$(az monitor log-analytics workspace show \
-  -g "$RESOURCE_GROUP" -n falcosec-law --query customerId -o tsv)
-
-az monitor log-analytics query -w "$WS_ID" \
-  --analytics-query "FalcoLogs_CL | take 20" -o table
-```
-
-KQL examples to run in **Sentinel → Logs**:
-
-```kusto
-// All Falco alerts in the last hour
+```kql
 FalcoLogs_CL
 | where TimeGenerated > ago(1h)
-| project TimeGenerated, priority_s, rule_s, output_s,
-          PodName = output_fields_k8s_pod_name_s,
-          Namespace = output_fields_k8s_ns_name_s
+| project TimeGenerated, 
+    PodName = output_fields_k8s_pod_name_s,
+    Namespace = output_fields_k8s_ns_name_s,
+    Priority = priority_s,
+    Rule = rule_s,
+    Output = output_s
 | order by TimeGenerated desc
+| take 50
 ```
 
-```kusto
-// Top firing rules
+### 3. Check Sentinel Incidents
+
+1. Go to Azure Portal → Search "Microsoft Sentinel"
+2. Select your Log Analytics workspace (e.g., `law-falco-demo-1`)
+3. Left menu → **Configuration** → **Analytics** → **Active rules** tab
+4. Filter by "Falco" to see the 5 imported rules
+5. Navigate to **Threat management** → **Incidents** to see triggered alerts
+6. Wait 5-10 minutes after first logs for rules to evaluate
+
+**Direct Portal Link Format:**
+```
+https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Analytics
+```
+
+## 📊 Sentinel Analytics Rules
+
+The deployment includes pre-configured analytics rules:
+
+1. **Critical Security Alert**
+   - Severity: High
+   - Frequency: Every 5 minutes
+   - Detects: Critical priority alerts from Falco
+
+2. **Suspicious Process Execution**
+   - Severity: Medium
+   - Frequency: Every 10 minutes
+   - Detects: Unauthorized or suspicious processes
+
+3. **Sensitive File Access**
+   - Severity: High
+   - Frequency: Every 5 minutes
+   - Detects: Access to sensitive files and secrets
+
+4. **Reverse Shell Detection**
+   - Severity: High
+   - Frequency: Every 5 minutes
+   - Detects: Potential reverse shell connections
+
+5. **Multiple Alerts from Same Pod**
+   - Severity: High
+   - Frequency: Every 10 minutes
+   - Detects: Potentially compromised pods
+
+## 🔍 Useful Queries
+
+### View All Falco Alerts
+```kql
 FalcoLogs_CL
-| summarize Count = count() by rule_s, priority_s
+| summarize Count=count() by priority_s, rule_s
 | order by Count desc
 ```
 
-Open **Microsoft Sentinel → Incidents**. Each rule runs every 5–10 minutes and creates incidents with grouping enabled (so repeat noise from the same pod gets bundled).
-
-## How the integration works
-
-- **values.yaml** (taken from `aks-labs`) installs the `falcosecurity/falco` chart with the modern eBPF driver, falcosidekick enabled, and a `webhook` output addressed by `${LOGIC_APP_WEBHOOK_URL}`. `deploy.sh` runs `envsubst` over it before `helm upgrade`. It also injects 5 custom AKS-focused rules under `customRules.aks-custom-rules.yaml`.
-- The **Logic App** uses the built-in `azureloganalyticsdatacollector` connector — no HMAC signing in the workflow definition. Each event is POSTed to `/api/logs` with header `Log-Type: FalcoLogs`, which Log Analytics surfaces as `FalcoLogs_CL` (`_CL` is appended automatically).
-- Trigger name `When_an_HTTP_request_is_received` is the default Logic App designer name and matches the `listCallbackUrl` path used by the upstream `deploy-falco.yml` workflow.
-- The **Bicep** template loads [sentinel-analytics-rules.json](sentinel-analytics-rules.json) at compile time via `loadJsonContent()` and creates one `Microsoft.SecurityInsights/alertRules` resource per entry inside a `for` loop — so editing the JSON and redeploying is enough to evolve detections.
-
-## Files
-
-| File | What it is |
-|---|---|
-| [main.bicep](main.bicep) | All Azure resources |
-| [main.bicepparam](main.bicepparam) | Parameter values (region, sizes) |
-| [deploy.sh](deploy.sh) | Bicep + Helm bootstrapper |
-| [cleanup.sh](cleanup.sh) | Tears the demo down |
-| [namespace.yaml](namespace.yaml) | Falco namespace manifest |
-| [values.yaml](values.yaml) | Helm values + custom Falco rules (envsubst placeholder) |
-| [sentinel-analytics-rules.json](sentinel-analytics-rules.json) | 5 Sentinel scheduled rules |
-| [sample-attacks/attack-pod.yaml](sample-attacks/attack-pod.yaml) | Privileged pod used as the target |
-| [sample-attacks/trigger-events.sh](sample-attacks/trigger-events.sh) | Generates suspicious behaviour |
-
-## Cleanup
-
-```bash
-./cleanup.sh
+### Critical Alerts by Pod
+```kql
+FalcoLogs_CL
+| where priority_s == "Critical"
+| summarize Count=count() by output_fields_k8s_pod_name_s, rule_s
+| order by Count desc
 ```
 
-Deletes the resource group and the AKS node resource group asynchronously.
+### Timeline of Security Events
+```kql
+FalcoLogs_CL
+| summarize Count=count() by bin(TimeGenerated, 1h), priority_s
+| render timechart
+```
 
-## Troubleshooting
+### Alerts by Namespace
+```kql
+FalcoLogs_CL
+| summarize Count=count() by output_fields_k8s_ns_name_s, priority_s
+| order by Count desc
+```
 
-| Symptom | Fix |
-|---|---|
-| `FalcoLogs_CL` not appearing | Wait up to 10 minutes after the first event. In *Logic App → Run history* you should see `200 OK` from the connector. |
-| Logic App run fails with `401` | Re-deploy — the API connection's shared key is set from `workspace.listKeys()` at deploy time. |
-| Falco pods `CrashLoopBackOff` | Try `driver.kind: ebpf` (legacy) instead of `modern_ebpf` in [values.yaml](values.yaml); some kernels need it. |
-| No Sentinel incidents | Confirm the rule is **enabled** in *Sentinel → Analytics*; run the query manually in *Logs* to verify it returns rows. |
-| `az sentinel alert-rule list` fails | `az extension add --name sentinel --allow-preview true` (the Sentinel CLI extension is required). |
+## 🧹 Cleanup
+
+To remove all resources created by this demo:
+
+**Using Bash:**
+```bash
+./scripts/cleanup.sh
+```
+
+**Using PowerShell:**
+```powershell
+./scripts/Remove-FalcoDemo.ps1
+```
+
+**PowerShell with force option (skip confirmation):**
+```powershell
+./scripts/Remove-FalcoDemo.ps1 -Force
+```
+
+**Warning**: This will permanently delete the resource group and all contained resources.
+
+## 🛡️ Security Considerations
+
+- **RBAC**: The deployment uses Azure RBAC for Kubernetes authorization
+- **Network Policies**: Consider implementing network policies for additional security
+- **Secrets Management**: In production, use Azure Key Vault for secrets
+- **Node Security**: AKS nodes are configured with security best practices
+- **Audit Logs**: All Kubernetes API audit logs are sent to Log Analytics
+
+## 📚 Additional Resources
+
+- [Falco Documentation](https://falco.org/docs/)
+- [Falco Rules Reference](https://falco.org/docs/rules/)
+- [AKS Documentation](https://docs.microsoft.com/en-us/azure/aks/)
+- [Azure Sentinel Documentation](https://docs.microsoft.com/en-us/azure/sentinel/)
+- [Falcosidekick](https://github.com/falcosecurity/falcosidekick)
+
+## 🤝 Contributing
+
+This is a demo project for educational purposes. Feel free to fork and customize for your needs!
+
+## 📝 License
+
+This project is provided as-is for demonstration purposes.
+
+## 🎯 Demo Tips
+
+1. **Start with simple violations**: Begin with file access to demonstrate detection
+2. **Show log flow**: Demonstrate the journey from Falco → Falcosidekick → Log Analytics → Sentinel
+3. **Highlight custom rules**: Show how easy it is to add custom detection rules
+4. **Demonstrate incident response**: Use Sentinel's investigation features
+5. **Discuss scalability**: Talk about handling alerts at scale
+
+## ⚠️ Known Issues & Troubleshooting
+
+### Log Ingestion
+- Initial log ingestion may take 5-10 minutes
+- Custom table `FalcoLogs_CL` is auto-created on first data arrival
+- Logic App runs can be viewed in Azure Portal → Logic Apps → logic-falco-webhook → Overview
+
+### Sentinel Rules
+- First-time rule evaluation can take up to 10 minutes
+- Rules are automatically imported during deployment (requires `jq` installed)
+- Verify rules: Azure Portal → Sentinel → Analytics → Active rules (filter by "Falco")
+- Rule queries use flattened column names (e.g., `output_fields_k8s_pod_name_s`)
+
+### False Positives
+- AKS system pods (ama-logs, kube-proxy, azure-policy) generate many alerts
+- Consider filtering these in custom rules or Sentinel queries:
+  ```kql
+  | where output_fields_k8s_ns_name_s != "kube-system"
+  ```
+
+### Data Collector API
+- Custom table limit: 10 tables (auto-created tables don't count against this)
+- Column naming: Nested JSON flattened with underscores, string fields get `_s` suffix
+- No pre-creation needed: Table schema is generated from first JSON payload
+
+## 📞 Support
+
+For issues or questions:
+- Falco: [Falco Slack Community](https://kubernetes.slack.com/messages/falco)
+- Azure: [Azure Support](https://azure.microsoft.com/support/)
+
+---
+
+**Happy Security Monitoring! 🔒**

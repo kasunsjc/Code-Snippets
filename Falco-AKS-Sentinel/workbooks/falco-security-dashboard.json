@@ -1,0 +1,614 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Falco Security Monitoring Dashboard\n\nReal-time security monitoring for AKS cluster using Falco runtime security.\n\n---"
+      },
+      "name": "text - title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "a1a1a001-aaaa-1a11-a1a1-1a1a1a1a1a1a",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscription",
+            "label": "Subscription",
+            "type": 6,
+            "isRequired": true,
+            "multiSelect": false,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::1"
+              ],
+              "includeAll": false,
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            }
+          },
+          {
+            "id": "b2b2b002-bbbb-2b22-b2b2-2b2b2b2b2b2b",
+            "version": "KqlParameterItem/1.0",
+            "name": "Workspace",
+            "label": "Log Analytics Workspace",
+            "type": 5,
+            "isRequired": true,
+            "multiSelect": false,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "where type =~ 'microsoft.operationalinsights/workspaces'\n| project id",
+            "crossComponentResources": [
+              "{Subscription}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::1"
+              ],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 86400000
+            },
+            "queryType": 1,
+            "resourceType": "microsoft.resourcegraph/resources"
+          },
+          {
+            "id": "b859a001-cbf9-4c76-b4f8-5d8e6b8d5e5b",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time Range",
+            "type": 4,
+            "isRequired": true,
+            "value": {
+              "durationMs": 3600000
+            },
+            "typeSettings": {
+              "selectableValues": [
+                {
+                  "durationMs": 300000
+                },
+                {
+                  "durationMs": 900000
+                },
+                {
+                  "durationMs": 1800000
+                },
+                {
+                  "durationMs": 3600000
+                },
+                {
+                  "durationMs": 14400000
+                },
+                {
+                  "durationMs": 43200000
+                },
+                {
+                  "durationMs": 86400000
+                },
+                {
+                  "durationMs": 172800000
+                },
+                {
+                  "durationMs": 259200000
+                },
+                {
+                  "durationMs": 604800000
+                }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "id": "c7c8e8c3-3f3e-4c5e-9f5e-8c5e5e5e5e5e",
+            "version": "KqlParameterItem/1.0",
+            "name": "Priority",
+            "label": "Priority Filter",
+            "type": 2,
+            "isRequired": false,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(priority_s)\n| distinct priority_s\n| sort by priority_s asc",
+            "crossComponentResources": [
+              "{Workspace}"
+            ],
+            "value": [
+              "value::all"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 0
+            },
+            "timeContextFromParameter": "TimeRange",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          },
+          {
+            "id": "d8d9f9d4-4f4f-5d6f-0f6f-9d6f6f6f6f6f",
+            "version": "KqlParameterItem/1.0",
+            "name": "Namespace",
+            "label": "Namespace Filter",
+            "type": 2,
+            "isRequired": false,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_ns_name_s)\n| distinct output_fields_k8s_ns_name_s\n| sort by output_fields_k8s_ns_name_s asc",
+            "crossComponentResources": [
+              "{Workspace}"
+            ],
+            "value": [
+              "value::all"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "showDefault": false
+            },
+            "timeContext": {
+              "durationMs": 0
+            },
+            "timeContextFromParameter": "TimeRange",
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters - filters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize TotalAlerts = count()",
+        "size": 3,
+        "title": "Total Alerts",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "card",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "TotalAlerts",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "TotalAlerts",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            },
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "style": "decimal",
+                "maximumFractionDigits": 2,
+                "maximumSignificantDigits": 3
+              }
+            }
+          },
+          "showBorder": false
+        }
+      },
+      "customWidth": "25",
+      "name": "query - total alerts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where priority_s == 'Critical' or priority_s == 'Error'\n| summarize CriticalCount = count()",
+        "size": 3,
+        "title": "Critical & Error",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "card",
+        "tileSettings": {
+          "titleContent": {
+            "columnMatch": "Count",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "Count",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "redBright"
+            },
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "style": "decimal"
+              }
+            }
+          },
+          "showBorder": false
+        },
+        "textSettings": {
+          "style": "bignumber"
+        }
+      },
+      "customWidth": "25",
+      "name": "query - critical alerts"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_pod_name_s)\n| summarize by output_fields_k8s_pod_name_s\n| summarize AffectedPods = count()",
+        "size": 3,
+        "title": "Affected Pods",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "card",
+        "textSettings": {
+          "style": "bignumber"
+        }
+      },
+      "customWidth": "25",
+      "name": "query - affected pods"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize by rule_s\n| summarize UniqueRules = count()",
+        "size": 3,
+        "title": "Unique Rules Triggered",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "card",
+        "textSettings": {
+          "style": "bignumber"
+        }
+      },
+      "customWidth": "25",
+      "name": "query - unique rules"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by bin(TimeGenerated, 5m), priority_s\n| render timechart",
+        "size": 0,
+        "title": "Alerts Over Time by Priority",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "timechart"
+      },
+      "name": "query - alerts timeline"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by priority_s\n| order by Count desc",
+        "size": 1,
+        "title": "Alerts by Priority",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "query - alerts by priority"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_ns_name_s)\n| summarize Count = count() by output_fields_k8s_ns_name_s\n| order by Count desc\n| take 10",
+        "size": 1,
+        "title": "Top 10 Namespaces by Alert Count",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "query - top namespaces"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by rule_s\n| order by Count desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 Triggered Rules",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "rule_s",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "60%"
+              }
+            },
+            {
+              "columnMatch": "Count",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top rules"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_pod_name_s)\n| summarize Count = count() by output_fields_k8s_pod_name_s\n| order by Count desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 Pods with Most Alerts",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "output_fields_k8s_pod_name_s",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "60%"
+              }
+            },
+            {
+              "columnMatch": "Count",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "red"
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top pods"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| project \n    TimeGenerated,\n    Priority = priority_s,\n    Rule = rule_s,\n    Namespace = output_fields_k8s_ns_name_s,\n    Pod = output_fields_k8s_pod_name_s,\n    Container = output_fields_container_name_s,\n    Output = output_s\n| order by TimeGenerated desc\n| take 100",
+        "size": 0,
+        "title": "Recent Security Events (Last 100)",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TimeGenerated",
+              "formatter": 6,
+              "formatOptions": {
+                "customColumnWidthSetting": "15%"
+              }
+            },
+            {
+              "columnMatch": "Priority",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Critical",
+                    "representation": "redBright",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Error",
+                    "representation": "orange",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "==",
+                    "thresholdValue": "Warning",
+                    "representation": "yellow",
+                    "text": "{0}{1}"
+                  },
+                  {
+                    "operator": "Default",
+                    "thresholdValue": null,
+                    "representation": "gray",
+                    "text": "{0}{1}"
+                  }
+                ],
+                "customColumnWidthSetting": "10%"
+              }
+            },
+            {
+              "columnMatch": "Rule",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "20%"
+              }
+            },
+            {
+              "columnMatch": "Output",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "35%"
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "query - recent events"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(hostname_s)\n| summarize Count = count() by hostname_s\n| order by Count desc",
+        "size": 0,
+        "title": "Alerts by Node/Host",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "hostname_s",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "60%"
+              }
+            },
+            {
+              "columnMatch": "Count",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "purple"
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - alerts by host"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_container_name_s)\n| summarize Count = count() by output_fields_container_name_s\n| order by Count desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 Containers by Alert Count",
+        "timeContext": {
+          "durationMs": 0
+        },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "crossComponentResources": [
+          "{Workspace}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "output_fields_container_name_s",
+              "formatter": 0,
+              "formatOptions": {
+                "customColumnWidthSetting": "60%"
+              }
+            },
+            {
+              "columnMatch": "Count",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "greenRed"
+              }
+            }
+          ]
+        }
+      },
+      "customWidth": "50",
+      "name": "query - top containers"
+    }
+  ],
+  "fallbackResourceIds": [
+    "{Workspace}"
+  ],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}

@@ -1,14 +1,18 @@
 // ========================================
-// Main Bicep Template for Falco AKS Demo
+// Subscription-Level Bicep Template for Falco AKS Demo
+// This creates the resource group and deploys all resources
 // ========================================
 
-targetScope = 'resourceGroup'
+targetScope = 'subscription'
+
+@description('The name of the resource group to create')
+param resourceGroupName string = 'rg-falco-demo'
+
+@description('The location for the resource group and all resources')
+param location string = 'eastus'
 
 @description('The name of the AKS cluster')
 param aksClusterName string = 'aks-falco-demo'
-
-@description('The location for all resources')
-param location string = resourceGroup().location
 
 @description('The name of the Log Analytics workspace')
 param logAnalyticsWorkspaceName string = 'law-falco-demo'
@@ -36,46 +40,29 @@ param tags object = {
 }
 
 // ========================================
-// Log Analytics Workspace
+// Resource Group
 // ========================================
-module logAnalytics 'modules/log-analytics.bicep' = {
-  name: 'deploy-log-analytics'
-  params: {
-    workspaceName: logAnalyticsWorkspaceName
-    location: location
-    retentionInDays: 30
-    enableSentinel: enableSentinel
-    tags: tags
-  }
+resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+  name: resourceGroupName
+  location: location
+  tags: tags
 }
 
 // ========================================
-// AKS Cluster
+// Deploy Resources into Resource Group
 // ========================================
-module aksCluster 'modules/aks-cluster.bicep' = {
-  name: 'deploy-aks-cluster'
+module resources 'main.bicep' = {
+  name: 'deploy-resources'
+  scope: rg
   params: {
-    clusterName: aksClusterName
+    aksClusterName: aksClusterName
     location: location
+    logAnalyticsWorkspaceName: logAnalyticsWorkspaceName
+    enableSentinel: enableSentinel
     kubernetesVersion: kubernetesVersion
     nodeVmSize: nodeVmSize
     nodeCount: nodeCount
-    logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     aksAdminPrincipalId: aksAdminPrincipalId
-    tags: tags
-  }
-}
-
-// ========================================
-// Logic App for Falco Webhook
-// ========================================
-module logicApp 'modules/logic-app.bicep' = {
-  name: 'deploy-logic-app'
-  params: {
-    logicAppName: 'logic-falco-webhook'
-    location: location
-    logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
-    workspaceCustomerId: logAnalytics.outputs.workspaceCustomerId
     tags: tags
   }
 }
@@ -84,29 +71,32 @@ module logicApp 'modules/logic-app.bicep' = {
 // Outputs
 // ========================================
 
+@description('The name of the resource group')
+output resourceGroupName string = rg.name
+
 @description('The resource ID of the AKS cluster')
-output aksClusterResourceId string = aksCluster.outputs.clusterResourceId
+output aksClusterResourceId string = resources.outputs.aksClusterResourceId
 
 @description('The name of the AKS cluster')
-output aksClusterName string = aksCluster.outputs.clusterName
+output aksClusterName string = resources.outputs.aksClusterName
 
 @description('The resource ID of the Log Analytics workspace')
-output logAnalyticsWorkspaceId string = logAnalytics.outputs.workspaceId
+output logAnalyticsWorkspaceId string = resources.outputs.logAnalyticsWorkspaceId
 
 @description('The name of the Log Analytics workspace')
-output logAnalyticsWorkspaceName string = logAnalytics.outputs.workspaceName
+output logAnalyticsWorkspaceName string = resources.outputs.logAnalyticsWorkspaceName
 
 @description('The Log Analytics workspace customer ID')
-output workspaceCustomerId string = logAnalytics.outputs.workspaceCustomerId
+output workspaceCustomerId string = resources.outputs.workspaceCustomerId
 
 @description('Sentinel deployment status')
-output sentinelEnabled bool = enableSentinel
+output sentinelEnabled bool = resources.outputs.sentinelEnabled
 
 @description('AKS cluster FQDN')
-output aksClusterFqdn string = aksCluster.outputs.clusterFqdn
+output aksClusterFqdn string = resources.outputs.aksClusterFqdn
 
 @description('Logic App webhook URL')
-output logicAppWebhookUrl string = logicApp.outputs.callbackUrl
+output logicAppWebhookUrl string = resources.outputs.logicAppWebhookUrl
 
 @description('Logic App resource ID')
-output logicAppId string = logicApp.outputs.logicAppId
+output logicAppId string = resources.outputs.logicAppId

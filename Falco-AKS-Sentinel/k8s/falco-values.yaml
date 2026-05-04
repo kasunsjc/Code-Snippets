@@ -16,17 +16,10 @@ falcosidekick:
     enabled: false
   
   config:
-    # Minimum priority to send alerts (only CRITICAL and ERROR)
-    # Priority levels: emergency, alert, critical, error, warning, notice, informational, debug
-    customfields:
-      filtered: "true"
-    
     # Webhook configuration - will be set via Helm values during deployment
     webhook:
-      address: "${LOGIC_APP_WEBHOOK_URL}"
+      address: "https://prod-86.eastus.logic.azure.com:443/workflows/9ec9ad2520874f36a049df17b4fe926f/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=ZXeOmQG-2F34XCu8XPgf4XbnMFWQI3gnUNRbGMxpagc"
       # The webhook URL will be set by the deployment script
-      # Only send high-priority alerts (critical and error)
-      minimumpriority: "error"
 
 # Falco configuration
 falco:

@@ -1,0 +1,25 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: falcosidekick-azure-config
+  namespace: falco
+type: Opaque
+stringData:
+  # These values should be replaced with actual values after deployment
+  # Or injected via Azure Key Vault integration
+  WORKSPACE_ID: "your-workspace-id-here"
+  SHARED_KEY: "your-shared-key-here"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: falcosidekick-config
+  namespace: falco
+data:
+  config.yaml: |
+    azure:
+      loganalytics:
+        enabled: true
+        # Workspace ID and Shared Key are loaded from secrets
+    customfields: "cluster:aks-falco-demo,environment:demo"
