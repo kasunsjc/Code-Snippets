@@ -280,10 +280,11 @@ deploy_workbook() {
     
     # Build the workbook resource JSON
     TEMP_WORKBOOK=$(mktemp)
+    WORKBOOK_DISPLAY_NAME="Falco Security Dashboard"
     
     jq -n \
         --arg name "$WORKBOOK_ID" \
-        --arg displayName "Falco Security Dashboard" \
+        --arg displayName "$WORKBOOK_DISPLAY_NAME" \
         --arg location "$LOCATION" \
         --arg workspaceId "$WORKSPACE_RESOURCE_ID" \
         --rawfile serializedData "$WORKBOOK_FILE" \
@@ -310,7 +311,7 @@ deploy_workbook() {
         --body @"$TEMP_WORKBOOK" \
         --output none 2>&1; then
         print_info "✓ Successfully deployed Falco Security Dashboard workbook"
-        print_info "View workbook in Azure Portal: Monitor > Workbooks > $displayName"
+        print_info "View workbook in Azure Portal: Monitor > Workbooks > $WORKBOOK_DISPLAY_NAME"
     else
         print_warning "✗ Failed to deploy workbook"
     fi
