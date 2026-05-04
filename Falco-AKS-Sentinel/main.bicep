@@ -232,7 +232,10 @@ resource falcoAnalyticRules 'Microsoft.SecurityInsights/alertRules@2023-12-01-pr
     displayName: rule.displayName
     description: rule.description
     severity: rule.severity
-    enabled: rule.enabled
+    // Rules are created disabled: FalcoLogs_CL table does not exist until Falco
+    // sends its first event via the Logic App webhook. Enable rules after Falco
+    // is running and data has appeared in the workspace.
+    enabled: false
     query: rule.query
     queryFrequency: rule.queryFrequency
     queryPeriod: rule.queryPeriod

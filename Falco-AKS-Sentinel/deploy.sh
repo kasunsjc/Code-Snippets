@@ -150,7 +150,16 @@ print_summary() {
   az monitor log-analytics query -w "\$WS_ID" \\
     --analytics-query "$CUSTOM_TABLE | take 20" -o table
 
-  # 5) Open Microsoft Sentinel → Incidents
+  # 5) Enable Sentinel analytics rules (disabled at deploy time; table must exist first)
+  #    Run this AFTER step 4 confirms data is arriving in Log Analytics:
+  az sentinel alert-rule list -g $RESOURCE_GROUP --workspace-name $WORKSPACE_NAME \
+    --query "[].name" -o tsv | while read -r RULE_ID; do
+    az rest --method patch \
+      --uri "https://management.azure.com/subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$WORKSPACE_NAME/providers/Microsoft.SecurityInsights/alertRules/\${RULE_ID}?api-version=2023-12-01-preview" \
+      --body '{"kind":"Scheduled","properties":{"enabled":true}}'
+  done
+
+  # 6) Open Microsoft Sentinel → Incidents
   echo "https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Incidents"
 
 EOF
