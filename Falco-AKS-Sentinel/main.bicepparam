@@ -11,7 +11,7 @@ param location = 'eastus'
 
 // AKS Configuration
 param kubernetesVersion = '1.33'
-param nodeVmSize = 'Standard_DS2_v2'
+param nodeVmSize = 'Standard_D2s_v3'
 param nodeCount = 3
 
 // Feature Flags
