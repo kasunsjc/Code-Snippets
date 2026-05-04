@@ -82,6 +82,19 @@ resource sentinel 'Microsoft.OperationsManagement/solutions@2015-11-01-preview' 
 }
 
 // ============================================================
+// Microsoft Sentinel onboarding state
+// Required: SecurityInsights/alertRules API checks this record.
+// ============================================================
+resource sentinelOnboarding 'Microsoft.SecurityInsights/onboardingStates@2024-03-01' = {
+  scope: workspace
+  name: 'default'
+  properties: {}
+  dependsOn: [
+    sentinel
+  ]
+}
+
+// ============================================================
 // API Connection — Azure Log Analytics Data Collector
 // ============================================================
 resource laConnection 'Microsoft.Web/connections@2016-06-01' = {
@@ -243,7 +256,7 @@ resource falcoAnalyticRules 'Microsoft.SecurityInsights/alertRules@2023-12-01-pr
     }
   }
   dependsOn: [
-    sentinel
+    sentinelOnboarding
   ]
 }]
 
