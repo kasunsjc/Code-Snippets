@@ -23,11 +23,18 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [switch]$Force
+    [switch]$Force,
+
+    [Parameter(Mandatory=$false)]
+    [string]$ResourceGroup,
+
+    [Parameter(Mandatory=$false)]
+    [string]$DeploymentName = "main-subscription"
 )
 
-# Configuration
-$RESOURCE_GROUP = "rg-falco-demo"
+# Configuration — resolved dynamically from the deployment outputs / param file
+# unless the caller passes -ResourceGroup or sets the env var.
+$RESOURCE_GROUP = $env:RESOURCE_GROUP
 
 # Script variables
 $ErrorActionPreference = "Stop"
@@ -47,6 +54,27 @@ function Write-Warning {
 function Write-ErrorMessage {
     param([string]$Message)
     Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
+function Resolve-ResourceGroup {
+    if ($ResourceGroup) { $script:RESOURCE_GROUP = $ResourceGroup; return }
+    if ($script:RESOURCE_GROUP) { return }
+
+    # Try the recorded subscription deployment outputs first
+    try {
+        $rg = (Get-AzDeployment -Name $DeploymentName -ErrorAction SilentlyContinue).Outputs.resourceGroupName.Value
+        if ($rg) { $script:RESOURCE_GROUP = $rg; return }
+    } catch {}
+
+    # Fall back to parsing main-subscription.bicepparam
+    $scriptPath = Split-Path -Parent $PSCommandPath
+    $paramFile  = Join-Path (Split-Path -Parent $scriptPath) "main-subscription.bicepparam"
+    if (Test-Path $paramFile) {
+        $line = Get-Content $paramFile | Where-Object { $_ -match "^\s*param\s+resourceGroupName\s*=\s*'([^']+)'" } | Select-Object -First 1
+        if ($line -and $matches[1]) { $script:RESOURCE_GROUP = $matches[1]; return }
+    }
+
+    throw "Could not determine resource group. Pass -ResourceGroup <name> or set `$env:RESOURCE_GROUP."
 }
 
 function Confirm-Deletion {
@@ -117,6 +145,16 @@ function Main {
     Write-Host ""
     
     try {
+        # Import early so we can query Get-AzDeployment for resource group resolution
+        Import-Module Az.Accounts -ErrorAction Stop
+        Import-Module Az.Resources -ErrorAction Stop
+        try {
+            $context = Get-AzContext
+            if (-not $context) { Connect-AzAccount | Out-Null }
+        } catch { Connect-AzAccount | Out-Null }
+
+        Resolve-ResourceGroup
+
         if (Confirm-Deletion) {
             Remove-Resources
             Write-Info "`nCleanup completed!"

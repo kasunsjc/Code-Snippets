@@ -95,8 +95,11 @@ output sentinelEnabled bool = resources.outputs.sentinelEnabled
 @description('AKS cluster FQDN')
 output aksClusterFqdn string = resources.outputs.aksClusterFqdn
 
-@description('Logic App webhook URL')
-output logicAppWebhookUrl string = resources.outputs.logicAppWebhookUrl
-
-@description('Logic App resource ID')
+@description('Logic App resource ID (use `az logic workflow show-callback-url` to fetch the webhook URL securely at deploy time)')
 output logicAppId string = resources.outputs.logicAppId
+
+@description('Logic App workflow name')
+output logicAppName string = resources.outputs.logicAppName
+
+@description('Logic App HTTP trigger name')
+output logicAppTriggerName string = resources.outputs.logicAppTriggerName

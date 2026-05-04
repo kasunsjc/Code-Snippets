@@ -1,293 +1,321 @@
 #!/bin/bash
-# ========================================
-# Deployment Script for Falco AKS Demo
-# ========================================
+# ============================================================
+# Deployment Script for Falco AKS + Microsoft Sentinel demo
+# ============================================================
+# Usage:
+#   ./deploy.sh                 # full deploy (infra → Falco → wait → rules)
+#   ./deploy.sh --enable-rules  # only (re)create Sentinel analytics rules
+#   ./deploy.sh --skip-rules    # deploy infra + Falco only
+#   ./deploy.sh --no-wait       # skip the wait-for-FalcoLogs_CL gate
+#
+# The Logic App callback URL contains a SAS signature and is treated as a
+# secret: it is fetched at runtime via `az logic workflow show-callback-url`
+# and never echoed to stdout. It is also no longer surfaced as a Bicep output.
+# ============================================================
 
-set -e
+set -euo pipefail
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+# ---------------------------------------------------------------------------
+# Colours / logging
+# ---------------------------------------------------------------------------
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+print_info()    { echo -e "${GREEN}[INFO]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Configuration
-RESOURCE_GROUP="rg-falco-demo"
+# ---------------------------------------------------------------------------
+# Defaults / globals
+# ---------------------------------------------------------------------------
 LOCATION="eastus"
 SUBSCRIPTION_ID=""
+DEPLOYMENT_NAME="main-subscription"
 
-# Functions
-print_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+# Defaults for --enable-rules-only mode (overridden from deployment outputs)
+RESOURCE_GROUP=""
+AKS_NAME=""
+LAW_NAME=""
+WORKSPACE_ID=""
+LOGIC_APP_NAME=""
+LOGIC_APP_TRIGGER=""
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+MODE="full"            # full | enable-rules-only | skip-rules
+WAIT_FOR_LOGS=true     # gate Sentinel rule creation on FalcoLogs_CL having data
+WAIT_TIMEOUT_MIN=20    # max minutes to wait for first FalcoLogs_CL row
 
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+# ---------------------------------------------------------------------------
+# CLI parsing
+# ---------------------------------------------------------------------------
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --enable-rules) MODE="enable-rules-only"; shift ;;
+        --skip-rules)   MODE="skip-rules"; shift ;;
+        --no-wait)      WAIT_FOR_LOGS=false; shift ;;
+        --wait-timeout) WAIT_TIMEOUT_MIN="$2"; shift 2 ;;
+        -h|--help)
+            sed -n '/^# Usage:/,/^# ====/p' "$0" | head -n -1 | sed 's/^# \{0,2\}//'
+            exit 0 ;;
+        *) print_error "Unknown option: $1"; exit 1 ;;
+    esac
+done
 
+# ---------------------------------------------------------------------------
+# Prerequisite checks (jq is REQUIRED — both rules + workbook need it)
+# ---------------------------------------------------------------------------
 check_prerequisites() {
     print_info "Checking prerequisites..."
-    
-    # Check Azure CLI
-    if ! command -v az &> /dev/null; then
-        print_error "Azure CLI is not installed. Please install it from https://docs.microsoft.com/en-us/cli/azure/install-azure-cli"
+
+    local missing=()
+    for cmd in az kubectl helm jq uuidgen; do
+        command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        print_error "Missing required tools: ${missing[*]}"
+        print_error "Install them and re-run. Hints:"
+        print_error "  az      → https://docs.microsoft.com/cli/azure/install-azure-cli"
+        print_error "  kubectl → https://kubernetes.io/docs/tasks/tools/"
+        print_error "  helm    → https://helm.sh/docs/intro/install/"
+        print_error "  jq      → 'brew install jq' (macOS) or 'apt-get install jq' (Linux)"
         exit 1
     fi
-    
-    # Check kubectl
-    if ! command -v kubectl &> /dev/null; then
-        print_error "kubectl is not installed. Please install it from https://kubernetes.io/docs/tasks/tools/"
-        exit 1
-    fi
-    
-    # Check helm
-    if ! command -v helm &> /dev/null; then
-        print_error "Helm is not installed. Please install it from https://helm.sh/docs/intro/install/"
-        exit 1
-    fi
-    
+
     print_info "All prerequisites are met!"
 }
 
 login_azure() {
     print_info "Checking Azure login status..."
-    
-    if ! az account show &> /dev/null; then
+    if ! az account show &>/dev/null; then
         print_info "Not logged in to Azure. Logging in..."
         az login
     fi
-    
-    # Get subscription ID
     SUBSCRIPTION_ID=$(az account show --query id -o tsv)
     print_info "Using subscription: $SUBSCRIPTION_ID"
 }
 
-create_resource_group() {
-    print_info "Resource group will be created by Bicep deployment..."
-}
-
+# ---------------------------------------------------------------------------
+# Infrastructure
+# ---------------------------------------------------------------------------
 deploy_infrastructure() {
-    print_info "Deploying Azure infrastructure with Bicep (subscription-level deployment)..."
-    
-    # Get the current user's object ID for RBAC
-    print_info "Getting current user's object ID for AKS RBAC assignment..."
-    USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
-    print_info "User Object ID: $USER_OBJECT_ID"
-    
+    print_info "Deploying Azure infrastructure with Bicep (subscription scope)..."
+
+    print_info "Resolving current user object ID for AKS RBAC assignment..."
+    local user_id
+    user_id=$(az ad signed-in-user show --query id -o tsv)
+
     az deployment sub create \
-        --location eastus \
+        --location "$LOCATION" \
+        --name "$DEPLOYMENT_NAME" \
         --template-file ../main-subscription.bicep \
         --parameters ../main-subscription.bicepparam \
-        --parameters aksAdminPrincipalId="$USER_OBJECT_ID" \
+        --parameters aksAdminPrincipalId="$user_id" \
         --output table
-    
+
     print_info "Infrastructure deployed successfully!"
 }
 
 get_deployment_outputs() {
     print_info "Retrieving deployment outputs..."
-    
-    RESOURCE_GROUP=$(az deployment sub show \
-        --name main-subscription \
-        --query properties.outputs.resourceGroupName.value -o tsv)
-    
-    AKS_NAME=$(az deployment sub show \
-        --name main-subscription \
-        --query properties.outputs.aksClusterName.value -o tsv)
-    
-    LAW_NAME=$(az deployment sub show \
-        --name main-subscription \
-        --query properties.outputs.logAnalyticsWorkspaceName.value -o tsv)
-    
-    WORKSPACE_ID=$(az deployment sub show \
-        --name main-subscription \
-        --query properties.outputs.workspaceCustomerId.value -o tsv)
-    
-    WEBHOOK_URL=$(az deployment sub show \
-        --name main-subscription \
-        --query properties.outputs.logicAppWebhookUrl.value -o tsv)
-    
+
+    local outputs
+    outputs=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query properties.outputs -o json)
+
+    RESOURCE_GROUP=$(echo "$outputs"     | jq -r '.resourceGroupName.value')
+    AKS_NAME=$(echo "$outputs"           | jq -r '.aksClusterName.value')
+    LAW_NAME=$(echo "$outputs"           | jq -r '.logAnalyticsWorkspaceName.value')
+    WORKSPACE_ID=$(echo "$outputs"       | jq -r '.workspaceCustomerId.value')
+    LOGIC_APP_NAME=$(echo "$outputs"     | jq -r '.logicAppName.value')
+    LOGIC_APP_TRIGGER=$(echo "$outputs"  | jq -r '.logicAppTriggerName.value')
+
     print_info "Resource Group: $RESOURCE_GROUP"
-    print_info "AKS Cluster: $AKS_NAME"
-    print_info "Log Analytics Workspace: $LAW_NAME"
-    print_info "Workspace ID: $WORKSPACE_ID"
-    print_info "Logic App Webhook URL: $WEBHOOK_URL"
+    print_info "AKS Cluster:    $AKS_NAME"
+    print_info "Log Analytics:  $LAW_NAME (customerId=$WORKSPACE_ID)"
+    print_info "Logic App:      $LOGIC_APP_NAME"
 }
 
+# Fetches the Logic App callback URL at runtime. The value is treated as a
+# secret and is NEVER echoed to stdout (it carries an HMAC signature that
+# grants invocation rights). It is consumed only by `helm --set`.
+fetch_webhook_url_silently() {
+    print_info "Fetching Logic App callback URL (value will not be printed)..."
+    WEBHOOK_URL=$(az rest --method post \
+        --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Logic/workflows/${LOGIC_APP_NAME}/triggers/${LOGIC_APP_TRIGGER}/listCallbackUrl?api-version=2017-07-01" \
+        --query value -o tsv)
+
+    if [[ -z "$WEBHOOK_URL" || "$WEBHOOK_URL" == "null" ]]; then
+        print_error "Could not retrieve Logic App callback URL."
+        exit 1
+    fi
+    print_info "Webhook URL retrieved (redacted)."
+}
+
+# ---------------------------------------------------------------------------
+# Falco / kubectl
+# ---------------------------------------------------------------------------
 configure_kubectl() {
     print_info "Configuring kubectl..."
-    
     az aks get-credentials \
         --resource-group "$RESOURCE_GROUP" \
         --name "$AKS_NAME" \
         --overwrite-existing
-    
-    print_info "kubectl configured successfully!"
     kubectl cluster-info
 }
 
 install_falco() {
     print_info "Installing Falco on AKS cluster..."
-    
-    # Add Falco Helm repository
-    helm repo add falcosecurity https://falcosecurity.github.io/charts
-    helm repo update
-    
-    # Create namespace
+
+    helm repo add falcosecurity https://falcosecurity.github.io/charts >/dev/null
+    helm repo update >/dev/null
+
     kubectl apply -f ../k8s/falco-namespace.yaml
-    
-    # Install Falco with Falcosidekick configured to use Logic App webhook
+
+    # The webhook URL is passed via --set (single arg, not echoed by helm in
+    # default verbosity). Avoid `--set-string` printing in CI-debug mode.
     helm upgrade --install falco falcosecurity/falco \
         --namespace falco \
         --values ../k8s/falco-values.yaml \
-        --set falcosidekick.config.webhook.address="$WEBHOOK_URL" \
+        --set "falcosidekick.config.webhook.address=${WEBHOOK_URL}" \
         --wait
-    
+
     print_info "Falco installed successfully!"
-    print_info "Falcosidekick configured to send alerts to Logic App webhook"
 }
 
-verify_deployment() {
-    print_info "Verifying deployment..."
-    
-    print_info "Checking Falco pods:"
+verify_falco() {
+    print_info "Verifying Falco deployment..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=falco \
+        -n falco --timeout=300s
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=falcosidekick \
+        -n falco --timeout=300s
     kubectl get pods -n falco
-    
-    print_info "\nWaiting for Falco pods to be ready..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=falco -n falco --timeout=300s
-    
-    print_info "\nWaiting for Falcosidekick pods to be ready..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=falcosidekick -n falco --timeout=300s
-    
-    print_info "\nChecking Falco logs:"
-    kubectl logs -n falco -l app.kubernetes.io/name=falco --tail=20
-    
-    print_info "\nChecking Falcosidekick logs:"
-    kubectl logs -n falco -l app.kubernetes.io/name=falcosidekick --tail=20
-    
-    print_info "\nDeployment verification complete!"
+}
+
+# ---------------------------------------------------------------------------
+# Wait until FalcoLogs_CL has at least one row (i.e. the Data Collector API
+# has materialised the custom table). This is required before we can create
+# Sentinel scheduled analytics rules — they validate the table exists.
+# ---------------------------------------------------------------------------
+wait_for_falco_logs() {
+    if ! $WAIT_FOR_LOGS; then
+        print_warning "Skipping wait-for-logs gate (--no-wait set)."
+        return 0
+    fi
+
+    print_info "Waiting for Falco events to land in Log Analytics (FalcoLogs_CL)..."
+    print_info "This can take 5–15 minutes after Falco starts emitting events."
+    print_info "Triggering a benign event so the table is created sooner..."
+
+    # Generate one harmless event to nudge the pipeline. We trigger Falco's
+    # "Package Management in Container" rule (apk update inside an alpine
+    # container) — this is enough to exercise falcosidekick → Logic App →
+    # FalcoLogs_CL without touching security-sensitive files like /etc/shadow.
+    kubectl run falco-warmup --rm --restart=Never --image=alpine:3.19 -i \
+        --command -- sh -c 'apk update >/dev/null 2>&1 || true; echo done' \
+        >/dev/null 2>&1 || true
+
+    local deadline=$(( $(date +%s) + WAIT_TIMEOUT_MIN * 60 ))
+    local attempt=0
+    while (( $(date +%s) < deadline )); do
+        attempt=$((attempt + 1))
+        local count
+        count=$(az monitor log-analytics query \
+            --workspace "$WORKSPACE_ID" \
+            --analytics-query "FalcoLogs_CL | where TimeGenerated > ago(1h) | count" \
+            --query "[0].Count" -o tsv 2>/dev/null || echo "")
+
+        if [[ -n "$count" && "$count" =~ ^[0-9]+$ && "$count" -gt 0 ]]; then
+            print_info "FalcoLogs_CL is populated (rows in last 1h: $count). Proceeding."
+            return 0
+        fi
+
+        print_info "  Attempt #${attempt}: FalcoLogs_CL not populated yet — sleeping 30s..."
+        sleep 30
+    done
+
+    print_warning "Timed out after ${WAIT_TIMEOUT_MIN}m waiting for FalcoLogs_CL."
+    print_warning "The first Sentinel rule creation may fail with 'table does not exist'."
+    print_warning "Re-run: ./deploy.sh --enable-rules   once data starts flowing."
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Sentinel analytics rules — deterministic GUIDs (idempotent re-deploys)
+# ---------------------------------------------------------------------------
+# Generates a deterministic name for a rule by SHA-1-hashing
+# "<workspace-id>::<displayName>" and formatting the first 32 hex chars as a
+# UUID. Re-running the script with the same display name updates the existing
+# rule instead of creating a duplicate.
+deterministic_rule_id() {
+    local workspace_resource_id="$1"
+    local display_name="$2"
+    local hex
+    hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
+        | sha1sum | awk '{print $1}' | cut -c1-32)
+    printf '%s-%s-%s-%s-%s\n' \
+        "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
 }
 
 import_sentinel_rules() {
     print_info "Importing Sentinel analytics rules..."
-    
-    # Get workspace resource ID
-    WORKSPACE_RESOURCE_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$LAW_NAME"
-    
-    # Read the analytics rules JSON file
-    RULES_FILE="../k8s/sentinel-analytics-rules.json"
-    
-    if [ ! -f "$RULES_FILE" ]; then
-        print_warning "Analytics rules file not found at $RULES_FILE"
+
+    local rules_file="../k8s/sentinel-analytics-rules.json"
+    if [[ ! -f "$rules_file" ]]; then
+        print_warning "Analytics rules file not found at $rules_file"
         return
     fi
-    
-    # Check if jq is installed
-    if ! command -v jq &> /dev/null; then
-        print_warning "jq is not installed. Skipping Sentinel rules import."
-        print_info "Install jq with: brew install jq (macOS) or apt-get install jq (Linux)"
-        return
-    fi
-    
-    # Parse and create each rule
-    RULE_COUNT=$(jq '.analyticsRules | length' "$RULES_FILE")
-    print_info "Found $RULE_COUNT analytics rules to import"
-    
-    for i in $(seq 0 $((RULE_COUNT - 1))); do
-        RULE_NAME=$(jq -r ".analyticsRules[$i].displayName" "$RULES_FILE")
-        print_info "Creating rule: $RULE_NAME"
-        
-        # Generate a unique GUID for the rule
-        RULE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-        
-        # Create a temporary JSON file for the rule body
-        TEMP_BODY=$(mktemp)
-        
-        # Build the rule JSON
-        jq -n \
-            --arg displayName "$(jq -r ".analyticsRules[$i].displayName" "$RULES_FILE")" \
-            --arg description "$(jq -r ".analyticsRules[$i].description" "$RULES_FILE")" \
-            --arg severity "$(jq -r ".analyticsRules[$i].severity" "$RULES_FILE")" \
-            --argjson enabled $(jq -r ".analyticsRules[$i].enabled" "$RULES_FILE") \
-            --arg query "$(jq -r ".analyticsRules[$i].query" "$RULES_FILE")" \
-            --arg queryFrequency "$(jq -r ".analyticsRules[$i].queryFrequency" "$RULES_FILE")" \
-            --arg queryPeriod "$(jq -r ".analyticsRules[$i].queryPeriod" "$RULES_FILE")" \
-            --arg triggerOperator "$(jq -r ".analyticsRules[$i].triggerOperator" "$RULES_FILE")" \
-            --argjson triggerThreshold $(jq -r ".analyticsRules[$i].triggerThreshold" "$RULES_FILE") \
-            --arg suppressionDuration "$(jq -r ".analyticsRules[$i].suppressionDuration" "$RULES_FILE")" \
-            --argjson suppressionEnabled $(jq -r ".analyticsRules[$i].suppressionEnabled" "$RULES_FILE") \
-            --argjson tactics $(jq -c ".analyticsRules[$i].tactics" "$RULES_FILE") \
-            --argjson techniques $(jq -c ".analyticsRules[$i].techniques" "$RULES_FILE") \
-            '{
-                "kind": "Scheduled",
-                "properties": {
-                    "displayName": $displayName,
-                    "description": $description,
-                    "severity": $severity,
-                    "enabled": $enabled,
-                    "query": $query,
-                    "queryFrequency": $queryFrequency,
-                    "queryPeriod": $queryPeriod,
-                    "triggerOperator": $triggerOperator,
-                    "triggerThreshold": $triggerThreshold,
-                    "suppressionDuration": $suppressionDuration,
-                    "suppressionEnabled": $suppressionEnabled,
-                    "tactics": $tactics,
-                    "techniques": $techniques
-                }
-            }' > "$TEMP_BODY"
-        
-        # Create the analytics rule using Azure REST API
+
+    local workspace_resource_id="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.OperationalInsights/workspaces/${LAW_NAME}"
+    local rule_count
+    rule_count=$(jq '.analyticsRules | length' "$rules_file")
+    print_info "Found $rule_count analytics rules to import"
+
+    local i
+    for i in $(seq 0 $((rule_count - 1))); do
+        local display_name rule_id tmp
+        display_name=$(jq -r ".analyticsRules[$i].displayName" "$rules_file")
+        rule_id=$(deterministic_rule_id "$workspace_resource_id" "$display_name")
+        tmp=$(mktemp)
+
+        jq -n --argjson r "$(jq -c ".analyticsRules[$i]" "$rules_file")" \
+            '{kind: "Scheduled", properties: $r}' > "$tmp"
+
+        print_info "  ${display_name}  (id=${rule_id})"
         if az rest --method put \
-            --url "https://management.azure.com${WORKSPACE_RESOURCE_ID}/providers/Microsoft.SecurityInsights/alertRules/${RULE_ID}?api-version=2023-02-01" \
-            --body @"$TEMP_BODY" \
-            --output none 2>&1; then
-            print_info "✓ Successfully created rule: $RULE_NAME"
+            --url "https://management.azure.com${workspace_resource_id}/providers/Microsoft.SecurityInsights/alertRules/${rule_id}?api-version=2023-02-01" \
+            --body @"$tmp" \
+            --output none 2>/dev/null; then
+            print_info "    ✓ created/updated"
         else
-            print_warning "✗ Failed to create rule: $RULE_NAME"
+            print_warning "    ✗ failed (rerun ./deploy.sh --enable-rules later)"
         fi
-        
-        # Clean up temp file
-        rm -f "$TEMP_BODY"
+        rm -f "$tmp"
     done
-    
     print_info "Sentinel analytics rules import completed!"
 }
 
+# ---------------------------------------------------------------------------
+# Workbook — also keyed on a deterministic GUID so re-runs update in place
+# ---------------------------------------------------------------------------
 deploy_workbook() {
     print_info "Deploying Falco Security Dashboard workbook..."
-    
-    # Get workspace resource ID
-    WORKSPACE_RESOURCE_ID="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.OperationalInsights/workspaces/$LAW_NAME"
-    
-    # Workbook file path
-    WORKBOOK_FILE="../workbooks/falco-security-dashboard.json"
-    
-    if [ ! -f "$WORKBOOK_FILE" ]; then
-        print_warning "Workbook file not found at $WORKBOOK_FILE"
+
+    local workbook_file="../workbooks/falco-security-dashboard.json"
+    if [[ ! -f "$workbook_file" ]]; then
+        print_warning "Workbook file not found at $workbook_file"
         return
     fi
-    
-    # Generate a unique GUID for the workbook
-    WORKBOOK_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-    
-    # Create the workbook using Azure REST API
-    print_info "Creating workbook: Falco Security Dashboard"
-    
-    # Build the workbook resource JSON
-    TEMP_WORKBOOK=$(mktemp)
-    WORKBOOK_DISPLAY_NAME="Falco Security Dashboard"
-    
+
+    local workspace_resource_id="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.OperationalInsights/workspaces/${LAW_NAME}"
+    local workbook_id
+    workbook_id=$(deterministic_rule_id "$workspace_resource_id" "Falco Security Dashboard")
+    local display_name="Falco Security Dashboard"
+    local tmp
+    tmp=$(mktemp)
+
     jq -n \
-        --arg name "$WORKBOOK_ID" \
-        --arg displayName "$WORKBOOK_DISPLAY_NAME" \
+        --arg name "$workbook_id" \
+        --arg displayName "$display_name" \
         --arg location "$LOCATION" \
-        --arg workspaceId "$WORKSPACE_RESOURCE_ID" \
-        --rawfile serializedData "$WORKBOOK_FILE" \
+        --arg workspaceId "$workspace_resource_id" \
+        --rawfile serializedData "$workbook_file" \
         '{
             "type": "Microsoft.Insights/workbooks",
             "name": $name,
@@ -304,65 +332,100 @@ deploy_workbook() {
                 "sourceId": $workspaceId,
                 "category": "sentinel"
             }
-        }' > "$TEMP_WORKBOOK"
-    
+        }' > "$tmp"
+
     if az rest --method put \
-        --url "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Insights/workbooks/${WORKBOOK_ID}?api-version=2022-04-01" \
-        --body @"$TEMP_WORKBOOK" \
-        --output none 2>&1; then
-        print_info "✓ Successfully deployed Falco Security Dashboard workbook"
-        print_info "View workbook in Azure Portal: Monitor > Workbooks > $WORKBOOK_DISPLAY_NAME"
+        --url "https://management.azure.com/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Insights/workbooks/${workbook_id}?api-version=2022-04-01" \
+        --body @"$tmp" --output none 2>/dev/null; then
+        print_info "✓ Workbook deployed (Monitor → Workbooks → ${display_name})"
     else
         print_warning "✗ Failed to deploy workbook"
     fi
-    
-    # Clean up temp file
-    rm -f "$TEMP_WORKBOOK"
-    
-    print_info "Workbook deployment completed!"
+    rm -f "$tmp"
 }
 
+# ---------------------------------------------------------------------------
 display_next_steps() {
-    print_info "\n=========================================="
-    print_info "Deployment Complete!"
-    print_info "=========================================="
-    echo ""
-    print_info "Next Steps:"
-    echo "1. Access Azure Portal and navigate to Microsoft Sentinel"
-    echo "2. Select the workspace: $LAW_NAME"
-    echo "3. Go to Analytics > Active rules to view imported rules"
-    echo "4. View Falco Security Dashboard: Monitor > Workbooks > Falco Security Dashboard"
-    echo "5. Test Falco by running: kubectl run test-pod --image=alpine --rm -it -- sh"
-    echo "6. Check logs in Log Analytics with query: FalcoLogs_CL | take 10"
-    echo ""
-    print_info "Logic App Webhook:"
-    echo "- Webhook URL: $WEBHOOK_URL"
-    echo "- View Logic App runs in Azure Portal: Logic Apps > logic-falco-webhook > Overview"
-    echo ""
-    print_info "Useful Commands:"
-    echo "- View Falco logs: kubectl logs -n falco -l app.kubernetes.io/name=falco -f"
-    echo "- View Falcosidekick logs: kubectl logs -n falco -l app.kubernetes.io/name=falcosidekick -f"
-    echo "- Test with a violation: kubectl exec -it <pod-name> -- cat /etc/shadow"
-    echo ""
+    cat <<EOF
+
+==========================================
+Deployment Complete!
+==========================================
+
+Resource Group: ${RESOURCE_GROUP}
+AKS Cluster:    ${AKS_NAME}
+Log Analytics:  ${LAW_NAME}
+
+Next Steps:
+  1. Open Azure Portal → Microsoft Sentinel → workspace ${LAW_NAME}
+  2. Analytics → Active rules to view imported rules
+  3. Monitor → Workbooks → Falco Security Dashboard
+  4. Run ./scripts/simulate-attacks.sh to generate detections
+
+Useful queries:
+  FalcoLogs_CL | order by TimeGenerated desc | take 20
+  FalcoLogs_CL | summarize count() by priority_s
+
+NOTE: The Logic App callback URL is a secret and is intentionally not
+printed. To inspect it locally run:
+  az logic workflow show-callback-url \\
+    -g ${RESOURCE_GROUP} -n ${LOGIC_APP_NAME} \\
+    --trigger-name ${LOGIC_APP_TRIGGER} \\
+    --query value -o tsv
+EOF
 }
 
-# Main execution
+# ---------------------------------------------------------------------------
+# Helpers for `--enable-rules` only mode (no infra/Falco changes)
+# ---------------------------------------------------------------------------
+load_existing_outputs_or_die() {
+    if ! az deployment sub show --name "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
+        print_error "No prior deployment named '$DEPLOYMENT_NAME' found."
+        print_error "Run ./deploy.sh (without --enable-rules) first."
+        exit 1
+    fi
+    get_deployment_outputs
+}
+
+# ===========================================================================
+# Main
+# ===========================================================================
 main() {
-    print_info "Starting Falco AKS Demo Deployment"
+    print_info "Starting Falco AKS Demo Deployment (mode=${MODE})"
     print_info "===================================="
-    
+
     check_prerequisites
     login_azure
-    create_resource_group
-    deploy_infrastructure
-    get_deployment_outputs
-    configure_kubectl
-    install_falco
-    verify_deployment
-    import_sentinel_rules
-    deploy_workbook
-    display_next_steps
+
+    case "$MODE" in
+        enable-rules-only)
+            load_existing_outputs_or_die
+            wait_for_falco_logs || true
+            import_sentinel_rules
+            deploy_workbook
+            ;;
+        skip-rules)
+            deploy_infrastructure
+            get_deployment_outputs
+            fetch_webhook_url_silently
+            configure_kubectl
+            install_falco
+            verify_falco
+            print_info "Skipping Sentinel rules (per --skip-rules). Run with --enable-rules later."
+            ;;
+        full|*)
+            deploy_infrastructure
+            get_deployment_outputs
+            fetch_webhook_url_silently
+            configure_kubectl
+            install_falco
+            verify_falco
+            wait_for_falco_logs || true
+            import_sentinel_rules
+            deploy_workbook
+            display_next_steps
+            ;;
+    esac
 }
 
-# Run main function
 main

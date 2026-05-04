@@ -38,6 +38,9 @@ param networkPlugin string = 'azure'
 @description('The Azure AD user or group object ID to grant AKS RBAC Cluster Admin role')
 param aksAdminPrincipalId string
 
+@description('Custom node resource group name (where AKS-managed VMSS, NICs, etc. live).')
+param nodeResourceGroupName string = 'rg-${clusterName}-nodes'
+
 // ========================================
 // AKS Managed Cluster
 // ========================================
@@ -52,6 +55,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-02-previ
     kubernetesVersion: kubernetesVersion
     dnsPrefix: '${clusterName}-dns'
     enableRBAC: true
+    nodeResourceGroup: nodeResourceGroupName
     
     // AAD Integration with Azure RBAC
     aadProfile: {

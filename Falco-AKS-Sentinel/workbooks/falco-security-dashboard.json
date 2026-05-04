@@ -177,7 +177,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize TotalAlerts = count()",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| summarize TotalAlerts = count()",
         "size": 3,
         "title": "Total Alerts",
         "timeContext": {
@@ -220,7 +220,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where priority_s == 'Critical' or priority_s == 'Error'\n| summarize CriticalCount = count()",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| where priority_s == 'Critical' or priority_s == 'Error'\n| summarize Count = count()",
         "size": 3,
         "title": "Critical & Error",
         "timeContext": {
@@ -264,7 +264,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_pod_name_s)\n| summarize by output_fields_k8s_pod_name_s\n| summarize AffectedPods = count()",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| where isnotempty(output_fields_k8s_pod_name_s)\n| summarize by output_fields_k8s_pod_name_s\n| summarize AffectedPods = count()",
         "size": 3,
         "title": "Affected Pods",
         "timeContext": {
@@ -288,7 +288,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize by rule_s\n| summarize UniqueRules = count()",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| summarize by rule_s\n| summarize UniqueRules = count()",
         "size": 3,
         "title": "Unique Rules Triggered",
         "timeContext": {
@@ -312,7 +312,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by bin(TimeGenerated, 5m), priority_s\n| render timechart",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| summarize Count = count() by bin(TimeGenerated, 5m), priority_s\n| render timechart",
         "size": 0,
         "title": "Alerts Over Time by Priority",
         "timeContext": {
@@ -332,7 +332,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by priority_s\n| order by Count desc",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| summarize Count = count() by priority_s\n| order by Count desc",
         "size": 1,
         "title": "Alerts by Priority",
         "timeContext": {
@@ -353,7 +353,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_ns_name_s)\n| summarize Count = count() by output_fields_k8s_ns_name_s\n| order by Count desc\n| take 10",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| where isnotempty(output_fields_k8s_ns_name_s)\n| summarize Count = count() by output_fields_k8s_ns_name_s\n| order by Count desc\n| take 10",
         "size": 1,
         "title": "Top 10 Namespaces by Alert Count",
         "timeContext": {
@@ -374,7 +374,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by rule_s\n| order by Count desc\n| take 10",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| summarize Count = count() by rule_s\n| order by Count desc\n| take 10",
         "size": 0,
         "title": "Top 10 Triggered Rules",
         "timeContext": {
@@ -413,7 +413,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_k8s_pod_name_s)\n| summarize Count = count() by output_fields_k8s_pod_name_s\n| order by Count desc\n| take 10",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| where isnotempty(output_fields_k8s_pod_name_s)\n| summarize Count = count() by output_fields_k8s_pod_name_s\n| order by Count desc\n| take 10",
         "size": 0,
         "title": "Top 10 Pods with Most Alerts",
         "timeContext": {
@@ -452,7 +452,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| project \n    TimeGenerated,\n    Priority = priority_s,\n    Rule = rule_s,\n    Namespace = output_fields_k8s_ns_name_s,\n    Pod = output_fields_k8s_pod_name_s,\n    Container = output_fields_container_name_s,\n    Output = output_s\n| order by TimeGenerated desc\n| take 100",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| project \n    TimeGenerated,\n    Priority = priority_s,\n    Rule = rule_s,\n    Namespace = output_fields_k8s_ns_name_s,\n    Pod = output_fields_k8s_pod_name_s,\n    Container = output_fields_container_name_s,\n    Output = output_s\n| order by TimeGenerated desc\n| take 100",
         "size": 0,
         "title": "Recent Security Events (Last 100)",
         "timeContext": {
@@ -532,7 +532,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(hostname_s)\n| summarize Count = count() by hostname_s\n| order by Count desc",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| where isnotempty(hostname_s)\n| summarize Count = count() by hostname_s\n| order by Count desc",
         "size": 0,
         "title": "Alerts by Node/Host",
         "timeContext": {
@@ -571,7 +571,7 @@
       "type": 3,
       "content": {
         "version": "KqlItem/1.0",
-        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where isnotempty(output_fields_container_name_s)\n| summarize Count = count() by output_fields_container_name_s\n| order by Count desc\n| take 10",
+        "query": "FalcoLogs_CL\n| where TimeGenerated {TimeRange}\n| where (\"*\" in ({Priority}) or priority_s in ({Priority}))\n| where (\"*\" in ({Namespace}) or output_fields_k8s_ns_name_s in ({Namespace}))\n| where isnotempty(output_fields_container_name_s)\n| summarize Count = count() by output_fields_container_name_s\n| order by Count desc\n| take 10",
         "size": 0,
         "title": "Top 10 Containers by Alert Count",
         "timeContext": {

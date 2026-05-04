@@ -19,12 +19,25 @@
 #>
 
 [CmdletBinding()]
-param()
+param(
+    [Parameter(Mandatory=$false)]
+    [switch]$EnableRulesOnly,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipRules,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$NoWait,
+
+    [Parameter(Mandatory=$false)]
+    [int]$WaitTimeoutMinutes = 20
+)
 
 # Configuration
-$RESOURCE_GROUP = "rg-falco-demo-ps1"
+$RESOURCE_GROUP = "rg-falco-demo-1"
 $LOCATION = "eastus"
 $SUBSCRIPTION_ID = ""
+$DEPLOYMENT_NAME = "main-subscription"
 
 # Script variables
 $ErrorActionPreference = "Stop"
@@ -142,7 +155,7 @@ function Deploy-Infrastructure {
         --template-file $mainBicep `
         --parameters $mainBicepParam `
         --parameters aksAdminPrincipalId=$USER_OBJECT_ID `
-        --name main-subscription `
+        --name $DEPLOYMENT_NAME `
         --output table
     
     if ($LASTEXITCODE -ne 0) {
@@ -155,19 +168,33 @@ function Deploy-Infrastructure {
 function Get-DeploymentOutputs {
     Write-Info "Retrieving deployment outputs..."
     
-    $deployment = Get-AzDeployment -Name "main-subscription"
+    $deployment = Get-AzDeployment -Name $DEPLOYMENT_NAME
     
-    $script:RESOURCE_GROUP = $deployment.Outputs.resourceGroupName.Value
-    $script:AKS_NAME = $deployment.Outputs.aksClusterName.Value
-    $script:LAW_NAME = $deployment.Outputs.logAnalyticsWorkspaceName.Value
-    $script:WORKSPACE_ID = $deployment.Outputs.workspaceCustomerId.Value
-    $script:WEBHOOK_URL = $deployment.Outputs.logicAppWebhookUrl.Value
+    $script:RESOURCE_GROUP    = $deployment.Outputs.resourceGroupName.Value
+    $script:AKS_NAME          = $deployment.Outputs.aksClusterName.Value
+    $script:LAW_NAME          = $deployment.Outputs.logAnalyticsWorkspaceName.Value
+    $script:WORKSPACE_ID      = $deployment.Outputs.workspaceCustomerId.Value
+    $script:LOGIC_APP_NAME    = $deployment.Outputs.logicAppName.Value
+    $script:LOGIC_APP_TRIGGER = $deployment.Outputs.logicAppTriggerName.Value
     
     Write-Info "Resource Group: $RESOURCE_GROUP"
     Write-Info "AKS Cluster: $AKS_NAME"
     Write-Info "Log Analytics Workspace: $LAW_NAME"
     Write-Info "Workspace ID: $WORKSPACE_ID"
-    Write-Info "Logic App Webhook URL: $WEBHOOK_URL"
+    Write-Info "Logic App: $LOGIC_APP_NAME"
+}
+
+# Fetches the Logic App callback URL at runtime. The value is treated as a
+# secret (it carries an HMAC SAS) and is NEVER printed to the console.
+function Get-WebhookUrlSilently {
+    Write-Info "Fetching Logic App callback URL (value will not be printed)..."
+    $uri = "https://management.azure.com/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/providers/Microsoft.Logic/workflows/$LOGIC_APP_NAME/triggers/$LOGIC_APP_TRIGGER/listCallbackUrl?api-version=2017-07-01"
+    $url = az rest --method post --url $uri --query value -o tsv 2>$null
+    if (-not $url -or $url -eq "null") {
+        throw "Could not retrieve Logic App callback URL"
+    }
+    $script:WEBHOOK_URL = $url
+    Write-Info "Webhook URL retrieved (redacted)."
 }
 
 function Set-KubectlContext {
@@ -234,6 +261,59 @@ function Test-Deployment {
     Write-Info "`nDeployment verification complete!"
 }
 
+function Get-DeterministicId {
+    param(
+        [Parameter(Mandatory=$true)][string]$WorkspaceResourceId,
+        [Parameter(Mandatory=$true)][string]$DisplayName
+    )
+    $sha1  = [System.Security.Cryptography.SHA1]::Create()
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes("$WorkspaceResourceId::$DisplayName")
+    $hex   = ($sha1.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+    return "{0}-{1}-{2}-{3}-{4}" -f `
+        $hex.Substring(0,8),  $hex.Substring(8,4), `
+        $hex.Substring(12,4), $hex.Substring(16,4), `
+        $hex.Substring(20,12)
+}
+
+function Wait-ForFalcoLogs {
+    if ($NoWait) {
+        Write-Warning "Skipping wait-for-logs gate (-NoWait set)."
+        return
+    }
+
+    Write-Info "Waiting for Falco events to land in Log Analytics (FalcoLogs_CL)..."
+    Write-Info "This can take 5-15 minutes after Falco starts emitting events."
+
+    # Generate a benign event so the FalcoLogs_CL table is materialised sooner.
+    # We trigger the "Package Management in Container" rule (apk update inside
+    # an alpine pod) instead of touching /etc/shadow, so the warm-up doesn't
+    # itself look like a credential-theft event in unrelated monitoring tools.
+    try {
+        kubectl run falco-warmup --rm --restart=Never --image=alpine:3.19 -i `
+            --command -- sh -c 'apk update >/dev/null 2>&1 || true; echo done' 2>$null | Out-Null
+    } catch { }
+
+    $deadline = (Get-Date).AddMinutes($WaitTimeoutMinutes)
+    $attempt  = 0
+    while ((Get-Date) -lt $deadline) {
+        $attempt++
+        $count = az monitor log-analytics query `
+            --workspace $WORKSPACE_ID `
+            --analytics-query "FalcoLogs_CL | where TimeGenerated > ago(1h) | count" `
+            --query "[0].Count" -o tsv 2>$null
+
+        if ($count -and ($count -as [int]) -gt 0) {
+            Write-Info "FalcoLogs_CL is populated (rows in last 1h: $count). Proceeding."
+            return
+        }
+        Write-Info "  Attempt #${attempt}: FalcoLogs_CL not populated yet — sleeping 30s..."
+        Start-Sleep -Seconds 30
+    }
+
+    Write-Warning "Timed out after ${WaitTimeoutMinutes}m waiting for FalcoLogs_CL."
+    Write-Warning "Re-run with -EnableRulesOnly once data is flowing."
+}
+
 function Import-SentinelRules {
     Write-Info "Importing Sentinel analytics rules..."
     
@@ -257,12 +337,12 @@ function Import-SentinelRules {
     
     Write-Info "Found $($rules.Count) analytics rules to import"
     
-    # Use Azure CLI for Sentinel rules creation (better authentication handling)
     foreach ($rule in $rules) {
         Write-Info "Creating rule: $($rule.displayName)"
-        
-        # Generate a unique GUID for the rule
-        $RULE_ID = [guid]::NewGuid().ToString()
+
+        # Deterministic GUID — re-running the script updates the existing rule
+        # instead of creating a duplicate.
+        $RULE_ID = Get-DeterministicId -WorkspaceResourceId $WORKSPACE_RESOURCE_ID -DisplayName $rule.displayName
         
         # Build the rule body
         $ruleBody = @{
@@ -327,8 +407,8 @@ function Deploy-Workbook {
         return
     }
     
-    # Generate a unique GUID for the workbook
-    $WORKBOOK_ID = [guid]::NewGuid().ToString()
+    # Deterministic ID — re-running updates the existing workbook
+    $WORKBOOK_ID = Get-DeterministicId -WorkspaceResourceId $WORKSPACE_RESOURCE_ID -DisplayName "Falco Security Dashboard"
     
     # Read the workbook template
     $serializedData = Get-Content $workbookFile -Raw
@@ -397,8 +477,9 @@ function Show-NextSteps {
     Write-Host "6. Check logs in Log Analytics with query: FalcoLogs_CL | take 10"
     Write-Host ""
     Write-Info "Logic App Webhook:"
-    Write-Host "- Webhook URL: $WEBHOOK_URL"
-    Write-Host "- View Logic App runs in Azure Portal: Logic Apps > logic-falco-webhook > Overview"
+    Write-Host "- The webhook URL contains a SAS signature and is intentionally not printed."
+    Write-Host "- To inspect locally: az logic workflow show-callback-url -g $RESOURCE_GROUP -n $LOGIC_APP_NAME --trigger-name $LOGIC_APP_TRIGGER --query value -o tsv"
+    Write-Host "- View Logic App runs in Azure Portal: Logic Apps > $LOGIC_APP_NAME > Overview"
     Write-Host ""
     Write-Info "Useful Commands:"
     Write-Host "- View Falco logs: kubectl logs -n falco -l app.kubernetes.io/name=falco -f"
@@ -418,14 +499,31 @@ function Main {
     try {
         Test-Prerequisites
         Connect-AzureAccount
+
+        if ($EnableRulesOnly) {
+            Get-DeploymentOutputs
+            Wait-ForFalcoLogs
+            Import-SentinelRules
+            Deploy-Workbook
+            return
+        }
+
         New-ResourceGroup
         Deploy-Infrastructure
         Get-DeploymentOutputs
+        Get-WebhookUrlSilently
         Set-KubectlContext
         Install-Falco
         Test-Deployment
-        Import-SentinelRules
-        Deploy-Workbook
+
+        if ($SkipRules) {
+            Write-Info "Skipping Sentinel rules (per -SkipRules). Run again with -EnableRulesOnly later."
+        } else {
+            Wait-ForFalcoLogs
+            Import-SentinelRules
+            Deploy-Workbook
+        }
+
         Show-NextSteps
     }
     catch {

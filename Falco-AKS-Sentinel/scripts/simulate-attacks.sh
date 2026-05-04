@@ -98,14 +98,20 @@ run_attack() {
 }
 
 # ---- helper: apply a manifest then delete it ---------------------------------
+# Substitutes the literal placeholder '__ATTACK_NS__' with the configured
+# namespace before applying. This keeps heredocs quoted (so $TOKEN, $(cat ...)
+# etc. inside container scripts are NOT expanded by the host shell) while
+# still honouring the user-supplied --namespace flag.
 apply_then_delete() {
   local name="$1"
   local manifest="$2"
-  log "Applying: $name"
-  echo "$manifest" | kubectl apply -f - 2>/dev/null || true
+  local rendered
+  rendered=$(printf '%s' "$manifest" | sed "s/__ATTACK_NS__/${ATTACK_NS}/g")
+  log "Applying: $name (namespace: $ATTACK_NS)"
+  echo "$rendered" | kubectl apply -f - 2>/dev/null || true
   echo "Waiting 15s for detection..."
   sleep 15
-  echo "$manifest" | kubectl delete -f - --ignore-not-found 2>/dev/null || true
+  echo "$rendered" | kubectl delete -f - --ignore-not-found 2>/dev/null || true
 }
 
 # ==============================================================================
@@ -121,7 +127,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-sensitive-file
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: sensitive-file
 spec:
@@ -157,7 +163,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-pkg-mgmt
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: package-mgmt
 spec:
@@ -191,7 +197,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-crypto-miner
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: crypto-miner
 spec:
@@ -227,7 +233,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-reverse-shell
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: reverse-shell
 spec:
@@ -263,7 +269,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-k8s-secrets
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: k8s-secrets
 spec:
@@ -305,7 +311,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-privileged
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: privileged
 spec:
@@ -346,7 +352,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: rogue-lateral-movement
-  namespace: falco-demo-attacks
+  namespace: __ATTACK_NS__
   labels:
     scenario: lateral-movement
 spec:
@@ -401,7 +407,7 @@ Next steps:
 
   # Query Log Analytics for ingested Falco alerts:
   WS_ID=\$(az monitor log-analytics workspace show \\
-    -g rg-falco-demo -n falcosec-law --query customerId -o tsv)
+    -g rg-falco-demo-1 -n law-falco-demo-1 --query customerId -o tsv)
   az monitor log-analytics query -w "\$WS_ID" \\
     --analytics-query "FalcoLogs_CL | order by TimeGenerated desc | take 20" \\
     -o table

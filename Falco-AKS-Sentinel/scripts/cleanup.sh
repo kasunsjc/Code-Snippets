@@ -12,7 +12,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-RESOURCE_GROUP="rg-falco-demo"
+RESOURCE_GROUP="${RESOURCE_GROUP:-}"
+DEPLOYMENT_NAME="main-subscription"
+PARAM_FILE="../main-subscription.bicepparam"
 
 # Functions
 print_info() {
@@ -25,6 +27,39 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
+}
+
+resolve_resource_group() {
+    # Prefer caller-supplied env var
+    if [ -n "$RESOURCE_GROUP" ]; then
+        return
+    fi
+
+    # Try the recorded deployment outputs first (single source of truth)
+    if command -v az >/dev/null 2>&1; then
+        local rg
+        rg=$(az deployment sub show --name "$DEPLOYMENT_NAME" \
+            --query properties.outputs.resourceGroupName.value -o tsv 2>/dev/null || true)
+        if [ -n "$rg" ] && [ "$rg" != "null" ]; then
+            RESOURCE_GROUP="$rg"
+            return
+        fi
+    fi
+
+    # Fall back to parsing the bicepparam file used by deploy.sh
+    if [ -f "$PARAM_FILE" ]; then
+        local rg
+        rg=$(grep -E "^[[:space:]]*param[[:space:]]+resourceGroupName" "$PARAM_FILE" \
+            | head -n1 | sed -E "s/.*=[[:space:]]*'([^']+)'.*/\1/")
+        if [ -n "$rg" ]; then
+            RESOURCE_GROUP="$rg"
+            return
+        fi
+    fi
+
+    print_error "Could not determine resource group. Set RESOURCE_GROUP env var:"
+    print_error "  RESOURCE_GROUP=rg-falco-demo-1 ./cleanup.sh"
+    exit 1
 }
 
 confirm_deletion() {
@@ -70,5 +105,11 @@ main() {
     print_info "\nCleanup completed!"
 }
 
+# Resolve target resource group dynamically before prompting
+resolve_target() {
+    resolve_resource_group
+}
+
 # Run main function
+resolve_target
 main

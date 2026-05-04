@@ -104,11 +104,14 @@ Before you begin, ensure you have the following installed:
    ```
 
 3. **Review and customize parameters** (optional):
-   Edit `main.bicepparam` to customize:
-   - Cluster name
-   - Location
-   - Node configuration
-   - Tags
+   Edit `main-subscription.bicepparam` (this is the file the deployment scripts
+   actually consume — `main.bicepparam` is only used for resource-group-scoped
+   deployments, which the scripts do not run by default). Customizable values:
+   - `resourceGroupName` (default `rg-falco-demo-1`)
+   - `aksClusterName`
+   - `location`
+   - `nodeVmSize` / `nodeCount`
+   - `tags`
 
 4. **Deploy the infrastructure**:
    

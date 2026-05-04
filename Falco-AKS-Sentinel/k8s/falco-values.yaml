@@ -16,10 +16,11 @@ falcosidekick:
     enabled: false
   
   config:
-    # Webhook configuration - will be set via Helm values during deployment
+    # Webhook configuration - the address MUST be supplied at install time via:
+    #   --set falcosidekick.config.webhook.address="$WEBHOOK_URL"
+    # Do NOT commit a Logic App callback URL here — it contains a SAS signature.
     webhook:
-      address: "https://prod-86.eastus.logic.azure.com:443/workflows/9ec9ad2520874f36a049df17b4fe926f/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=ZXeOmQG-2F34XCu8XPgf4XbnMFWQI3gnUNRbGMxpagc"
-      # The webhook URL will be set by the deployment script
+      address: ""
 
 # Falco configuration
 falco:

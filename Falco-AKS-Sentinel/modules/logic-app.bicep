@@ -119,6 +119,10 @@ output logicAppId string = logicApp.id
 @description('The name of the Logic App')
 output logicAppName string = logicApp.name
 
-@description('The Logic App callback URL - retrieve using listCallbackUrl in parent template')
-#disable-next-line outputs-should-not-contain-secrets
-output callbackUrl string = listCallbackUrl('${logicApp.id}/triggers/When_an_HTTP_request_is_received', '2017-07-01').value
+@description('The name of the trigger to use with `az logic workflow show-callback-url`.')
+output logicAppTriggerName string = 'When_an_HTTP_request_is_received'
+
+// NOTE: The callback URL is intentionally NOT exported as a Bicep output.
+// It contains a SAS signature that grants invocation rights to the workflow,
+// and Bicep outputs are persisted in deployment history. The deployment scripts
+// retrieve it at runtime via `az logic workflow show-callback-url` instead.
