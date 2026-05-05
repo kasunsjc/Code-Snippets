@@ -5,7 +5,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **17 examples** | Kubernetes: 11 | Docker: 4 | Azure: 1 | *Last Updated: April 2026*
+> **18 examples** | Kubernetes: 11 | Docker: 4 | Azure: 1 | *Last Updated: May 2026*
 
 ## 📋 Table of Contents
 
@@ -28,6 +28,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 | 15 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
 | 16 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
 | 17 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
+| 18 | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) | This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstr... | Other |
 
 ---
 
@@ -78,6 +79,8 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 
 - **[Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/)** — This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot common issues in Azure Kubernetes Service (AKS) clusters. Instead of manually running `kubectl` commands and digging through logs, you can ask Copilot natural language questions directly in the Azure Portal and get actionable insights.
   - 📄 README: Yes | 📁 Files: 16
+- **[Falco-AKS-Sentinel](./Falco-AKS-Sentinel/)** — This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstrating Falco runtime security on Azure Kubernetes Service (AKS) with Azure Sentinel integration.
+  - 📄 README: Yes | 📁 Files: 19
 
 ---
 
