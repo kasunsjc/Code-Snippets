@@ -1,0 +1,113 @@
+{
+  "analyticsRules": [
+    {
+      "displayName": "Falco - Critical Security Alert",
+      "description": "Detects critical security alerts from Falco indicating potential security breaches",
+      "severity": "High",
+      "enabled": true,
+      "query": "FalcoLogs_CL\n| where priority_s == \"Critical\"\n| project TimeGenerated, output_fields_k8s_pod_name_s, output_fields_k8s_ns_name_s, rule_s, output_s, hostname_s",
+      "queryFrequency": "PT5M",
+      "queryPeriod": "PT5M",
+      "triggerOperator": "GreaterThan",
+      "triggerThreshold": 0,
+      "suppressionDuration": "PT1H",
+      "suppressionEnabled": false,
+      "tactics": [
+        "Execution",
+        "PrivilegeEscalation",
+        "DefenseEvasion"
+      ],
+      "techniques": [
+        "T1059",
+        "T1068",
+        "T1070"
+      ]
+    },
+    {
+      "displayName": "Falco - Suspicious Process Execution",
+      "description": "Detects suspicious process execution patterns in Kubernetes containers",
+      "severity": "Medium",
+      "enabled": true,
+      "query": "FalcoLogs_CL\n| where rule_s contains \"Unauthorized Process\" or rule_s contains \"Package Management\"\n| summarize Count = count() by output_fields_k8s_pod_name_s, output_fields_k8s_ns_name_s, output_fields_container_name_s, rule_s, bin(TimeGenerated, 5m)\n| where Count > 5",
+      "queryFrequency": "PT10M",
+      "queryPeriod": "PT10M",
+      "triggerOperator": "GreaterThan",
+      "triggerThreshold": 0,
+      "suppressionDuration": "PT1H",
+      "suppressionEnabled": false,
+      "tactics": [
+        "Execution",
+        "Persistence"
+      ],
+      "techniques": [
+        "T1059",
+        "T1543"
+      ]
+    },
+    {
+      "displayName": "Falco - Sensitive File Access",
+      "description": "Detects unauthorized access to sensitive files in containers",
+      "severity": "High",
+      "enabled": true,
+      "query": "FalcoLogs_CL\n| where rule_s contains \"Sensitive File Access\" or rule_s contains \"Kubernetes Secret Access\"\n| project TimeGenerated, output_fields_k8s_pod_name_s, output_fields_k8s_ns_name_s, output_fields_user_name_s, rule_s, output_s",
+      "queryFrequency": "PT5M",
+      "queryPeriod": "PT5M",
+      "triggerOperator": "GreaterThan",
+      "triggerThreshold": 0,
+      "suppressionDuration": "PT1H",
+      "suppressionEnabled": false,
+      "tactics": [
+        "CredentialAccess",
+        "Discovery"
+      ],
+      "techniques": [
+        "T1552",
+        "T1083"
+      ]
+    },
+    {
+      "displayName": "Falco - Reverse Shell Detection",
+      "description": "Detects potential reverse shell connections from containers",
+      "severity": "High",
+      "enabled": true,
+      "query": "FalcoLogs_CL\n| where rule_s contains \"Reverse Shell\"\n| project TimeGenerated, output_fields_k8s_pod_name_s, output_fields_k8s_ns_name_s, output_s, hostname_s, output_fields_container_id_s",
+      "queryFrequency": "PT5M",
+      "queryPeriod": "PT5M",
+      "triggerOperator": "GreaterThan",
+      "triggerThreshold": 0,
+      "suppressionDuration": "PT30M",
+      "suppressionEnabled": false,
+      "tactics": [
+        "CommandAndControl",
+        "Execution"
+      ],
+      "techniques": [
+        "T1071",
+        "T1059"
+      ]
+    },
+    {
+      "displayName": "Falco - Multiple Security Alerts from Same Pod",
+      "description": "Detects multiple security alerts originating from the same pod indicating potential compromise",
+      "severity": "High",
+      "enabled": true,
+      "query": "FalcoLogs_CL\n| where priority_s in (\"Critical\", \"Error\", \"Warning\")\n| summarize AlertCount = count(), Rules = make_set(rule_s) by output_fields_k8s_pod_name_s, output_fields_k8s_ns_name_s, bin(TimeGenerated, 10m)\n| where AlertCount >= 5\n| project TimeGenerated, output_fields_k8s_pod_name_s, output_fields_k8s_ns_name_s, AlertCount, Rules",
+      "queryFrequency": "PT10M",
+      "queryPeriod": "PT10M",
+      "triggerOperator": "GreaterThan",
+      "triggerThreshold": 0,
+      "suppressionDuration": "PT1H",
+      "suppressionEnabled": false,
+      "tactics": [
+        "InitialAccess",
+        "Execution",
+        "Persistence"
+      ],
+      "techniques": [
+        "T1190",
+        "T1059",
+        "T1053"
+      ]
+    }
+  ]
+}
