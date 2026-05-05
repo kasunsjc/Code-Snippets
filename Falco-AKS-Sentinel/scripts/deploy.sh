@@ -30,6 +30,11 @@ LOCATION="eastus"
 SUBSCRIPTION_ID=""
 DEPLOYMENT_NAME="main-subscription"
 
+# Random 6-character alphanumeric suffix to ensure unique resource names.
+# Generated once per script run so all resources share the same suffix.
+# Uses openssl to avoid SIGPIPE issues from /dev/urandom pipelines under pipefail.
+RANDOM_SUFFIX=$(openssl rand -hex 3)
+
 # Defaults for --enable-rules-only mode (overridden from deployment outputs)
 RESOURCE_GROUP=""
 AKS_NAME=""
@@ -97,6 +102,7 @@ login_azure() {
 # ---------------------------------------------------------------------------
 deploy_infrastructure() {
     print_info "Deploying Azure infrastructure with Bicep (subscription scope)..."
+    print_info "Resource name suffix: ${RANDOM_SUFFIX}"
 
     print_info "Resolving current user object ID for AKS RBAC assignment..."
     local user_id
@@ -108,6 +114,9 @@ deploy_infrastructure() {
         --template-file ../main-subscription.bicep \
         --parameters ../main-subscription.bicepparam \
         --parameters aksAdminPrincipalId="$user_id" \
+        --parameters resourceGroupName="rg-falco-demo-${RANDOM_SUFFIX}" \
+        --parameters aksClusterName="aks-falco-demo-${RANDOM_SUFFIX}" \
+        --parameters logAnalyticsWorkspaceName="law-falco-demo-${RANDOM_SUFFIX}" \
         --output table
 
     print_info "Infrastructure deployed successfully!"
