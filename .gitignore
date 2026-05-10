@@ -7,3 +7,4 @@
 
 # Ignore IDE directories
 .idea/
+.vscode/
