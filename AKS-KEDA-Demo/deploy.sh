@@ -41,6 +41,16 @@ done
 echo "Checking Azure CLI login..."
 az account show --output none || { echo "ERROR: Not logged in to Azure. Run 'az login'."; exit 1; }
 
+# ---- Get current user Object ID ----
+echo ""
+echo "Retrieving current user Object ID for role assignments..."
+USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+if [[ -z "$USER_OBJECT_ID" ]]; then
+  echo "  Warning: Could not retrieve user Object ID. Grafana Admin and AKS RBAC roles will not be assigned."
+else
+  echo "  User Object ID: $USER_OBJECT_ID"
+fi
+
 # ---- Create Resource Group ----
 echo ""
 echo "[1/7] Creating resource group: $RESOURCE_GROUP..."
@@ -51,12 +61,13 @@ az group create \
 
 # ---- Deploy Bicep ----
 echo ""
-echo "[2/7] Deploying AKS cluster with KEDA add-on..."
+echo "[2/7] Deploying AKS cluster with KEDA add-on and Azure Managed Prometheus..."
 az deployment group create \
   --resource-group "$RESOURCE_GROUP" \
   --name "$DEPLOYMENT_NAME" \
   --template-file "$SCRIPT_DIR/main.bicep" \
   --parameters "$SCRIPT_DIR/main.bicepparam" \
+  --parameters userId="${USER_OBJECT_ID:-}" \
   --output table
 
 # ---- Read Outputs ----
@@ -74,11 +85,15 @@ AKS_NAME=$(get_output aksClusterName)
 STORAGE_ACCOUNT=$(get_output storageAccountName)
 SB_NAMESPACE=$(get_output serviceBusNamespaceName)
 OIDC_ISSUER=$(get_output oidcIssuerUrl)
+GRAFANA_URL=$(get_output grafanaUrl)
+PROMETHEUS_ENDPOINT=$(get_output prometheusQueryEndpoint)
 
-echo "  AKS cluster     : $AKS_NAME"
-echo "  Storage account : $STORAGE_ACCOUNT"
-echo "  Service Bus     : $SB_NAMESPACE"
-echo "  OIDC issuer     : $OIDC_ISSUER"
+echo "  AKS cluster          : $AKS_NAME"
+echo "  Storage account      : $STORAGE_ACCOUNT"
+echo "  Service Bus          : $SB_NAMESPACE"
+echo "  OIDC issuer          : $OIDC_ISSUER"
+echo "  Grafana URL          : $GRAFANA_URL"
+echo "  Prometheus endpoint  : $PROMETHEUS_ENDPOINT"
 
 # ---- Get AKS Credentials ----
 echo ""
@@ -148,9 +163,12 @@ echo "=================================================="
 echo "  Deployment Complete!"
 echo "=================================================="
 echo ""
-echo "AKS cluster      : $AKS_NAME"
-echo "Resource group   : $RESOURCE_GROUP"
-echo "K8s namespace    : $K8S_NAMESPACE"
+echo "AKS cluster            : $AKS_NAME"
+echo "Resource group         : $RESOURCE_GROUP"
+echo "K8s namespace          : $K8S_NAMESPACE"
+echo ""
+echo "Azure Managed Grafana  : $GRAFANA_URL"
+echo "Prometheus endpoint    : $PROMETHEUS_ENDPOINT"
 echo ""
 echo "KEDA pods:"
 kubectl get pods -n kube-system -l app=keda-operator --no-headers 2>/dev/null \
@@ -173,8 +191,15 @@ echo ""
 echo "  # Scenario 03 — Cron"
 echo "  kubectl apply -f scenarios/03-cron/ -n $K8S_NAMESPACE"
 echo ""
-echo "  # Scenario 04 — Prometheus (requires Prometheus install — see scenario README)"
+echo "  # Scenario 04 — Prometheus (Azure Managed Prometheus)"
+echo "  # 1. Update serverAddress in 03-scaled-object.yaml with: $PROMETHEUS_ENDPOINT"
+echo "  # 2. Populate bearer token:"
+echo "  #    TOKEN=\$(az account get-access-token --resource https://prometheus.monitor.azure.com --query accessToken -o tsv)"
+echo "  #    kubectl create secret generic azure-managed-prometheus-secret -n $K8S_NAMESPACE --from-literal=bearerToken=\"\$TOKEN\" --dry-run=client -o yaml | kubectl apply -f -"
 echo "  kubectl apply -f scenarios/04-prometheus/ -n $K8S_NAMESPACE"
 echo ""
 echo "  # Scenario 05 — CPU / Memory"
 echo "  kubectl apply -f scenarios/05-cpu-memory/ -n $K8S_NAMESPACE"
+echo ""
+echo "  # Open Grafana to observe KEDA scaling"
+echo "  echo \"Open: $GRAFANA_URL\""

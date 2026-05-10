@@ -1,13 +1,20 @@
 // ============================================================
 // AKS KEDA Demo - Infrastructure Deployment
-// Deploys an AKS cluster with the KEDA add-on enabled plus
-// supporting resources for the demo scenarios.
+//
+// Module-based Bicep orchestrator. Deploys:
+//   - Log Analytics Workspace
+//   - Azure Managed Prometheus + Managed Grafana (monitoring)
+//   - AKS cluster with KEDA add-on + Azure Monitor profile
+//   - Data Collection Rule Association (routes metrics to Prometheus)
+//   - Prometheus Recording Rule Groups (powers Grafana dashboards)
+//   - Azure Storage Account + Queue    (Scenario 01)
+//   - Azure Service Bus Namespace + Queue  (Scenario 02)
 //
 // Scenarios covered:
 //   01 - Azure Storage Queue scaler
 //   02 - Azure Service Bus Queue scaler
 //   03 - Cron (time-based) scaler
-//   04 - Prometheus scaler
+//   04 - Prometheus scaler (Azure Managed Prometheus)
 //   05 - CPU / Memory scaler
 // ============================================================
 
@@ -26,6 +33,9 @@ param nodeCount int = 2
 @description('VM size for agent nodes.')
 param nodeVmSize string = 'Standard_DS2_v2'
 
+@description('Entra ID Object ID of the operator. Grants Grafana Admin and AKS RBAC Cluster Admin. Leave empty to skip.')
+param userId string = ''
+
 @description('Tags applied to all resources.')
 param tags object = {
   Environment: 'Demo'
@@ -42,134 +52,101 @@ var serviceBusNamespaceName = '${clusterName}-sb'
 var nodeResourceGroupName = 'rg-${clusterName}-nodes'
 
 // ============================================================
-// Log Analytics Workspace
+// Module: Log Analytics Workspace
 // ============================================================
 
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: '${clusterName}-law'
-  location: location
-  tags: tags
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
+module logAnalytics './modules/log-analytics.bicep' = {
+  name: 'log-analytics'
+  params: {
+    workspaceName: '${clusterName}-law'
+    location: location
+    tags: tags
   }
 }
 
 // ============================================================
-// AKS Cluster with KEDA Add-on
+// Module: Azure Managed Prometheus + Managed Grafana
 // ============================================================
 
-resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
-  name: clusterName
-  location: location
-  tags: tags
-  identity: {
-    type: 'SystemAssigned'
+module monitoring './modules/monitoring.bicep' = {
+  name: 'monitoring'
+  params: {
+    baseName: clusterName
+    location: location
+    userId: userId
+    tags: tags
   }
-  properties: {
+}
+
+// ============================================================
+// Module: AKS Cluster with KEDA Add-on
+// ============================================================
+
+module aks './modules/aks.bicep' = {
+  name: 'aks'
+  params: {
+    clusterName: clusterName
+    location: location
     kubernetesVersion: kubernetesVersion
-    dnsPrefix: clusterName
-    nodeResourceGroup: nodeResourceGroupName
-
-    agentPoolProfiles: [
-      {
-        name: 'system'
-        count: nodeCount
-        vmSize: nodeVmSize
-        mode: 'System'
-        osType: 'Linux'
-        osDiskSizeGB: 50
-        enableAutoScaling: false
-      }
-    ]
-
-    // ----- KEDA Add-on (Workload Autoscaler) -----
-    workloadAutoScalerProfile: {
-      keda: {
-        enabled: true
-      }
-    }
-
-    // ----- Workload Identity + OIDC Issuer -----
-    oidcIssuerProfile: {
-      enabled: true
-    }
-    securityProfile: {
-      workloadIdentity: {
-        enabled: true
-      }
-    }
-
-    // ----- Monitoring -----
-    addonProfiles: {
-      omsagent: {
-        enabled: true
-        config: {
-          logAnalyticsWorkspaceResourceID: logAnalyticsWorkspace.id
-        }
-      }
-    }
-
-    networkProfile: {
-      networkPlugin: 'azure'
-      networkPolicy: 'azure'
-      loadBalancerSku: 'standard'
-    }
+    nodeCount: nodeCount
+    nodeVmSize: nodeVmSize
+    nodeResourceGroupName: nodeResourceGroupName
+    logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
+    userId: userId
+    tags: tags
   }
 }
 
 // ============================================================
-// Azure Storage Account + Queue  (Scenario 01)
+// Module: DCR Association (AKS → Prometheus workspace)
 // ============================================================
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
-  name: storageAccountName
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard_LRS'
-  }
-  kind: 'StorageV2'
-  properties: {
-    minimumTlsVersion: 'TLS1_2'
-    allowBlobPublicAccess: false
-    supportsHttpsTrafficOnly: true
+module dcrAssociation './modules/dcr-association.bicep' = {
+  name: 'dcr-association'
+  params: {
+    aksClusterId: aks.outputs.aksClusterId
+    dataCollectionRuleId: monitoring.outputs.dataCollectionRuleId
   }
 }
 
-resource storageQueueService 'Microsoft.Storage/storageAccounts/queueServices@2023-05-01' = {
-  parent: storageAccount
-  name: 'default'
-}
-
-resource storageQueue 'Microsoft.Storage/storageAccounts/queueServices/queues@2023-05-01' = {
-  parent: storageQueueService
-  name: 'keda-demo-queue'
-}
-
 // ============================================================
-// Azure Service Bus Namespace + Queue  (Scenario 02)
+// Module: Prometheus Recording Rule Groups
+// Powers the Azure Managed Grafana dashboards
 // ============================================================
 
-resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' = {
-  name: serviceBusNamespaceName
-  location: location
-  tags: tags
-  sku: {
-    name: 'Standard'
-    tier: 'Standard'
+module recordingRules './modules/recording-rules.bicep' = {
+  name: 'recording-rules'
+  params: {
+    location: location
+    clusterName: clusterName
+    prometheusWorkspaceId: monitoring.outputs.prometheusWorkspaceId
+    aksClusterId: aks.outputs.aksClusterId
   }
 }
 
-resource serviceBusQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-preview' = {
-  parent: serviceBusNamespace
-  name: 'keda-demo-queue'
-  properties: {
-    maxDeliveryCount: 10
-    lockDuration: 'PT1M'
-    defaultMessageTimeToLive: 'P1D'
+// ============================================================
+// Module: Azure Storage Account + Queue  (Scenario 01)
+// ============================================================
+
+module storage './modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    storageAccountName: storageAccountName
+    location: location
+    tags: tags
+  }
+}
+
+// ============================================================
+// Module: Azure Service Bus Namespace + Queue  (Scenario 02)
+// ============================================================
+
+module serviceBus './modules/servicebus.bicep' = {
+  name: 'servicebus'
+  params: {
+    namespaceName: serviceBusNamespaceName
+    location: location
+    tags: tags
   }
 }
 
@@ -177,10 +154,12 @@ resource serviceBusQueue 'Microsoft.ServiceBus/namespaces/queues@2022-10-01-prev
 // Outputs
 // ============================================================
 
-output aksClusterName string = aksCluster.name
+output aksClusterName string = aks.outputs.aksClusterName
 output nodeResourceGroup string = nodeResourceGroupName
-output oidcIssuerUrl string = aksCluster.properties.oidcIssuerProfile.issuerURL
-output storageAccountName string = storageAccount.name
-output storageQueueName string = storageQueue.name
-output serviceBusNamespaceName string = serviceBusNamespace.name
-output serviceBusQueueName string = serviceBusQueue.name
+output oidcIssuerUrl string = aks.outputs.oidcIssuerUrl
+output storageAccountName string = storage.outputs.storageAccountName
+output storageQueueName string = storage.outputs.storageQueueName
+output serviceBusNamespaceName string = serviceBus.outputs.namespaceName
+output serviceBusQueueName string = serviceBus.outputs.queueName
+output prometheusQueryEndpoint string = monitoring.outputs.prometheusQueryEndpoint
+output grafanaUrl string = monitoring.outputs.grafanaUrl
