@@ -1,0 +1,38 @@
+# ScaledObject for Azure Service Bus Queue.
+# KEDA polls the active message count on the Service Bus queue.
+# Each replica targets processing 5 messages at a time.
+#
+#  Active messages  |  Replicas
+#  ────────────────────────────
+#        0          |     0   (scale-to-zero)
+#       1–5         |     1
+#       6–10        |     2
+#      46–50        |    10   (capped)
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: servicebus-scaler
+  namespace: keda-demo
+spec:
+  scaleTargetRef:
+    name: servicebus-consumer
+
+  minReplicaCount: 0
+  maxReplicaCount: 10
+
+  cooldownPeriod: 60
+  pollingInterval: 15
+
+  triggers:
+    - type: azure-servicebus
+      metadata:
+        # Queue to watch
+        queueName: keda-demo-queue
+        # Scale 1 replica per this many active messages
+        messageCount: "5"
+        # Namespace (for logging/visibility only when using connection string auth)
+        namespace: ""
+        cloud: AzurePublicCloud
+      authenticationRef:
+        name: azure-servicebus-auth

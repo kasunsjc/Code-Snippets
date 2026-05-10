@@ -1,0 +1,55 @@
+# Producer Job — sends 100 messages to the Azure Storage Queue.
+# Run this to trigger KEDA scale-out on the queue-consumer Deployment.
+#
+# Apply:  kubectl apply -f 04-producer-job.yaml -n keda-demo
+# Watch:  kubectl get pods -n keda-demo -w
+# Logs:   kubectl logs job/storage-queue-producer -n keda-demo
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: storage-queue-producer
+  namespace: keda-demo
+  labels:
+    app: storage-queue-producer
+    scenario: storage-queue
+spec:
+  template:
+    metadata:
+      labels:
+        app: storage-queue-producer
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: producer
+          image: mcr.microsoft.com/azure-cli:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "=== Azure Storage Queue Producer ==="
+              echo "Sending 100 messages to keda-demo-queue..."
+              for i in $(seq 1 100); do
+                az storage message put \
+                  --queue-name keda-demo-queue \
+                  --content "Task-${i}: process item at $(date -u +%H:%M:%S)" \
+                  --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
+                  --output none
+                echo "  Sent message ${i}/100"
+              done
+              echo "Done! Check queue depth with:"
+              echo "  az storage message peek --queue-name keda-demo-queue --num-messages 32 --connection-string \"\$AZURE_STORAGE_CONNECTION_STRING\""
+          env:
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-storage-secret
+                  key: connection-string
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300

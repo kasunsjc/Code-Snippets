@@ -1,0 +1,40 @@
+# Cron ScaledObject — no TriggerAuthentication required.
+#
+# Schedule (Australia/Melbourne AEDT = UTC+11):
+#   Monday–Friday  08:00  →  scale to 5 replicas  (business hours open)
+#   Monday–Friday  18:00  →  scale to 1 replica   (business hours close)
+#   Outside window         →  stays at minReplicaCount (1)
+#
+# To test immediately, change the start/end times to a window
+# that includes the current time, then re-apply.
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: cron-scaler
+  namespace: keda-demo
+spec:
+  scaleTargetRef:
+    name: cron-app
+
+  # Minimum replicas outside all cron windows.
+  # Set to 0 for scale-to-zero overnight.
+  minReplicaCount: 1
+  maxReplicaCount: 10
+
+  triggers:
+    # ---- Peak hours: Mon–Fri 08:00–18:00 Melbourne time ----
+    - type: cron
+      metadata:
+        timezone: "Australia/Melbourne"   # Change to your timezone
+        start: "0 8 * * 1-5"             # 08:00 Mon–Fri  (cron: min hour dom month dow)
+        end:   "0 18 * * 1-5"            # 18:00 Mon–Fri
+        desiredReplicas: "5"             # replicas during this window
+
+    # ---- Optional: Saturday batch window 06:00–10:00 ----
+    - type: cron
+      metadata:
+        timezone: "Australia/Melbourne"
+        start: "0 6 * * 6"               # 06:00 Saturday
+        end:   "0 10 * * 6"              # 10:00 Saturday
+        desiredReplicas: "3"

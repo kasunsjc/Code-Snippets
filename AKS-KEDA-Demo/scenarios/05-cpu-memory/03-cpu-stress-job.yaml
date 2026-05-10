@@ -1,0 +1,35 @@
+# CPU Stress Job — generates CPU load inside the cluster to trigger scale-out.
+# This job runs 'stress' to saturate the CPU of a target pod.
+#
+# Apply:  kubectl apply -f 03-cpu-stress-job.yaml -n keda-demo
+# Watch:  kubectl top pods -n keda-demo
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cpu-stress
+  namespace: keda-demo
+  labels:
+    app: cpu-stress
+    scenario: cpu-memory
+spec:
+  template:
+    metadata:
+      labels:
+        app: cpu-stress
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: stress
+          image: polinux/stress:latest
+          # --cpu 4  : spawn 4 CPU stressor workers
+          # --timeout 120 : run for 2 minutes
+          args: ["--cpu", "4", "--timeout", "120", "--verbose"]
+          resources:
+            requests:
+              cpu: "400m"
+              memory: "64Mi"
+            limits:
+              cpu: "800m"
+              memory: "128Mi"
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 120

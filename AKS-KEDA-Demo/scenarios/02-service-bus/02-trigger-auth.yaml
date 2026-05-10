@@ -1,0 +1,10 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: azure-servicebus-auth
+  namespace: keda-demo
+spec:
+  secretTargetRef:
+    - parameter: connection          # KEDA azure-servicebus trigger parameter
+      name: azure-servicebus-secret  # K8s Secret name
+      key: connection-string         # Key inside the Secret

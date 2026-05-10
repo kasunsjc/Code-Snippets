@@ -1,0 +1,42 @@
+---
+# ClusterIP Service — used by KEDA and the load generator to reach the app
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-svc
+  namespace: keda-demo
+  labels:
+    app: sample-app
+    scenario: prometheus
+spec:
+  selector:
+    app: sample-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# ServiceMonitor — used by kube-prometheus-stack (Prometheus Operator) to auto-discover scrape targets.
+# Requires the Prometheus Operator CRD to be installed (see README).
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sample-app-monitor
+  namespace: keda-demo
+  labels:
+    app: sample-app
+    # This label must match the Prometheus Operator's serviceMonitorSelector
+    release: kube-prometheus
+spec:
+  selector:
+    matchLabels:
+      app: sample-app
+  namespaceSelector:
+    matchNames:
+      - keda-demo
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

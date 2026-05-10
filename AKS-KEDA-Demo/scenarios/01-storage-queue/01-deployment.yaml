@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-consumer
+  namespace: keda-demo
+  labels:
+    app: queue-consumer
+    scenario: storage-queue
+spec:
+  # KEDA manages replica count via the ScaledObject.
+  # Setting replicas: 0 here means it starts scaled-to-zero.
+  replicas: 0
+  selector:
+    matchLabels:
+      app: queue-consumer
+  template:
+    metadata:
+      labels:
+        app: queue-consumer
+        scenario: storage-queue
+    spec:
+      containers:
+        - name: queue-consumer
+          image: mcr.microsoft.com/azure-cli:latest
+          command:
+            - /bin/bash
+            - -c
+            - |
+              echo "Queue consumer started — pod: $HOSTNAME"
+              # Simulate message processing loop.
+              # In a real app this would dequeue and process messages.
+              while true; do
+                echo "[$(date -u +%H:%M:%S)] Processing message batch..."
+                # Peek at queue length for visibility
+                az storage message peek \
+                  --queue-name keda-demo-queue \
+                  --num-messages 1 \
+                  --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
+                  --output table 2>/dev/null || true
+                # Dequeue one message
+                MSG=$(az storage message get \
+                  --queue-name keda-demo-queue \
+                  --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
+                  -o json 2>/dev/null || echo "[]")
+                if [ "$MSG" != "[]" ] && [ -n "$MSG" ]; then
+                  ID=$(echo "$MSG" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id']) if d else print('')" 2>/dev/null || echo "")
+                  POP=$(echo "$MSG" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['popReceipt']) if d else print('')" 2>/dev/null || echo "")
+                  CONTENT=$(echo "$MSG" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['content']) if d else print('')" 2>/dev/null || echo "")
+                  echo "  Consumed: $CONTENT"
+                  if [ -n "$ID" ] && [ -n "$POP" ]; then
+                    az storage message delete \
+                      --queue-name keda-demo-queue \
+                      --id "$ID" \
+                      --pop-receipt "$POP" \
+                      --connection-string "$AZURE_STORAGE_CONNECTION_STRING" 2>/dev/null || true
+                  fi
+                else
+                  echo "  No messages — waiting..."
+                fi
+                sleep 2
+              done
+          env:
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-storage-secret
+                  key: connection-string
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"

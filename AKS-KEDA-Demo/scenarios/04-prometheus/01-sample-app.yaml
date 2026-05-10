@@ -1,0 +1,117 @@
+---
+# ConfigMap with a minimal Python HTTP server that exposes a Prometheus counter.
+# The counter increments on every request to '/' and is exposed at '/metrics'.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample-app-script
+  namespace: keda-demo
+data:
+  server.py: |
+    #!/usr/bin/env python3
+    """
+    Minimal HTTP server with a Prometheus request counter.
+    Endpoints:
+      GET /         → returns 200 with a greeting (increments counter)
+      GET /metrics  → Prometheus text format metrics
+    """
+    import http.server
+    import threading
+    import time
+
+    request_count = 0
+    start_time    = time.time()
+    lock          = threading.Lock()
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            pass   # suppress default access log
+
+        def do_GET(self):
+            global request_count
+            if self.path == "/metrics":
+                uptime = time.time() - start_time
+                with lock:
+                    count = request_count
+                body = (
+                    "# HELP http_requests_total Total HTTP requests received\n"
+                    "# TYPE http_requests_total counter\n"
+                    f'http_requests_total{{pod="{__import__("os").environ.get("HOSTNAME","unknown")}",namespace="keda-demo"}} {count}\n'
+                    "# HELP uptime_seconds Application uptime in seconds\n"
+                    "# TYPE uptime_seconds gauge\n"
+                    f"uptime_seconds {uptime:.2f}\n"
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; version=0.0.4")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path == "/":
+                with lock:
+                    request_count += 1
+                    count = request_count
+                body = f"Hello from {__import__('os').environ.get('HOSTNAME','?')} — request #{count}\n".encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            else:
+                self.send_response(404)
+                self.end_headers()
+
+    server = http.server.HTTPServer(("0.0.0.0", 8080), Handler)
+    print(f"Sample app listening on :8080")
+    server.serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  namespace: keda-demo
+  labels:
+    app: sample-app
+    scenario: prometheus
+spec:
+  replicas: 1    # KEDA will scale this based on Prometheus query result
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+        scenario: prometheus
+      annotations:
+        # Prometheus scrape annotations (for basic Prometheus setups without ServiceMonitor CRD)
+        prometheus.io/scrape: "true"
+        prometheus.io/port:   "8080"
+        prometheus.io/path:   "/metrics"
+    spec:
+      containers:
+        - name: sample-app
+          image: python:3.12-slim
+          command: ["python3", "/app/server.py"]
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: script
+              mountPath: /app
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: script
+          configMap:
+            name: sample-app-script

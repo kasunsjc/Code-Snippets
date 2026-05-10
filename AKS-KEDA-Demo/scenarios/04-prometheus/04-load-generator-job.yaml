@@ -1,0 +1,57 @@
+# Load Generator Job — sends 5000 HTTP requests to the sample-app Service.
+# This drives up the http_requests_total counter which Prometheus will scrape,
+# and KEDA will use to trigger scale-out.
+#
+# Apply:  kubectl apply -f 04-load-generator-job.yaml -n keda-demo
+# Logs:   kubectl logs job/load-generator -n keda-demo
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-generator
+  namespace: keda-demo
+  labels:
+    app: load-generator
+    scenario: prometheus
+spec:
+  template:
+    metadata:
+      labels:
+        app: load-generator
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: load-generator
+          image: alpine:3.19
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== Load Generator ==="
+              echo "Installing curl..."
+              apk add --no-cache curl --quiet
+
+              TARGET="http://sample-app-svc.keda-demo.svc.cluster.local"
+              TOTAL=5000
+              CONCURRENT=20
+
+              echo "Sending ${TOTAL} requests to ${TARGET} (${CONCURRENT} at a time)..."
+              sent=0
+              while [ $sent -lt $TOTAL ]; do
+                # Fire CONCURRENT requests in parallel
+                for i in $(seq 1 $CONCURRENT); do
+                  curl -s "$TARGET" -o /dev/null &
+                done
+                wait
+                sent=$((sent + CONCURRENT))
+                echo "  Progress: ${sent}/${TOTAL} requests sent"
+              done
+              echo "Load generation complete. Watching KEDA scale down in ~90s..."
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "128Mi"
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 300
