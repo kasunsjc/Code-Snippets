@@ -1,0 +1,92 @@
+---
+# demo-app.yaml
+# A simple nginx deployment + ClusterIP service + a verification Pod
+# Deploy this INSIDE the vcluster to observe isolation from the host.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-app
+  labels:
+    demo: basic-vcluster
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-demo
+  namespace: demo-app
+  labels:
+    app: nginx-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx-demo
+  template:
+    metadata:
+      labels:
+        app: nginx-demo
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-demo
+  namespace: demo-app
+spec:
+  selector:
+    app: nginx-demo
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+# A "verify" pod — use this to test DNS and connectivity inside the vcluster
+apiVersion: v1
+kind: Pod
+metadata:
+  name: verify-pod
+  namespace: demo-app
+  labels:
+    demo: verify
+spec:
+  containers:
+    - name: curl
+      image: curlimages/curl:8.6.0
+      command: ["sleep", "3600"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+  restartPolicy: Always

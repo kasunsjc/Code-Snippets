@@ -1,0 +1,43 @@
+# controlPlane — use k3s as the virtual Kubernetes distro (lightweight, fast startup)
+controlPlane:
+  distro:
+    k3s:
+      enabled: true
+      # Use the same version as the host AKS cluster to avoid skew issues
+      image:
+        tag: "v1.31.0-k3s1"
+
+  # Resource requests/limits for the vcluster control plane StatefulSet
+  statefulSet:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# sync — controls what the vcluster syncs to/from the host cluster
+sync:
+  # fromHost: what the vcluster can "see" from the host
+  fromHost:
+    nodes:
+      enabled: true
+      # Sync all host nodes so vcluster pods can be scheduled on them
+      selector:
+        all: true
+
+  # toHost: what gets synced INTO the host cluster namespace
+  toHost:
+    services:
+      enabled: true
+    persistentVolumeClaims:
+      enabled: true
+    ingresses:
+      enabled: false    # enabled in demo 05
+    networkPolicies:
+      enabled: true
+    configMaps:
+      enabled: true
+    secrets:
+      enabled: true
