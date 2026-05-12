@@ -1,0 +1,63 @@
+---
+# host-namespace-quota.yaml
+# Apply this to the HOST namespace BEFORE creating the vcluster.
+# It acts as the hard ceiling for all resources (control plane + workloads).
+
+# ResourceQuota — overall cap for the entire namespace
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vcluster-quota
+  # Applied to: kubectl apply -f host-namespace-quota.yaml -n vc-limits
+spec:
+  hard:
+    # Compute
+    requests.cpu: "4"
+    requests.memory: 4Gi
+    limits.cpu: "8"
+    limits.memory: 8Gi
+    # Pods
+    pods: "30"
+    # Services
+    services: "20"
+    services.loadbalancers: "2"
+    services.nodeports: "5"
+    # Storage
+    persistentvolumeclaims: "10"
+    requests.storage: 50Gi
+    # Config/Secrets
+    configmaps: "30"
+    secrets: "30"
+
+---
+# LimitRange — sets defaults for pods that don't specify resources
+# Prevents "no resources = unlimited" from depleting the quota silently
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vcluster-limitrange
+spec:
+  limits:
+    - type: Container
+      # Default applied when no resources are specified
+      default:
+        cpu: 200m
+        memory: 256Mi
+      defaultRequest:
+        cpu: 50m
+        memory: 64Mi
+      # Hard max per container
+      max:
+        cpu: "2"
+        memory: 2Gi
+      # Hard min per container
+      min:
+        cpu: 10m
+        memory: 16Mi
+    - type: Pod
+      max:
+        cpu: "4"
+        memory: 4Gi
+    - type: PersistentVolumeClaim
+      max:
+        storage: 10Gi

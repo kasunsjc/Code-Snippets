@@ -1,0 +1,39 @@
+# vcluster-with-limits.yaml
+# vcluster config with explicit resource requests/limits on the control plane.
+# Required when the host namespace has a ResourceQuota (pods must declare resources).
+
+controlPlane:
+  distro:
+    k3s:
+      enabled: true
+      image:
+        tag: "v1.31.0-k3s1"
+
+  statefulSet:
+    # IMPORTANT: When a ResourceQuota is in place on the host namespace,
+    # you MUST set resources on the StatefulSet or it will fail admission.
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    labels:
+      demo: resource-limits
+
+sync:
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true
+  toHost:
+    services:
+      enabled: true
+    persistentVolumeClaims:
+      enabled: true
+    configMaps:
+      enabled: true
+    secrets:
+      enabled: true

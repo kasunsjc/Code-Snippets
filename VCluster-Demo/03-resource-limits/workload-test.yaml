@@ -1,0 +1,70 @@
+---
+# workload-test.yaml
+# Deploy INSIDE the vcluster to test resource quota enforcement.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quota-test
+
+---
+# A well-behaved deployment with proper resource requests
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: well-behaved-app
+  namespace: quota-test
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: well-behaved
+  template:
+    metadata:
+      labels:
+        app: well-behaved
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          # Resources explicitly set — required with a quota
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: well-behaved-app
+  namespace: quota-test
+spec:
+  selector:
+    app: well-behaved
+  ports:
+    - port: 80
+      targetPort: 80
+
+---
+# A Job to check the LimitRange defaults are applied
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: check-limits
+  namespace: quota-test
+spec:
+  template:
+    spec:
+      containers:
+        - name: checker
+          image: curlimages/curl:8.6.0
+          # No resources set intentionally — LimitRange should inject defaults
+          command: ["sh", "-c", "echo 'Resource defaults injected by LimitRange:'; cat /proc/meminfo | head -3; sleep 5"]
+      restartPolicy: Never
+  backoffLimit: 1
