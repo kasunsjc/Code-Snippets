@@ -1,0 +1,68 @@
+---
+# tenant-a-app.yaml — Team Alpha's workloads (deploy inside tenant-a vcluster)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-alpha
+  labels:
+    team: alpha
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alpha-frontend
+  namespace: team-alpha
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: alpha-frontend
+  template:
+    metadata:
+      labels:
+        app: alpha-frontend
+        team: alpha
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          env:
+            - name: TEAM
+              value: "alpha"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alpha-frontend
+  namespace: team-alpha
+spec:
+  selector:
+    app: alpha-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+# Team Alpha's ConfigMap — only visible inside their vcluster
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alpha-config
+  namespace: team-alpha
+data:
+  team: "alpha"
+  environment: "demo"
+  feature-flags: "featureX=true,featureY=false"

@@ -1,0 +1,40 @@
+# vcluster configuration for Team Alpha
+# Slightly larger resource limits to simulate a "premium" tenant
+
+controlPlane:
+  distro:
+    k3s:
+      enabled: true
+      image:
+        tag: "v1.31.0-k3s1"
+
+  statefulSet:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # Custom labels help platform engineers identify the tenant
+    labels:
+      tenant: team-alpha
+      tier: standard
+
+sync:
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true
+  toHost:
+    services:
+      enabled: true
+    persistentVolumeClaims:
+      enabled: true
+    configMaps:
+      enabled: true
+    secrets:
+      enabled: true
+    networkPolicies:
+      enabled: true

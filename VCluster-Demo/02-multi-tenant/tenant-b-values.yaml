@@ -1,0 +1,39 @@
+# vcluster configuration for Team Beta
+# Smaller resource limits to simulate a "basic" tenant
+
+controlPlane:
+  distro:
+    k3s:
+      enabled: true
+      image:
+        tag: "v1.31.0-k3s1"
+
+  statefulSet:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+    labels:
+      tenant: team-beta
+      tier: basic
+
+sync:
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true
+  toHost:
+    services:
+      enabled: true
+    persistentVolumeClaims:
+      enabled: true
+    configMaps:
+      enabled: true
+    secrets:
+      enabled: true
+    networkPolicies:
+      enabled: true

@@ -1,0 +1,65 @@
+---
+# tenant-b-app.yaml — Team Beta's workloads (deploy inside tenant-b vcluster)
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: team-beta
+  labels:
+    team: beta
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beta-api
+  namespace: team-beta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: beta-api
+  template:
+    metadata:
+      labels:
+        app: beta-api
+        team: beta
+    spec:
+      containers:
+        - name: httpbin
+          image: kennethreitz/httpbin:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: beta-api
+  namespace: team-beta
+spec:
+  selector:
+    app: beta-api
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+# Team Beta's ConfigMap — completely separate from Team Alpha
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beta-config
+  namespace: team-beta
+data:
+  team: "beta"
+  environment: "demo"
+  api-version: "v2"
