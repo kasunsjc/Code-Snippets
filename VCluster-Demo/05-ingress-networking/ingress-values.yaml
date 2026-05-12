@@ -1,0 +1,51 @@
+# ingress-values.yaml — vcluster configured for Ingress and LoadBalancer sync
+
+controlPlane:
+  distro:
+    k3s:
+      enabled: true
+      image:
+        tag: "v1.31.0-k3s1"
+
+  statefulSet:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+sync:
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true
+
+    # Sync IngressClasses from host — required for Ingress className field
+    ingressClasses:
+      enabled: true
+
+    storageClasses:
+      enabled: true
+
+  toHost:
+    services:
+      enabled: true
+
+    persistentVolumeClaims:
+      enabled: true
+
+    configMaps:
+      enabled: true
+
+    secrets:
+      enabled: true
+
+    # Enable Ingress sync — REQUIRED for Ingress resources to reach the host IC
+    ingresses:
+      enabled: true
+
+    networkPolicies:
+      enabled: true

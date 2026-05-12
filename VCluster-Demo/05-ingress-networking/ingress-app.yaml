@@ -1,0 +1,78 @@
+---
+# ingress-app.yaml
+# Deploy INSIDE the vcluster.
+# Replace REPLACE_WITH_HOST with e.g. echo.<EXTERNAL_IP>.nip.io
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-test
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-server
+  namespace: ingress-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: echo
+  template:
+    metadata:
+      labels:
+        app: echo
+    spec:
+      containers:
+        - name: echo
+          image: ealen/echo-server:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          env:
+            - name: PORT
+              value: "80"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-server
+  namespace: ingress-test
+spec:
+  selector:
+    app: echo
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echo-ingress
+  namespace: ingress-test
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: REPLACE_WITH_HOST
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: echo-server
+                port:
+                  number: 80
