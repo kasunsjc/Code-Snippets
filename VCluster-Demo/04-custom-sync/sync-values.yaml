@@ -1,0 +1,89 @@
+# sync-values.yaml — vcluster with extended sync configuration
+
+controlPlane:
+  distro:
+    k3s:
+      enabled: true
+      image:
+        tag: "v1.31.0-k3s1"
+
+  statefulSet:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# =============================================================================
+# Sync Configuration
+# =============================================================================
+sync:
+  # ─────────────────────────────────────────────
+  # fromHost: resources synced FROM host INTO vcluster
+  # ─────────────────────────────────────────────
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true     # Sync all host nodes
+
+    # Sync IngressClasses from host so tenants can reference nginx/traefik etc.
+    ingressClasses:
+      enabled: true
+
+    # Sync StorageClasses from host (enabled by default in v0.20+)
+    storageClasses:
+      enabled: true
+
+    # Sync specific ConfigMaps from the host into the vcluster
+    # Useful for platform-wide config (CA bundles, DNS overrides, etc.)
+    configMaps:
+      enabled: true
+      mappings:
+        - fromNamespace: vc-sync            # host namespace
+          toNamespace: kube-system          # vcluster namespace
+          selector:
+            labelSelector:
+              matchLabels:
+                sync-to-vcluster: "true"
+
+    # Sync specific Secrets from the host into the vcluster
+    secrets:
+      enabled: true
+      mappings:
+        - fromNamespace: vc-sync
+          toNamespace: kube-system
+          selector:
+            labelSelector:
+              matchLabels:
+                sync-to-vcluster: "true"
+
+  # ─────────────────────────────────────────────
+  # toHost: resources synced FROM vcluster TO host
+  # ─────────────────────────────────────────────
+  toHost:
+    services:
+      enabled: true
+
+    persistentVolumeClaims:
+      enabled: true
+
+    configMaps:
+      enabled: true
+
+    secrets:
+      enabled: true
+
+    # Enable Ingress sync — lets the host Ingress controller serve vcluster routes
+    ingresses:
+      enabled: true
+
+    # Sync NetworkPolicies so host-level network enforcement applies
+    networkPolicies:
+      enabled: true
+
+    # Sync PodDisruptionBudgets
+    podDisruptionBudgets:
+      enabled: true

@@ -1,0 +1,24 @@
+---
+# test-configmap.yaml
+# Create this on the HOST (in namespace vc-sync).
+# The vcluster sync-values.yaml will pull it into kube-system of the vcluster.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-platform-config
+  namespace: vc-sync       # host namespace — same as the vcluster namespace
+  labels:
+    sync-to-vcluster: "true"   # required label for fromHost sync selector
+data:
+  # Platform-wide settings pushed to all vclusters by the platform team
+  cluster-region: "australiaeast"
+  container-registry: "myregistry.azurecr.io"
+  log-level: "info"
+  dns-domain: "cluster.local"
+  platform-version: "2026.05"
+  # CA bundle placeholder (real deployments would contain the actual cert)
+  ca-bundle: |
+    -----BEGIN CERTIFICATE-----
+    # Replace with actual platform CA certificate
+    -----END CERTIFICATE-----
