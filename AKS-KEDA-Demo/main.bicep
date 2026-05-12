@@ -31,7 +31,7 @@ param kubernetesVersion string = '1.31'
 param nodeCount int = 2
 
 @description('VM size for agent nodes.')
-param nodeVmSize string = 'Standard_DS2_v2'
+param nodeVmSize string = 'Standard_D2s_v4'
 
 @description('Entra ID Object ID of the operator. Grants Grafana Admin and AKS RBAC Cluster Admin. Leave empty to skip.')
 param userId string = ''
@@ -48,7 +48,7 @@ param tags object = {
 // ============================================================
 
 var storageAccountName = take(replace(toLower('st${clusterName}keda'), '-', ''), 24)
-var serviceBusNamespaceName = '${clusterName}-sb'
+var serviceBusNamespaceName = '${clusterName}-${take(uniqueString(resourceGroup().id, clusterName), 6)}'
 var nodeResourceGroupName = 'rg-${clusterName}-nodes'
 
 // ============================================================
