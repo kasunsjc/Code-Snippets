@@ -58,16 +58,24 @@ delete_resource_group() {
 }
 
 remove_kubectl_context() {
-    print_message "Removing kubectl context..."
-    
-    CONTEXT_NAME=$(kubectl config get-contexts -o name | grep "$RESOURCE_GROUP_NAME" || true)
-    
-    if [ -n "$CONTEXT_NAME" ]; then
-        kubectl config delete-context "$CONTEXT_NAME" || true
-        print_message "Kubectl context removed!"
-    else
-        print_message "No kubectl context found for this cluster."
+    print_message "Removing AKS kubeconfig entries..."
+
+    local cluster_names
+    cluster_names=$(az aks list --resource-group "$RESOURCE_GROUP_NAME" --query "[].name" -o tsv 2>/dev/null || true)
+
+    if [ -z "$cluster_names" ]; then
+        print_message "No AKS clusters found in resource group."
+        return
     fi
+
+    while IFS= read -r cluster; do
+        [ -z "$cluster" ] && continue
+        kubectl config delete-context "$cluster" 2>/dev/null || true
+        kubectl config delete-cluster "$cluster" 2>/dev/null || true
+        kubectl config delete-user "clusterUser_${RESOURCE_GROUP_NAME}_${cluster}" 2>/dev/null || true
+        kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP_NAME}_${cluster}" 2>/dev/null || true
+        print_message "Removed kubeconfig entries for: $cluster"
+    done <<< "$cluster_names"
 }
 
 # Main execution
@@ -75,8 +83,8 @@ main() {
     print_message "Starting cleanup process..."
     
     confirm_deletion
-    remove_kubectl_context
     delete_resource_group
+    remove_kubectl_context
     
     print_message "Cleanup completed successfully!"
     echo ""

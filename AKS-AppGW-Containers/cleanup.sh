@@ -12,6 +12,26 @@ NC='\033[0m' # No Color
 
 RESOURCE_GROUP_NAME="rg-agfc-demo"
 
+cleanup_aks_contexts() {
+    print_message "Removing AKS kubeconfig entries..."
+    local cluster_names
+    cluster_names=$(az aks list --resource-group "$RESOURCE_GROUP_NAME" --query "[].name" -o tsv 2>/dev/null || true)
+
+    if [[ -z "$cluster_names" ]]; then
+        print_message "No AKS clusters found in resource group."
+        return
+    fi
+
+    while IFS= read -r cluster; do
+        [[ -z "$cluster" ]] && continue
+        kubectl config delete-context "$cluster" 2>/dev/null || true
+        kubectl config delete-cluster "$cluster" 2>/dev/null || true
+        kubectl config delete-user "clusterUser_${RESOURCE_GROUP_NAME}_${cluster}" 2>/dev/null || true
+        kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP_NAME}_${cluster}" 2>/dev/null || true
+        print_message "Removed kubeconfig entries for: $cluster"
+    done <<< "$cluster_names"
+}
+
 print_message() {
     echo -e "${GREEN}==>${NC} $1"
 }
@@ -50,6 +70,8 @@ sleep 30
 # Delete the resource group
 print_message "Deleting resource group: ${RESOURCE_GROUP_NAME}..."
 az group delete --name "${RESOURCE_GROUP_NAME}" --yes --no-wait
+
+cleanup_aks_contexts
 
 print_message "Cleanup initiated. Resource group deletion is running in the background."
 echo ""

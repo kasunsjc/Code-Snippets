@@ -63,6 +63,7 @@ fi
 # Clean up kubectl contexts
 echo -e "${YELLOW}Cleaning up kubectl contexts...${NC}"
 CONTEXTS=$(kubectl config get-contexts -o name 2>/dev/null | grep -iE "fleet|member|hub" || true)
+AKS_CLUSTERS=$(az aks list --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv 2>/dev/null || true)
 
 if [ ! -z "$CONTEXTS" ]; then
     for context in $CONTEXTS; do
@@ -74,6 +75,16 @@ if [ ! -z "$CONTEXTS" ]; then
     echo -e "${GREEN}✓ Kubectl contexts cleaned up${NC}"
 else
     echo -e "${YELLOW}No fleet-related contexts found${NC}"
+fi
+
+if [ ! -z "$AKS_CLUSTERS" ]; then
+    for cluster in $AKS_CLUSTERS; do
+        echo "  Removing AKS entries: $cluster"
+        kubectl config delete-context "$cluster" 2>/dev/null || true
+        kubectl config delete-cluster "$cluster" 2>/dev/null || true
+        kubectl config delete-user "clusterUser_${RESOURCE_GROUP}_${cluster}" 2>/dev/null || true
+        kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP}_${cluster}" 2>/dev/null || true
+    done
 fi
 
 echo ""

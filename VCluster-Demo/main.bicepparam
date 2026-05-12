@@ -3,7 +3,7 @@ using './main.bicep'
 param location         = 'australiaeast'
 param namePrefix       = 'vcluster'
 param environment      = 'demo'
-param kubernetesVersion = '1.31'
+param kubernetesVersion = '1.33'
 param systemNodeVmSize = 'Standard_D2s_v3'
 param systemNodeCount  = 2
 param userNodeVmSize   = 'Standard_D4s_v3'

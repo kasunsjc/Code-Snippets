@@ -15,6 +15,7 @@ NC='\033[0m' # No Color
 RESOURCE_GROUP="${RESOURCE_GROUP:-}"
 DEPLOYMENT_NAME="main-subscription"
 PARAM_FILE="../main-subscription.bicepparam"
+AKS_CLUSTER_NAMES=""
 
 # Functions
 print_info() {
@@ -93,6 +94,31 @@ cleanup_resources() {
     fi
 }
 
+discover_aks_clusters() {
+    AKS_CLUSTER_NAMES=$(az aks list --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv 2>/dev/null || true)
+}
+
+cleanup_aks_contexts() {
+    if ! command -v kubectl >/dev/null 2>&1; then
+        return
+    fi
+
+    if [ -z "$AKS_CLUSTER_NAMES" ]; then
+        print_info "No AKS clusters found for kubeconfig cleanup."
+        return
+    fi
+
+    print_info "Removing AKS kubeconfig entries..."
+    while IFS= read -r cluster; do
+        [ -z "$cluster" ] && continue
+        kubectl config delete-context "$cluster" 2>/dev/null || true
+        kubectl config delete-cluster "$cluster" 2>/dev/null || true
+        kubectl config delete-user "clusterUser_${RESOURCE_GROUP}_${cluster}" 2>/dev/null || true
+        kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP}_${cluster}" 2>/dev/null || true
+        print_info "Removed kubeconfig entries for: $cluster"
+    done <<< "$AKS_CLUSTER_NAMES"
+}
+
 # Main execution
 main() {
     print_info "Falco AKS Demo Cleanup"
@@ -100,7 +126,9 @@ main() {
     echo ""
     
     confirm_deletion
+    discover_aks_clusters
     cleanup_resources
+    cleanup_aks_contexts
     
     print_info "\nCleanup completed!"
 }

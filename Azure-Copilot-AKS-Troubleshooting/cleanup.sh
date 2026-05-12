@@ -12,6 +12,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 RESOURCE_GROUP_NAME="rg-copilot-aks-demo"
+AKS_NAME="copilot-aks-demo"
 
 print_message() {
     echo -e "${GREEN}==>${NC} $1"
@@ -36,17 +37,19 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
     exit 0
 fi
 
-# Remove kubectl context
-print_message "Removing kubectl context..."
-kubectl config delete-context "copilot-aks-demo" 2>/dev/null || true
-kubectl config delete-cluster "copilot-aks-demo" 2>/dev/null || true
-
 # Delete resource group
 print_message "Deleting resource group: $RESOURCE_GROUP_NAME (this takes a few minutes)..."
 az group delete \
     --name "$RESOURCE_GROUP_NAME" \
     --yes \
     --no-wait
+
+# Remove kubectl context after cleanup is initiated
+print_message "Removing AKS kubeconfig entries..."
+kubectl config delete-context "$AKS_NAME" 2>/dev/null || true
+kubectl config delete-cluster "$AKS_NAME" 2>/dev/null || true
+kubectl config delete-user "clusterUser_${RESOURCE_GROUP_NAME}_${AKS_NAME}" 2>/dev/null || true
+kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP_NAME}_${AKS_NAME}" 2>/dev/null || true
 
 print_message "Resource group deletion initiated (running in background)."
 echo ""

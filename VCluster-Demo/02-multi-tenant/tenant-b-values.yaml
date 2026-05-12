@@ -2,12 +2,6 @@
 # Smaller resource limits to simulate a "basic" tenant
 
 controlPlane:
-  distro:
-    k3s:
-      enabled: true
-      image:
-        tag: "v1.31.0-k3s1"
-
   statefulSet:
     resources:
       requests:

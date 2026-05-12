@@ -80,8 +80,8 @@ main() {
     print_message "Starting AKS ACNS cleanup..."
 
     confirm_deletion
-    remove_kubectl_context
     delete_resource_group
+    remove_kubectl_context
 
     echo ""
     print_message "Cleanup completed successfully!"

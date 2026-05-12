@@ -1,12 +1,6 @@
 # sync-values.yaml — vcluster with extended sync configuration
 
 controlPlane:
-  distro:
-    k3s:
-      enabled: true
-      image:
-        tag: "v1.31.0-k3s1"
-
   statefulSet:
     resources:
       requests:

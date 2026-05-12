@@ -3,12 +3,6 @@
 # Required when the host namespace has a ResourceQuota (pods must declare resources).
 
 controlPlane:
-  distro:
-    k3s:
-      enabled: true
-      image:
-        tag: "v1.31.0-k3s1"
-
   statefulSet:
     # IMPORTANT: When a ResourceQuota is in place on the host namespace,
     # you MUST set resources on the StatefulSet or it will fail admission.

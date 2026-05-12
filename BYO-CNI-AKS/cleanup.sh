@@ -36,13 +36,8 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Remove kubectl context
+# Capture AKS cluster name first, then remove kubeconfig entries at script end
 AKS_CLUSTER_NAME=$(az aks list --resource-group "$RESOURCE_GROUP_NAME" --query "[0].name" --output tsv 2>/dev/null || echo "")
-if [ -n "$AKS_CLUSTER_NAME" ]; then
-    print_message "Removing kubectl context for $AKS_CLUSTER_NAME..."
-    kubectl config delete-context "$AKS_CLUSTER_NAME" 2>/dev/null || true
-    kubectl config delete-cluster "$AKS_CLUSTER_NAME" 2>/dev/null || true
-fi
 
 # Delete resource group
 print_message "Deleting resource group: $RESOURCE_GROUP_NAME..."
@@ -53,5 +48,14 @@ az group delete \
 
 print_message "Resource group deletion initiated (running in background)."
 print_message "Use 'az group show -n $RESOURCE_GROUP_NAME' to check deletion status."
+
+if [ -n "$AKS_CLUSTER_NAME" ]; then
+    print_message "Removing AKS kubeconfig entries for $AKS_CLUSTER_NAME..."
+    kubectl config delete-context "$AKS_CLUSTER_NAME" 2>/dev/null || true
+    kubectl config delete-cluster "$AKS_CLUSTER_NAME" 2>/dev/null || true
+    kubectl config delete-user "clusterUser_${RESOURCE_GROUP_NAME}_${AKS_CLUSTER_NAME}" 2>/dev/null || true
+    kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP_NAME}_${AKS_CLUSTER_NAME}" 2>/dev/null || true
+fi
+
 echo ""
 print_message "Cleanup complete!"

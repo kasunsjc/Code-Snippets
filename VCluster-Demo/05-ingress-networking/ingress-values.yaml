@@ -1,12 +1,6 @@
 # ingress-values.yaml — vcluster configured for Ingress and LoadBalancer sync
 
 controlPlane:
-  distro:
-    k3s:
-      enabled: true
-      image:
-        tag: "v1.31.0-k3s1"
-
   statefulSet:
     resources:
       requests:

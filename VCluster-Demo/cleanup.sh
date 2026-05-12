@@ -14,6 +14,35 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 DEFAULT_RG="rg-vcluster-demo"
+AKS_CLUSTER_NAMES=""
+
+discover_aks_clusters() {
+  if ! command -v az &> /dev/null; then
+    return
+  fi
+  AKS_CLUSTER_NAMES=$(az aks list --resource-group "$RESOURCE_GROUP" --query "[].name" -o tsv 2>/dev/null || true)
+}
+
+cleanup_aks_contexts() {
+  if ! command -v kubectl &> /dev/null; then
+    return
+  fi
+
+  echo -e "${YELLOW}Removing AKS kubeconfig contexts...${NC}"
+  if [[ -z "$AKS_CLUSTER_NAMES" ]]; then
+    echo "  No AKS clusters discovered in resource group '$RESOURCE_GROUP'."
+    return
+  fi
+
+  while IFS= read -r cluster; do
+    [[ -z "$cluster" ]] && continue
+    kubectl config delete-context "$cluster" 2>/dev/null || true
+    kubectl config delete-cluster "$cluster" 2>/dev/null || true
+    kubectl config delete-user "clusterUser_${RESOURCE_GROUP}_${cluster}" 2>/dev/null || true
+    kubectl config delete-user "clusterAdmin_${RESOURCE_GROUP}_${cluster}" 2>/dev/null || true
+    echo -e "${GREEN}  ✓ Removed kubeconfig entries for $cluster${NC}"
+  done <<< "$AKS_CLUSTER_NAMES"
+}
 
 echo -e "${RED}======================================${NC}"
 echo -e "${RED}  VCluster Demo — Full Cleanup        ${NC}"
@@ -76,6 +105,7 @@ echo "  This may take 5-10 minutes..."
 
 # First check if the resource group exists
 if az group exists --name "$RESOURCE_GROUP" | grep -q true; then
+  discover_aks_clusters
   # az group delete: delete the resource group and all resources in it
   # --yes: skip confirmation prompt
   # --no-wait: submit delete request and return immediately (delete happens in background)
@@ -91,6 +121,8 @@ if az group exists --name "$RESOURCE_GROUP" | grep -q true; then
 else
   echo -e "${YELLOW}  Resource group '$RESOURCE_GROUP' not found — skipping${NC}"
 fi
+
+cleanup_aks_contexts
 
 echo ""
 echo -e "${GREEN}Cleanup complete.${NC}"

@@ -1,12 +1,4 @@
-# controlPlane — use k3s as the virtual Kubernetes distro (lightweight, fast startup)
 controlPlane:
-  distro:
-    k3s:
-      enabled: true
-      # Use the same version as the host AKS cluster to avoid skew issues
-      image:
-        tag: "v1.31.0-k3s1"
-
   # Resource requests/limits for the vcluster control plane StatefulSet
   statefulSet:
     resources:
