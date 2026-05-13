@@ -1,0 +1,107 @@
+# test-persistence.yaml
+# Deploys a StatefulSet with a PVC to demonstrate that application state
+# (data written to disk) survives a vcluster control plane restart.
+#
+# This is a key advantage of embedded etcd over SQLite: even if the vcluster
+# pod is restarted, etcd state is durable and Kubernetes resource definitions
+# (including PVC bindings and StatefulSet specs) are preserved.
+#
+# What this deploys:
+#   - A PersistentVolumeClaim (backed by Azure Disk via AKS managed-csi)
+#   - A simple Nginx StatefulSet that writes a timestamp to the PVC on startup
+#   - A Service exposing the StatefulSet
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: demo-data-pvc
+  namespace: default
+  labels:
+    app: persistence-demo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: persistence-demo
+  namespace: default
+  labels:
+    app: persistence-demo
+spec:
+  serviceName: persistence-demo
+  replicas: 1
+  selector:
+    matchLabels:
+      app: persistence-demo
+  template:
+    metadata:
+      labels:
+        app: persistence-demo
+    spec:
+      initContainers:
+        # Write a startup timestamp to the PVC on every pod start.
+        # After a vcluster restart, the file will contain previous entries,
+        # proving that both etcd state (StatefulSet definition) and PVC data
+        # (file contents) survived.
+        - name: write-timestamp
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Pod started at: $(date)" >> /data/startup-log.txt
+              echo "Hostname: $HOSTNAME"     >> /data/startup-log.txt
+              echo "---"                     >> /data/startup-log.txt
+          volumeMounts:
+            - name: demo-data
+              mountPath: /data
+      containers:
+        - name: app
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          # Serve the startup log as a static file
+          command:
+            - sh
+            - -c
+            - |
+              cp /data/startup-log.txt /usr/share/nginx/html/index.html
+              nginx -g "daemon off;"
+          volumeMounts:
+            - name: demo-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+      volumes:
+        - name: demo-data
+          persistentVolumeClaim:
+            claimName: demo-data-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: persistence-demo
+  namespace: default
+  labels:
+    app: persistence-demo
+spec:
+  selector:
+    app: persistence-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+  type: ClusterIP

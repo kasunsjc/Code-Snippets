@@ -116,12 +116,19 @@ VCluster-Demo/
 │   ├── test-secret-host.yaml
 │   └── setup-sync.sh
 │
-└── 05-ingress-networking/           ← Demo 05: Internet exposure
+├── 05-ingress-networking/           ← Demo 05: Internet exposure
+│   ├── README.md
+│   ├── ingress-values.yaml
+│   ├── ingress-app.yaml
+│   ├── install-nginx-ingress.sh
+│   └── setup-ingress.sh
+│
+└── 06-etcd-datastore/               ← Demo 06: Embedded etcd + HA
     ├── README.md
-    ├── ingress-values.yaml
-    ├── ingress-app.yaml
-    ├── install-nginx-ingress.sh
-    └── setup-ingress.sh
+    ├── etcd-values.yaml
+    ├── test-persistence.yaml
+    ├── setup-etcd-demo.sh
+    └── cleanup-etcd.sh
 ```
 
 ---
@@ -183,6 +190,11 @@ chmod +x setup-sync.sh
 cd ../05-ingress-networking
 chmod +x install-nginx-ingress.sh setup-ingress.sh
 ./setup-ingress.sh
+
+# Demo 06 — Embedded etcd + HA (~20 min)
+cd ../06-etcd-datastore
+chmod +x setup-etcd-demo.sh cleanup-etcd.sh
+./setup-etcd-demo.sh
 ```
 
 ### Step 4 — Clean up everything
@@ -298,6 +310,7 @@ sync:
 | 03 | [Resource Limits](03-resource-limits/README.md) | ResourceQuota, LimitRange, sizing | 10 min |
 | 04 | [Custom Sync](04-custom-sync/README.md) | toHost/fromHost sync config | 15 min |
 | 05 | [Ingress & Networking](05-ingress-networking/README.md) | NGINX IC, real traffic, ExternalName | 20 min |
+| 06 | [etcd Datastore](06-etcd-datastore/README.md) | Embedded etcd, HA replicas, persistence | 20 min |
 
 ---
 

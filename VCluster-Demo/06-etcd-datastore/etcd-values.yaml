@@ -1,0 +1,82 @@
+# etcd-values.yaml — vcluster configured with embedded etcd as the backing store
+#
+# DEFAULT (SQLite):
+#   vcluster stores all Kubernetes state in a single SQLite file inside the
+#   control plane pod.  Simple and lightweight but:
+#     - Single replica only (no HA)
+#     - State stored on ephemeral pod storage unless PVC is attached
+#     - SQLite WAL file can grow unbounded under heavy write load
+#
+# THIS CONFIG (Embedded etcd):
+#   Replaces SQLite with a full etcd cluster running *inside* the vcluster pod.
+#   Benefits:
+#     - Enables High Availability (multiple control plane replicas)
+#     - Battle-tested Kubernetes-native datastore
+#     - Supports etcd snapshot/restore workflows
+#     - Suitable for production workloads requiring persistence guarantees
+#   Trade-off:
+#     - Higher memory footprint (~50–100 MB per replica vs ~10 MB for SQLite)
+#     - Requires a PVC per replica for durable storage
+
+controlPlane:
+  # ── Backing store ────────────────────────────────────────────────────────────
+  backingStore:
+    # embeddedEtcd: runs a real etcd instance inside the vcluster StatefulSet pod.
+    # This is mutually exclusive with embeddedDatabase (SQLite) — enabling etcd
+    # automatically disables the SQLite backend.
+    embeddedEtcd:
+      enabled: true
+
+  # ── High Availability ────────────────────────────────────────────────────────
+  statefulSet:
+    # highAvailability: when replicas > 1, vcluster runs multiple control plane
+    # pods each with its own etcd member, forming an etcd cluster.
+    # Minimum recommended: 3 (quorum requires majority; 3 nodes tolerate 1 failure)
+    highAvailability:
+      replicas: 3
+
+    # Resource requests/limits for each control plane replica
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  # ── Persistence ──────────────────────────────────────────────────────────────
+  # Each replica gets its own PVC to persist etcd data across pod restarts.
+  # Without this, etcd data is lost when a pod is restarted.
+  persistence:
+    volumeClaim:
+      enabled: true
+      # storageClass: leave empty to use the cluster default StorageClass.
+      # For AKS this defaults to Azure Disk (managed-csi).
+      storageClass: ""
+      size: 5Gi
+      accessModes:
+        - ReadWriteOnce
+
+# ── Sync configuration ───────────────────────────────────────────────────────
+sync:
+  fromHost:
+    nodes:
+      enabled: true
+      selector:
+        all: true
+    storageClasses:
+      enabled: true
+
+  toHost:
+    services:
+      enabled: true
+    persistentVolumeClaims:
+      enabled: true
+    configMaps:
+      enabled: true
+    secrets:
+      enabled: true
+    ingresses:
+      enabled: false
+    networkPolicies:
+      enabled: true
