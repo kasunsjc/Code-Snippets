@@ -38,6 +38,22 @@ param userNodeVmSize string = 'Standard_D4s_v3'
 @maxValue(10)
 param userNodeCount int = 3
 
+@description('System node pool minimum node count for autoscaling')
+@minValue(1)
+param systemNodeMinCount int = 1
+
+@description('System node pool maximum node count for autoscaling')
+@maxValue(5)
+param systemNodeMaxCount int = 3
+
+@description('User node pool minimum node count for autoscaling')
+@minValue(1)
+param userNodeMinCount int = 2
+
+@description('User node pool maximum node count for autoscaling')
+@maxValue(10)
+param userNodeMaxCount int = 6
+
 @description('Enable Azure Monitor Container Insights')
 param enableMonitoring bool = true
 
@@ -93,6 +109,10 @@ module aks 'modules/aks.bicep' = {
     systemNodeCount: systemNodeCount
     userNodeVmSize: userNodeVmSize
     userNodeCount: userNodeCount
+    systemNodeMinCount: systemNodeMinCount
+    systemNodeMaxCount: systemNodeMaxCount
+    userNodeMinCount: userNodeMinCount
+    userNodeMaxCount: userNodeMaxCount
     vnetSubnetId: vnet.outputs.aksSubnetId
     logAnalyticsWorkspaceId: enableMonitoring ? logAnalytics.outputs.workspaceId : ''
     enableMonitoring: enableMonitoring

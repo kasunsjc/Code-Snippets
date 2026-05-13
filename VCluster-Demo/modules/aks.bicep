@@ -22,6 +22,22 @@ param userNodeVmSize string = 'Standard_D4s_v3'
 @description('User node pool count')
 param userNodeCount int = 3
 
+@description('System node pool minimum count when autoscaling is enabled')
+@minValue(1)
+param systemNodeMinCount int = 1
+
+@description('System node pool maximum count when autoscaling is enabled')
+@maxValue(5)
+param systemNodeMaxCount int = 3
+
+@description('User node pool minimum count when autoscaling is enabled')
+@minValue(1)
+param userNodeMinCount int = 2
+
+@description('User node pool maximum count when autoscaling is enabled')
+@maxValue(10)
+param userNodeMaxCount int = 6
+
 @description('VNet subnet resource ID for Azure CNI')
 param vnetSubnetId string
 
@@ -60,11 +76,10 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
         mode: 'System'
         vnetSubnetID: vnetSubnetId
         maxPods: 110
-        enableAutoScaling: false
+        enableAutoScaling: true
+        minCount: systemNodeMinCount
+        maxCount: systemNodeMaxCount
         type: 'VirtualMachineScaleSets'
-        nodeTaints: [
-          'CriticalAddonsOnly=true:NoSchedule'
-        ]
       }
       // User node pool — hosts all vclusters and demo workloads
       {
@@ -77,8 +92,8 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-01-01' = {
         vnetSubnetID: vnetSubnetId
         maxPods: 110
         enableAutoScaling: true
-        minCount: 2
-        maxCount: 6
+        minCount: userNodeMinCount
+        maxCount: userNodeMaxCount
         type: 'VirtualMachineScaleSets'
       }
     ]
