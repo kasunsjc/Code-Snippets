@@ -114,9 +114,22 @@ module aks 'modules/aks.bicep' = {
     userNodeMinCount: userNodeMinCount
     userNodeMaxCount: userNodeMaxCount
     vnetSubnetId: vnet.outputs.aksSubnetId
-    logAnalyticsWorkspaceId: enableMonitoring ? logAnalytics.outputs.workspaceId : ''
+    logAnalyticsWorkspaceId: enableMonitoring ? logAnalytics!.outputs.workspaceId : ''
     enableMonitoring: enableMonitoring
     nodeResourceGroup: nodeRgName
+    tags: tags
+  }
+}
+
+// --------------------------------------------------
+// Container Insights v2
+// --------------------------------------------------
+module containerInsights 'modules/container-insights.bicep' = if (enableMonitoring) {
+  name: 'container-insights-deployment'
+  params: {
+    clusterName: aks.outputs.clusterName
+    logAnalyticsWorkspaceId: enableMonitoring ? logAnalytics!.outputs.workspaceId : ''
+    location: location
     tags: tags
   }
 }
@@ -128,4 +141,4 @@ output aksClusterName string = aks.outputs.clusterName
 output aksClusterFqdn string  = aks.outputs.clusterFqdn
 output aksNodeResourceGroup string = nodeRgName
 output vnetId string = vnet.outputs.vnetId
-output logAnalyticsWorkspaceId string = enableMonitoring ? logAnalytics.outputs.workspaceId : ''
+output logAnalyticsWorkspaceId string = enableMonitoring ? logAnalytics!.outputs.workspaceId : ''

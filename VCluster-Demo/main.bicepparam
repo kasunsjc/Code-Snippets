@@ -1,6 +1,6 @@
 using './main.bicep'
 
-param location         = 'australiaeast'
+param location         = 'northeurope'
 param namePrefix       = 'vcluster'
 param environment      = 'demo'
 param kubernetesVersion = '1.33'

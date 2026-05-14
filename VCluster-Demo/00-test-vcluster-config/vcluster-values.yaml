@@ -1,0 +1,61 @@
+controlPlane:
+  distro:
+    k8s:
+      image:
+        registry: ghcr.io           # Default: ghcr.io (can be overridden globally with controlPlane.advanced.defaultImageRegistry)
+        repository: loft-sh/kubernetes  # Default: loft-sh/kubernetes
+        tag: v1.35.0                # Default: v1.32.1 (or matches host Kubernetes version)
+  backingStore:
+    etcd:
+      deploy:
+        enabled: true
+        statefulSet:
+          # HighAvailability are high availability options
+          highAvailability:
+            # Replicas are the amount of pods to use.
+            replicas: 3
+  coredns:
+      enabled: true
+      deployment:
+        replicas: 1
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+  # Resource requests/limits for the vcluster control plane StatefulSet
+  statefulSet:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# sync — controls what the vcluster syncs to/from the host cluster
+sync:
+  # fromHost: what the vcluster can "see" from the host
+  fromHost:
+    nodes:
+      enabled: true
+      # Sync all host nodes so vcluster pods can be scheduled on them
+      selector:
+        all: true
+
+  # toHost: what gets synced INTO the host cluster namespace
+  toHost:
+    services:
+      enabled: true
+    persistentVolumeClaims:
+      enabled: true
+    ingresses:
+      enabled: false    # enabled in demo 05
+    networkPolicies:
+      enabled: true
+    configMaps:
+      enabled: true
+    secrets:
+      enabled: true
