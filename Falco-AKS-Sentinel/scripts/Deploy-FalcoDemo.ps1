@@ -34,10 +34,18 @@ param(
 )
 
 # Configuration
-$RESOURCE_GROUP = "rg-falco-demo-1"
 $LOCATION = "eastus"
 $SUBSCRIPTION_ID = ""
 $DEPLOYMENT_NAME = "main-subscription"
+
+# Random 6-character hex suffix to ensure unique resource names.
+# Generated once per run so all resources share the same suffix.
+$RANDOM_SUFFIX = [System.BitConverter]::ToString(
+    [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(3)
+).Replace('-', '').ToLower()
+
+# These are populated from deployment outputs after Deploy-Infrastructure
+$RESOURCE_GROUP = ""
 
 # Script variables
 $ErrorActionPreference = "Stop"
@@ -149,12 +157,17 @@ function Deploy-Infrastructure {
     $mainBicep = Join-Path (Split-Path -Parent $scriptPath) "main-subscription.bicep"
     $mainBicepParam = Join-Path (Split-Path -Parent $scriptPath) "main-subscription.bicepparam"
     
+    Write-Info "Resource name suffix: $RANDOM_SUFFIX"
+
     # Use Azure CLI for subscription-level deployment to support .bicepparam files
     az deployment sub create `
-        --location eastus `
+        --location $LOCATION `
         --template-file $mainBicep `
         --parameters $mainBicepParam `
         --parameters aksAdminPrincipalId=$USER_OBJECT_ID `
+        --parameters resourceGroupName="rg-falco-demo-$RANDOM_SUFFIX" `
+        --parameters aksClusterName="aks-falco-demo-$RANDOM_SUFFIX" `
+        --parameters logAnalyticsWorkspaceName="law-falco-demo-$RANDOM_SUFFIX" `
         --name $DEPLOYMENT_NAME `
         --output table
     
@@ -338,54 +351,37 @@ function Import-SentinelRules {
     Write-Info "Found $($rules.Count) analytics rules to import"
     
     foreach ($rule in $rules) {
-        Write-Info "Creating rule: $($rule.displayName)"
+        Write-Info "  $($rule.displayName)"
 
         # Deterministic GUID — re-running the script updates the existing rule
         # instead of creating a duplicate.
         $RULE_ID = Get-DeterministicId -WorkspaceResourceId $WORKSPACE_RESOURCE_ID -DisplayName $rule.displayName
-        
-        # Build the rule body
-        $ruleBody = @{
-            kind = "Scheduled"
-            properties = @{
-                displayName = $rule.displayName
-                description = $rule.description
-                severity = $rule.severity
-                enabled = $rule.enabled
-                query = $rule.query
-                queryFrequency = $rule.queryFrequency
-                queryPeriod = $rule.queryPeriod
-                triggerOperator = $rule.triggerOperator
-                triggerThreshold = $rule.triggerThreshold
-                suppressionDuration = $rule.suppressionDuration
-                suppressionEnabled = $rule.suppressionEnabled
-                tactics = $rule.tactics
-                techniques = $rule.techniques
-            }
-        } | ConvertTo-Json -Depth 10
-        
+
+        # Pass all fields from the JSON through as-is so nothing is silently
+        # dropped (matches the bash script behaviour of `{kind, properties: $r}`).
+        $ruleBody = @{ kind = "Scheduled"; properties = $rule } | ConvertTo-Json -Depth 20
+
         # Create a temporary file for the body
         $tempFile = New-TemporaryFile
         $ruleBody | Out-File -FilePath $tempFile.FullName -Encoding utf8 -NoNewline
-        
+
         try {
             # Create the analytics rule using Azure CLI REST API
             $uri = "https://management.azure.com${WORKSPACE_RESOURCE_ID}/providers/Microsoft.SecurityInsights/alertRules/${RULE_ID}?api-version=2023-02-01"
-            
+
             $result = az rest --method put --url $uri --body "@$($tempFile.FullName)" 2>&1
-            
+
             if ($LASTEXITCODE -eq 0) {
-                Write-Info "✓ Successfully created rule: $($rule.displayName)"
+                Write-Info "    ✓ created/updated"
             } else {
-                Write-Warning "✗ Failed to create rule: $($rule.displayName)"
+                Write-Warning "    ✗ failed (rerun with -EnableRulesOnly later)"
                 Write-Host "Error details: $result" -ForegroundColor Yellow
             }
         }
         catch {
-            Write-Warning "✗ Failed to create rule: $($rule.displayName) - $($_.Exception.Message)"
+            Write-Warning "    ✗ failed: $($_.Exception.Message)"
         }
         finally {
-            # Clean up temp file
             Remove-Item $tempFile.FullName -ErrorAction SilentlyContinue
         }
     }

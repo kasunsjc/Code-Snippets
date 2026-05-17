@@ -119,13 +119,32 @@ Before you begin, ensure you have the following installed:
    ```bash
    ./scripts/deploy.sh
    ```
+
+   | Flag | Description |
+   |---|---|
+   | *(none)* | Full deploy: infra → Falco → wait for logs → Sentinel rules |
+   | `--enable-rules` | Re-import Sentinel rules only (no infra/Falco changes) |
+   | `--skip-rules` | Deploy infra + Falco only; skip Sentinel rules |
+   | `--no-wait` | Skip the `FalcoLogs_CL` population gate |
+   | `--wait-timeout <min>` | Override the wait timeout (default: 20 minutes) |
    
    **Option B - Using PowerShell:**
    ```powershell
    ./scripts/Deploy-FalcoDemo.ps1
    ```
 
-   Both scripts will:
+   | Parameter | Description |
+   |---|---|
+   | *(none)* | Full deploy: infra → Falco → wait for logs → Sentinel rules |
+   | `-EnableRulesOnly` | Re-import Sentinel rules only (no infra/Falco changes) |
+   | `-SkipRules` | Deploy infra + Falco only; skip Sentinel rules |
+   | `-NoWait` | Skip the `FalcoLogs_CL` population gate |
+   | `-WaitTimeoutMinutes <n>` | Override the wait timeout (default: 20 minutes) |
+
+   > **Resource naming**: Both scripts automatically append a random 6-character hex suffix
+   > to all resource names (e.g. `rg-falco-demo-a3f9c1`, `aks-falco-demo-a3f9c1`,
+   > `law-falco-demo-a3f9c1`) so each deployment is isolated and re-deployable without
+   > name conflicts. The suffix is printed at the start of every run.
    - Create a resource group in East US
    - Deploy AKS cluster (v1.33, 3 nodes, Azure RBAC enabled)
    - Create Log Analytics workspace with Sentinel enabled
@@ -147,12 +166,30 @@ Before you begin, ensure you have the following installed:
    kubectl logs -n falco -l app.kubernetes.io/name=falcosidekick --tail=50
    ```
 
+6. **Simulate attacks** (optional — generates real Falco detections for the demo):
+   ```bash
+   # Run all 7 attack scenarios
+   ./scripts/simulate-attacks.sh
+
+   # Run a specific scenario
+   ./scripts/simulate-attacks.sh --scenario sensitive-file
+   ./scripts/simulate-attacks.sh --scenario crypto-miner
+   ./scripts/simulate-attacks.sh --scenario reverse-shell
+
+   # Clean up attack namespaces
+   ./scripts/simulate-attacks.sh --cleanup
+   ```
+
+   Available scenarios: `sensitive-file`, `package-mgmt`, `crypto-miner`, `reverse-shell`, `k8s-secrets`, `privileged-container`, `lateral-movement`
+
 ## 📁 Repository Structure
 
 ```
 .
-├── main.bicep                          # Main Bicep template
-├── main.bicepparam                     # Parameters file
+├── main-subscription.bicep             # Subscription-scoped Bicep template (entry point)
+├── main-subscription.bicepparam        # Parameters for subscription-scoped deployment
+├── main.bicep                          # Resource-group-scoped Bicep template
+├── main.bicepparam                     # Parameters for resource-group-scoped deployment
 ├── modules/
 │   ├── aks-cluster.bicep              # AKS cluster with RBAC
 │   ├── log-analytics.bicep            # Log Analytics & Sentinel
@@ -162,9 +199,12 @@ Before you begin, ensure you have the following installed:
 │   ├── falco-values.yaml              # Falco Helm values
 │   ├── falcosidekick-config.yaml      # Falcosidekick configuration
 │   └── sentinel-analytics-rules.json  # Sentinel analytics rules
+├── workbooks/
+│   └── falco-security-dashboard.json  # Falco Security Dashboard workbook
 ├── scripts/
 │   ├── deploy.sh                      # Bash deployment script
 │   ├── cleanup.sh                     # Bash cleanup script
+│   ├── simulate-attacks.sh            # Rogue actor attack simulation (7 scenarios)
 │   ├── Deploy-FalcoDemo.ps1          # PowerShell deployment script
 │   └── Remove-FalcoDemo.ps1          # PowerShell cleanup script
 └── README.md                          # This file
@@ -175,7 +215,7 @@ Before you begin, ensure you have the following installed:
 ### AKS Cluster Configuration
 
 - **Kubernetes Version**: 1.33
-- **Node Size**: Standard_DS2_v2
+- **Node Size**: Standard_D2s_v3
 - **Node Count**: 3 nodes (system pool)
 - **Network Plugin**: Azure CNI
 - **Features Enabled**:
