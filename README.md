@@ -80,7 +80,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 - **[Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/)** — This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot common issues in Azure Kubernetes Service (AKS) clusters. Instead of manually running `kubectl` commands and digging through logs, you can ask Copilot natural language questions directly in the Azure Portal and get actionable insights.
   - 📄 README: Yes | 📁 Files: 16
 - **[Falco-AKS-Sentinel](./Falco-AKS-Sentinel/)** — This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstrating Falco runtime security on Azure Kubernetes Service (AKS) with Azure Sentinel integration.
-  - 📄 README: Yes | 📁 Files: 19
+  - 📄 README: Yes | 📁 Files: 17
 
 ---
 
