@@ -70,7 +70,7 @@ check_prerequisites() {
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
     if ! command -v sha1sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
-        missing+=("sha1sum (or shasum)")
+        missing+=("sha1sum or shasum")
     fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
