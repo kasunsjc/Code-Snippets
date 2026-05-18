@@ -266,16 +266,18 @@ FalcoLogs_CL
 
 ### 3. Check Sentinel Incidents
 
-1. Go to Azure Portal → Search "Microsoft Sentinel"
-2. Select your Log Analytics workspace (e.g., `law-falco-demo-1`)
+> **Portal change:** Microsoft Sentinel has moved to the **Microsoft Defender portal**. Navigate to [security.microsoft.com](https://security.microsoft.com) — the legacy Azure Portal blade still exists but redirects there.
+
+1. Go to the [**Microsoft Defender portal**](https://security.microsoft.com)
+2. Left nav → **Microsoft Sentinel** → select your Log Analytics workspace (e.g., `law-falco-demo-a3f9c1`)
 3. Left menu → **Configuration** → **Analytics** → **Active rules** tab
 4. Filter by "Falco" to see the 5 imported rules
-5. Navigate to **Threat management** → **Incidents** to see triggered alerts
+5. Navigate to **Investigation & response** → **Incidents & alerts** → **Incidents** to see triggered alerts
 6. Wait 5-10 minutes after first logs for rules to evaluate
 
-**Direct Portal Link Format:**
+**Direct Defender portal link:**
 ```
-https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Analytics
+https://security.microsoft.com/
 ```
 
 ## 📊 Sentinel Analytics Rules
@@ -390,7 +392,7 @@ This project is provided as-is for demonstration purposes.
 ### Sentinel Rules
 - First-time rule evaluation can take up to 10 minutes
 - Rules are automatically imported during deployment (requires `jq` installed)
-- Verify rules: Azure Portal → Sentinel → Analytics → Active rules (filter by "Falco")
+- Verify rules: [Microsoft Defender portal](https://security.microsoft.com) → **Microsoft Sentinel** → **Configuration** → **Analytics** → **Active rules** (filter by "Falco")
 - Rule queries use flattened column names (e.g., `output_fields_k8s_pod_name_s`)
 
 ### False Positives
