@@ -14,6 +14,7 @@
 # ============================================================
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ---------------------------------------------------------------------------
 # Colours / logging
@@ -33,7 +34,7 @@ DEPLOYMENT_NAME="main-subscription"
 # Random 6-character alphanumeric suffix to ensure unique resource names.
 # Generated once per script run so all resources share the same suffix.
 # Uses openssl to avoid SIGPIPE issues from /dev/urandom pipelines under pipefail.
-RANDOM_SUFFIX=$(openssl rand -hex 3)
+RANDOM_SUFFIX=""
 
 # Defaults for --enable-rules-only mode (overridden from deployment outputs)
 RESOURCE_GROUP=""
@@ -70,9 +71,12 @@ check_prerequisites() {
     print_info "Checking prerequisites..."
 
     local missing=()
-    for cmd in az kubectl helm jq uuidgen; do
+    for cmd in az kubectl helm jq uuidgen openssl; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
+    if ! command -v sha1sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+        missing+=("sha1sum (or shasum)")
+    fi
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         print_error "Missing required tools: ${missing[*]}"
@@ -101,6 +105,9 @@ login_azure() {
 # Infrastructure
 # ---------------------------------------------------------------------------
 deploy_infrastructure() {
+    if [[ -z "$RANDOM_SUFFIX" ]]; then
+        RANDOM_SUFFIX=$(openssl rand -hex 3)
+    fi
     print_info "Deploying Azure infrastructure with Bicep (subscription scope)..."
     print_info "Resource name suffix: ${RANDOM_SUFFIX}"
 
@@ -111,8 +118,8 @@ deploy_infrastructure() {
     az deployment sub create \
         --location "$LOCATION" \
         --name "$DEPLOYMENT_NAME" \
-        --template-file ../main-subscription.bicep \
-        --parameters ../main-subscription.bicepparam \
+        --template-file "$SCRIPT_DIR/../main-subscription.bicep" \
+        --parameters "$SCRIPT_DIR/../main-subscription.bicepparam" \
         --parameters aksAdminPrincipalId="$user_id" \
         --parameters resourceGroupName="rg-falco-demo-${RANDOM_SUFFIX}" \
         --parameters aksClusterName="aks-falco-demo-${RANDOM_SUFFIX}" \
@@ -175,13 +182,13 @@ install_falco() {
     helm repo add falcosecurity https://falcosecurity.github.io/charts >/dev/null
     helm repo update >/dev/null
 
-    kubectl apply -f ../k8s/falco-namespace.yaml
+    kubectl apply -f "$SCRIPT_DIR/../k8s/falco-namespace.yaml"
 
     # The webhook URL is passed via --set (single arg, not echoed by helm in
     # default verbosity). Avoid `--set-string` printing in CI-debug mode.
     helm upgrade --install falco falcosecurity/falco \
         --namespace falco \
-        --values ../k8s/falco-values.yaml \
+        --values "$SCRIPT_DIR/../k8s/falco-values.yaml" \
         --set "falcosidekick.config.webhook.address=${WEBHOOK_URL}" \
         --wait
 
@@ -241,7 +248,7 @@ wait_for_falco_logs() {
 
     print_warning "Timed out after ${WAIT_TIMEOUT_MIN}m waiting for FalcoLogs_CL."
     print_warning "The first Sentinel rule creation may fail with 'table does not exist'."
-    print_warning "Re-run: ./deploy.sh --enable-rules   once data starts flowing."
+    print_warning "Re-run: $0 --enable-rules   once data starts flowing."
     return 1
 }
 
@@ -256,8 +263,13 @@ deterministic_rule_id() {
     local workspace_resource_id="$1"
     local display_name="$2"
     local hex
-    hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
-        | sha1sum | awk '{print $1}' | cut -c1-32)
+    if command -v sha1sum >/dev/null 2>&1; then
+        hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
+            | sha1sum | awk '{print $1}' | cut -c1-32)
+    else
+        hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
+            | shasum -a 1 | awk '{print $1}' | cut -c1-32)
+    fi
     printf '%s-%s-%s-%s-%s\n' \
         "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
 }
@@ -265,7 +277,7 @@ deterministic_rule_id() {
 import_sentinel_rules() {
     print_info "Importing Sentinel analytics rules..."
 
-    local rules_file="../k8s/sentinel-analytics-rules.json"
+    local rules_file="$SCRIPT_DIR/../k8s/sentinel-analytics-rules.json"
     if [[ ! -f "$rules_file" ]]; then
         print_warning "Analytics rules file not found at $rules_file"
         return
@@ -293,7 +305,7 @@ import_sentinel_rules() {
             --output none 2>/dev/null; then
             print_info "    ✓ created/updated"
         else
-            print_warning "    ✗ failed (rerun ./deploy.sh --enable-rules later)"
+            print_warning "    ✗ failed (rerun $0 --enable-rules later)"
         fi
         rm -f "$tmp"
     done
@@ -306,7 +318,7 @@ import_sentinel_rules() {
 deploy_workbook() {
     print_info "Deploying Falco Security Dashboard workbook..."
 
-    local workbook_file="../workbooks/falco-security-dashboard.json"
+    local workbook_file="$SCRIPT_DIR/../workbooks/falco-security-dashboard.json"
     if [[ ! -f "$workbook_file" ]]; then
         print_warning "Workbook file not found at $workbook_file"
         return
@@ -390,7 +402,7 @@ EOF
 load_existing_outputs_or_die() {
     if ! az deployment sub show --name "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
         print_error "No prior deployment named '$DEPLOYMENT_NAME' found."
-        print_error "Run ./deploy.sh (without --enable-rules) first."
+        print_error "Run $0 (without --enable-rules) first."
         exit 1
     fi
     get_deployment_outputs

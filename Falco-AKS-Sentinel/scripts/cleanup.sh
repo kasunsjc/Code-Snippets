@@ -4,6 +4,7 @@
 # ========================================
 
 set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Colors for output
 RED='\033[0;31m'
@@ -14,7 +15,7 @@ NC='\033[0m' # No Color
 # Configuration
 RESOURCE_GROUP="${RESOURCE_GROUP:-}"
 DEPLOYMENT_NAME="main-subscription"
-PARAM_FILE="../main-subscription.bicepparam"
+PARAM_FILE="$SCRIPT_DIR/../main-subscription.bicepparam"
 
 # Functions
 print_info() {
@@ -58,7 +59,7 @@ resolve_resource_group() {
     fi
 
     print_error "Could not determine resource group. Set RESOURCE_GROUP env var:"
-    print_error "  RESOURCE_GROUP=rg-falco-demo-1 ./cleanup.sh"
+    print_error "  RESOURCE_GROUP=rg-falco-demo-1 $0"
     exit 1
 }
 

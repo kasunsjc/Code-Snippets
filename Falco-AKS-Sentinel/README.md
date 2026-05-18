@@ -74,6 +74,9 @@ Before you begin, ensure you have the following installed:
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
 - [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
 - [jq](https://stedolan.github.io/jq/) (for Sentinel rules import)
+- `openssl` (used for deployment name suffix generation)
+- `uuidgen` (used by deployment script prerequisites)
+- `sha1sum` (GNU coreutils) **or** `shasum` (Perl) for deterministic Sentinel rule IDs
 - An active Azure subscription with appropriate permissions to create resources
 
 ### Installation
