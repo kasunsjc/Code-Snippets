@@ -70,26 +70,11 @@ This demo showcases:
 
 Before you begin, ensure you have the following installed:
 
-**For Bash deployment:**
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (version 2.30+)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
 - [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
 - [jq](https://stedolan.github.io/jq/) (for Sentinel rules import)
-
-**For PowerShell deployment:**
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (version 2.30+) - for Bicep deployment
-- [Azure PowerShell modules](https://docs.microsoft.com/en-us/powershell/azure/install-az-ps):
-  - Az.Accounts
-  - Az.Resources
-  - Az.OperationalInsights
-  - Az.Aks
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
-- [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
-- [PowerShell 7+](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell) (recommended)
-
-**Common requirements:**
-- An active Azure subscription
-- Appropriate permissions to create resources in Azure
+- An active Azure subscription with appropriate permissions to create resources
 
 ### Installation
 
@@ -114,8 +99,6 @@ Before you begin, ensure you have the following installed:
    - `tags`
 
 4. **Deploy the infrastructure**:
-   
-   **Option A - Using Bash:**
    ```bash
    ./scripts/deploy.sh
    ```
@@ -127,21 +110,8 @@ Before you begin, ensure you have the following installed:
    | `--skip-rules` | Deploy infra + Falco only; skip Sentinel rules |
    | `--no-wait` | Skip the `FalcoLogs_CL` population gate |
    | `--wait-timeout <min>` | Override the wait timeout (default: 20 minutes) |
-   
-   **Option B - Using PowerShell:**
-   ```powershell
-   ./scripts/Deploy-FalcoDemo.ps1
-   ```
 
-   | Parameter | Description |
-   |---|---|
-   | *(none)* | Full deploy: infra → Falco → wait for logs → Sentinel rules |
-   | `-EnableRulesOnly` | Re-import Sentinel rules only (no infra/Falco changes) |
-   | `-SkipRules` | Deploy infra + Falco only; skip Sentinel rules |
-   | `-NoWait` | Skip the `FalcoLogs_CL` population gate |
-   | `-WaitTimeoutMinutes <n>` | Override the wait timeout (default: 20 minutes) |
-
-   > **Resource naming**: Both scripts automatically append a random 6-character hex suffix
+   > **Resource naming**: The script automatically appends a random 6-character hex suffix
    > to all resource names (e.g. `rg-falco-demo-a3f9c1`, `aks-falco-demo-a3f9c1`,
    > `law-falco-demo-a3f9c1`) so each deployment is isolated and re-deployable without
    > name conflicts. The suffix is printed at the start of every run.
@@ -202,11 +172,9 @@ Before you begin, ensure you have the following installed:
 ├── workbooks/
 │   └── falco-security-dashboard.json  # Falco Security Dashboard workbook
 ├── scripts/
-│   ├── deploy.sh                      # Bash deployment script
-│   ├── cleanup.sh                     # Bash cleanup script
-│   ├── simulate-attacks.sh            # Rogue actor attack simulation (7 scenarios)
-│   ├── Deploy-FalcoDemo.ps1          # PowerShell deployment script
-│   └── Remove-FalcoDemo.ps1          # PowerShell cleanup script
+│   ├── deploy.sh                      # Deployment script
+│   ├── cleanup.sh                     # Cleanup script
+│   └── simulate-attacks.sh            # Rogue actor attack simulation (7 scenarios)
 └── README.md                          # This file
 ```
 
@@ -371,19 +339,8 @@ FalcoLogs_CL
 
 To remove all resources created by this demo:
 
-**Using Bash:**
 ```bash
 ./scripts/cleanup.sh
-```
-
-**Using PowerShell:**
-```powershell
-./scripts/Remove-FalcoDemo.ps1
-```
-
-**PowerShell with force option (skip confirmation):**
-```powershell
-./scripts/Remove-FalcoDemo.ps1 -Force
 ```
 
 **Warning**: This will permanently delete the resource group and all contained resources.
