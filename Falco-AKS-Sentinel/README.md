@@ -76,7 +76,7 @@ Before you begin, ensure you have the following installed:
 - [jq](https://stedolan.github.io/jq/) (for Sentinel rules import)
 - `openssl` (used for deployment name suffix generation)
 - `uuidgen` (used by deployment script prerequisites)
-- `sha1sum` (GNU coreutils) **or** `shasum` (Perl) for deterministic Sentinel rule IDs
+- `sha1sum` (GNU coreutils) **or** `shasum` (Perl) — either tool works for deterministic Sentinel rule IDs
 - An active Azure subscription with appropriate permissions to create resources
 
 ### Installation

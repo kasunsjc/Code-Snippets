@@ -105,9 +105,6 @@ login_azure() {
 # Infrastructure
 # ---------------------------------------------------------------------------
 deploy_infrastructure() {
-    if [[ -z "$RANDOM_SUFFIX" ]]; then
-        RANDOM_SUFFIX=$(openssl rand -hex 3)
-    fi
     print_info "Deploying Azure infrastructure with Bicep (subscription scope)..."
     print_info "Resource name suffix: ${RANDOM_SUFFIX}"
 
@@ -417,6 +414,9 @@ main() {
 
     check_prerequisites
     login_azure
+    if [[ "$MODE" != "enable-rules-only" ]]; then
+        RANDOM_SUFFIX=$(openssl rand -hex 3)
+    fi
 
     case "$MODE" in
         enable-rules-only)
