@@ -5,6 +5,7 @@
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RECOMMENDED_CMD="./scripts/cleanup.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -59,7 +60,7 @@ resolve_resource_group() {
     fi
 
     print_error "Could not determine resource group. Set RESOURCE_GROUP env var:"
-    print_error "  RESOURCE_GROUP=rg-falco-demo-1 $0"
+    print_error "  RESOURCE_GROUP=rg-falco-demo-1 ${RECOMMENDED_CMD}"
     exit 1
 }
 

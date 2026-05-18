@@ -15,6 +15,7 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RECOMMENDED_CMD="./scripts/deploy.sh"
 
 # ---------------------------------------------------------------------------
 # Colours / logging
@@ -69,12 +70,18 @@ check_prerequisites() {
     for cmd in az kubectl helm jq uuidgen openssl; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
+    local missing_hash_tool=false
     if ! command -v sha1sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
-        missing+=("sha1sum or shasum")
+        missing_hash_tool=true
     fi
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        print_error "Missing required tools: ${missing[*]}"
+    if [[ ${#missing[@]} -gt 0 || "$missing_hash_tool" == true ]]; then
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            print_error "Missing required tools: ${missing[*]}"
+        fi
+        if [[ "$missing_hash_tool" == true ]]; then
+            print_error "Missing required hash tool: install either sha1sum or shasum"
+        fi
         print_error "Install them and re-run. Hints:"
         print_error "  az      → https://docs.microsoft.com/cli/azure/install-azure-cli"
         print_error "  kubectl → https://kubernetes.io/docs/tasks/tools/"
@@ -242,7 +249,7 @@ wait_for_falco_logs() {
 
     print_warning "Timed out after ${WAIT_TIMEOUT_MIN}m waiting for FalcoLogs_CL."
     print_warning "The first Sentinel rule creation may fail with 'table does not exist'."
-    print_warning "Re-run: $0 --enable-rules   once data starts flowing."
+    print_warning "Re-run: ${RECOMMENDED_CMD} --enable-rules   once data starts flowing."
     return 1
 }
 
@@ -299,7 +306,7 @@ import_sentinel_rules() {
             --output none 2>/dev/null; then
             print_info "    ✓ created/updated"
         else
-            print_warning "    ✗ failed (rerun $0 --enable-rules later)"
+            print_warning "    ✗ failed (rerun ${RECOMMENDED_CMD} --enable-rules later)"
         fi
         rm -f "$tmp"
     done
@@ -396,7 +403,7 @@ EOF
 load_existing_outputs_or_die() {
     if ! az deployment sub show --name "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
         print_error "No prior deployment named '$DEPLOYMENT_NAME' found."
-        print_error "Run $0 (without --enable-rules) first."
+        print_error "Run ${RECOMMENDED_CMD} (without --enable-rules) first."
         exit 1
     fi
     get_deployment_outputs
