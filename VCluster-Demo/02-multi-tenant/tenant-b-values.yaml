@@ -1,15 +1,15 @@
 # vcluster configuration for Team Beta
-# Smaller resource limits to simulate a "basic" tenant
+# Use the stable baseline resources used by other demos
 
 controlPlane:
   statefulSet:
     resources:
       requests:
-        cpu: 50m
-        memory: 64Mi
+        cpu: 100m
+        memory: 128Mi
       limits:
-        cpu: 250m
-        memory: 256Mi
+        cpu: 500m
+        memory: 512Mi
     labels:
       tenant: team-beta
       tier: basic

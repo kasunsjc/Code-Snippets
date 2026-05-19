@@ -1,4 +1,4 @@
-# etcd-values.yaml — vcluster configured with embedded etcd as the backing store
+# etcd-values.yaml — vcluster configured with deployed (external) etcd backing store
 #
 # DEFAULT (SQLite):
 #   vcluster stores all Kubernetes state in a single SQLite file inside the
@@ -7,8 +7,8 @@
 #     - State stored on ephemeral pod storage unless PVC is attached
 #     - SQLite WAL file can grow unbounded under heavy write load
 #
-# THIS CONFIG (Embedded etcd):
-#   Replaces SQLite with a full etcd cluster running *inside* the vcluster pod.
+# THIS CONFIG (Deployed etcd):
+#   Replaces SQLite with a dedicated etcd StatefulSet on the host cluster.
 #   Benefits:
 #     - Enables High Availability (multiple control plane replicas)
 #     - Battle-tested Kubernetes-native datastore
@@ -21,17 +21,33 @@
 controlPlane:
   # ── Backing store ────────────────────────────────────────────────────────────
   backingStore:
-    # embeddedEtcd: runs a real etcd instance inside the vcluster StatefulSet pod.
-    # This is mutually exclusive with embeddedDatabase (SQLite) — enabling etcd
-    # automatically disables the SQLite backend.
-    embeddedEtcd:
-      enabled: true
+    etcd:
+      # deploy.enabled=true uses an external etcd StatefulSet managed by vcluster.
+      deploy:
+        enabled: true
+        statefulSet:
+          highAvailability:
+            replicas: 3
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          persistence:
+            volumeClaim:
+              enabled: true
+              # storageClass: leave empty to use the cluster default StorageClass.
+              # For AKS this defaults to Azure Disk (managed-csi).
+              storageClass: ""
+              size: 5Gi
+              accessModes:
+                - ReadWriteOnce
 
   # ── High Availability ────────────────────────────────────────────────────────
   statefulSet:
-    # highAvailability: when replicas > 1, vcluster runs multiple control plane
-    # pods each with its own etcd member, forming an etcd cluster.
-    # Minimum recommended: 3 (quorum requires majority; 3 nodes tolerate 1 failure)
+    # Run 3 vcluster control plane replicas for HA.
     highAvailability:
       replicas: 3
 
@@ -43,19 +59,6 @@ controlPlane:
       limits:
         cpu: 1000m
         memory: 1Gi
-
-  # ── Persistence ──────────────────────────────────────────────────────────────
-  # Each replica gets its own PVC to persist etcd data across pod restarts.
-  # Without this, etcd data is lost when a pod is restarted.
-  persistence:
-    volumeClaim:
-      enabled: true
-      # storageClass: leave empty to use the cluster default StorageClass.
-      # For AKS this defaults to Azure Disk (managed-csi).
-      storageClass: ""
-      size: 5Gi
-      accessModes:
-        - ReadWriteOnce
 
 # ── Sync configuration ───────────────────────────────────────────────────────
 sync:
