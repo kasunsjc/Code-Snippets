@@ -37,8 +37,8 @@ done
 
 echo ""
 info "Waiting for both vclusters to be ready..."
-kubectl rollout status statefulset/tenant-a --namespace vc-tenant-a --timeout=180s
-kubectl rollout status statefulset/tenant-b --namespace vc-tenant-b --timeout=180s
+kubectl rollout status statefulset/tenant-a --namespace vc-tenant-a --timeout=300s
+kubectl rollout status statefulset/tenant-b --namespace vc-tenant-b --timeout=300s
 ok "Both vclusters are running"
 
 # --------------------------------------------------
@@ -67,7 +67,7 @@ vcluster connect tenant-a --namespace vc-tenant-a --update-current
 
 info "Deploying Team Alpha's app..."
 kubectl apply -f "$DEMO_DIR/tenant-a-app.yaml"
-kubectl rollout status deployment/alpha-frontend -n team-alpha --timeout=120s
+kubectl rollout status deployment/alpha-frontend -n team-alpha --timeout=180s
 ok "Team Alpha's frontend is running"
 
 echo ""
@@ -93,7 +93,7 @@ vcluster connect tenant-b --namespace vc-tenant-b --update-current
 
 info "Deploying Team Beta's app..."
 kubectl apply -f "$DEMO_DIR/tenant-b-app.yaml"
-kubectl rollout status deployment/beta-api -n team-beta --timeout=120s
+kubectl rollout status deployment/beta-api -n team-beta --timeout=180s
 ok "Team Beta's API is running"
 
 echo ""
