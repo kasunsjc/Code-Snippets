@@ -78,8 +78,6 @@ module "keyvault" {
   certificate_name         = local.certificate_name
   certificate_pfx_base64   = filebase64(var.certificate_pfx_path)
   certificate_pfx_password = var.certificate_pfx_password
-  aks_cluster_name         = module.aks.cluster_name
-  aks_resource_group_name  = azurerm_resource_group.this.name
   tags                     = local.tags
 }
 

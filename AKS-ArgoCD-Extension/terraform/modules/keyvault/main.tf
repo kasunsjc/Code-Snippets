@@ -35,28 +35,3 @@ resource "azurerm_key_vault_certificate" "ingress" {
 
   depends_on = [azurerm_role_assignment.tf_kv_cert_officer]
 }
-
-# Attach Key Vault to the App Routing add-on via Azure CLI.
-resource "null_resource" "approuting_attach_kv" {
-  triggers = {
-    cluster_name   = var.aks_cluster_name
-    key_vault_id   = azurerm_key_vault.this.id
-    resource_group = var.aks_resource_group_name
-  }
-
-  provisioner "local-exec" {
-    command     = <<-EOT
-      az aks approuting update \
-        --resource-group ${var.aks_resource_group_name} \
-        --name ${var.aks_cluster_name} \
-        --enable-kv \
-        --attach-kv ${azurerm_key_vault.this.id}
-    EOT
-    interpreter = ["/bin/bash", "-c"]
-  }
-
-  depends_on = [
-    azurerm_role_assignment.approuting_kv_secrets_user,
-    azurerm_key_vault_certificate.ingress,
-  ]
-}
