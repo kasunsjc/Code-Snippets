@@ -84,37 +84,43 @@ repository's AKS naming convention.
 
 ## 🚀 Deploy
 
-```bash
-cd AKS-ArgoCD-Extension/terraform
-
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars and set:
-#   dns_zone_name / dns_zone_resource_group
-#   argocd_hostname (e.g. argocd.example.com)
-#   certificate_pfx_path / certificate_pfx_password
-
-terraform init
-terraform apply
-```
-
-Once `apply` finishes, run the post-deploy helper from the demo root:
+A single script handles both Terraform provisioning and post-deploy K8s
+configuration:
 
 ```bash
-cd ..
-./commands.sh
+cd AKS-ArgoCD-Extension
+
+# Create terraform.tfvars with required variables:
+cat > terraform/terraform.tfvars <<'EOF'
+dns_zone_name           = "example.com"
+dns_zone_resource_group = "dns-zones-rg"
+argocd_hostname         = "argocd.example.com"
+certificate_pfx_path    = "./star_example_com.pfx"
+EOF
+
+# Deploy everything in one step:
+./deploy.sh
 ```
 
-`commands.sh` will:
+`deploy.sh` will:
 
-1. Fetch kubeconfig for the cluster.
-2. Wait for the `Microsoft.ArgoCD` extension to finish provisioning.
-3. Render `k8s/argocd-ingress.yaml` with the real Key Vault certificate URI and
+1. Run `terraform init` and `terraform apply` to provision all Azure
+   infrastructure (AKS, Key Vault, Entra ID app + group, Argo CD extension).
+2. Fetch kubeconfig for the cluster.
+3. Wait for the `Microsoft.ArgoCD` extension to finish provisioning.
+4. Render `k8s/argocd-ingress.yaml` with the real Key Vault certificate URI and
    hostname and apply it (the App Routing controller mounts the cert via
    Secrets Store CSI).
-4. Print the public IP of the App Routing NGINX service so you can create the
+5. Print the public IP of the App Routing NGINX service so you can create the
    matching DNS A record.
-5. Apply the sample Argo CD `Application`.
-6. Print the initial admin password (use it once, then sign in with SSO).
+6. Apply the sample Argo CD `Application`.
+7. Print the initial admin password (use it once, then sign in with SSO).
+
+To destroy all resources:
+
+```bash
+./deploy.sh --destroy
+```
 
 ## 🔐 SSO sign-in
 
