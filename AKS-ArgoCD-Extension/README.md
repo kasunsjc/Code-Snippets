@@ -155,7 +155,7 @@ Terraform are left untouched.
 - The configuration setting keys used for the `Microsoft.ArgoCD` extension
   (`sso.provider`, `sso.entra.clientId`, …) reflect the public preview schema at
   the time of writing. If your extension version exposes different keys,
-  update `terraform/argocd.tf` accordingly.
+  update `terraform/modules/argocd-extension/main.tf` accordingly.
 - The Entra ID client secret is stored in Terraform state. Use a remote backend
   with state encryption (e.g. Azure Storage with CMK) for any non-throwaway
   environment.
