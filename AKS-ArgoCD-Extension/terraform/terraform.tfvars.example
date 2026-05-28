@@ -1,0 +1,18 @@
+project                 = "argocd"
+environment             = "demo"
+location                = "northeurope"
+kubernetes_version      = "1.31"
+
+# Existing public Azure DNS zone
+dns_zone_name           = "example.com"
+dns_zone_resource_group = "dns-zones-rg"
+
+# FQDN for the Argo CD UI/API
+argocd_hostname         = "argocd.example.com"
+
+# .pfx that covers argocd_hostname (and optionally *.example.com)
+certificate_pfx_path     = "./star_example_com.pfx"
+certificate_pfx_password = ""
+
+# Members of this Entra ID security group become Argo CD admins via SSO.
+argocd_admin_group_object_id = "00000000-0000-0000-0000-000000000000"
