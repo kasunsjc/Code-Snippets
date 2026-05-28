@@ -105,7 +105,7 @@ module "argocd_extension" {
   client_id                  = module.entra.application_client_id
   client_secret              = module.entra.client_secret
   argocd_hostname            = var.argocd_hostname
-  admin_group_object_id      = var.argocd_admin_group_object_id
+  admin_group_object_id      = module.entra.admin_group_object_id
   entra_service_principal_id = module.entra.service_principal_id
   keyvault_ready             = module.keyvault.key_vault_id
 }

@@ -6,8 +6,9 @@
 # extension's `rbac.policy.csv` configurationSetting; this manifest is provided
 # for cases where you want to manage RBAC out-of-band with GitOps.
 #
-# Replace <ENTRA_ADMIN_GROUP_OBJECT_ID> with the value of
-# var.argocd_admin_group_object_id.
+# The argocd-admins group is created automatically by Terraform (entra module).
+# Replace <ARGOCD_ADMIN_GROUP_OBJECT_ID> with the output value of
+# argocd_admin_group_object_id from `terraform output`.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -20,4 +21,4 @@ data:
   policy.default: role:readonly
   scopes: "[groups]"
   policy.csv: |
-    g, <ENTRA_ADMIN_GROUP_OBJECT_ID>, role:admin
+    g, <ARGOCD_ADMIN_GROUP_OBJECT_ID>, role:admin

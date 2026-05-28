@@ -18,3 +18,9 @@ variable "extra_redirect_uris" {
   type        = list(string)
   default     = []
 }
+
+variable "admin_group_name" {
+  description = "Display name for the Entra ID security group whose members become Argo CD admins."
+  type        = string
+  default     = "argocd-admins"
+}

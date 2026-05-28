@@ -35,6 +35,11 @@ output "argocd_entra_application_tenant_id" {
   value = data.azurerm_client_config.current.tenant_id
 }
 
+output "argocd_admin_group_object_id" {
+  description = "Object ID of the argocd-admins Entra ID security group."
+  value       = module.entra.admin_group_object_id
+}
+
 output "argocd_initial_admin_password_command" {
   description = "Read the Argo CD bootstrap admin password from the cluster."
   value       = "kubectl -n ${local.argocd_namespace} get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"

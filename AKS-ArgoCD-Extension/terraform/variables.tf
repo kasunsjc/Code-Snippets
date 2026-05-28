@@ -65,11 +65,6 @@ variable "certificate_pfx_password" {
 
 # --- Entra ID SSO -------------------------------------------------------------
 
-variable "argocd_admin_group_object_id" {
-  description = "Object ID of the Microsoft Entra group whose members become Argo CD admins."
-  type        = string
-}
-
 variable "extra_redirect_uris" {
   description = "Additional reply URLs to register on the Entra ID app (optional)."
   type        = list(string)

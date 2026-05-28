@@ -92,7 +92,6 @@ cp terraform.tfvars.example terraform.tfvars
 #   dns_zone_name / dns_zone_resource_group
 #   argocd_hostname (e.g. argocd.example.com)
 #   certificate_pfx_path / certificate_pfx_password
-#   argocd_admin_group_object_id
 
 terraform init
 terraform apply
@@ -120,12 +119,15 @@ cd ..
 ## 🔐 SSO sign-in
 
 After DNS resolves, open `https://<argocd_hostname>/` and choose **Log in via
-Microsoft Entra ID**. Members of the configured admin group get the built-in
-Argo CD `admin` role via the policy:
+Microsoft Entra ID**. Members of the **argocd-admins** group (created
+automatically by Terraform and populated with the deploying user) get the
+built-in Argo CD `admin` role via the policy:
 
 ```
 g, <argocd_admin_group_object_id>, role:admin
 ```
+
+You can manage group membership in the Azure portal or with `az ad group member add`.
 
 Everyone else falls back to `role:readonly` (`policy.default`).
 

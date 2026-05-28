@@ -67,3 +67,17 @@ resource "azuread_application_password" "argocd" {
   display_name   = "argocd-sso"
   end_date       = "2099-12-31T23:59:59Z"
 }
+
+# --- Argo CD admin group & membership ----------------------------------------
+
+resource "azuread_group" "argocd_admins" {
+  display_name     = var.admin_group_name
+  security_enabled = true
+  owners           = [var.owner_object_id]
+  description      = "Members of this group are granted the Argo CD admin role via SSO."
+}
+
+resource "azuread_group_member" "current_user" {
+  group_object_id  = azuread_group.argocd_admins.object_id
+  member_object_id = var.owner_object_id
+}
