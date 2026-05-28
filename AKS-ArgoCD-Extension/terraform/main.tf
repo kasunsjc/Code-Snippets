@@ -29,7 +29,7 @@ resource "azurerm_resource_group" "this" {
   tags     = local.tags
 }
 
-# --- Existing DNS zone (referenced for App Routing zone attachment) -----------
+# --- Existing DNS zone --------------------------------------------------------
 
 data "azurerm_dns_zone" "this" {
   name                = var.dns_zone_name
@@ -48,128 +48,64 @@ resource "azurerm_log_analytics_workspace" "this" {
 }
 
 # --- AKS cluster --------------------------------------------------------------
-# - Workload Identity + OIDC issuer enabled (required by the Argo CD extension
-#   for Microsoft Entra federation).
-# - Application Routing (managed NGINX) add-on enabled via web_app_routing.
-# - Custom node resource group name per repo convention.
 
-resource "azurerm_kubernetes_cluster" "this" {
-  name                      = local.cluster_name
-  location                  = azurerm_resource_group.this.location
-  resource_group_name       = azurerm_resource_group.this.name
-  node_resource_group       = local.node_resource_group
-  dns_prefix                = local.cluster_name
-  kubernetes_version        = var.kubernetes_version
-  oidc_issuer_enabled       = true
-  workload_identity_enabled = true
-  azure_policy_enabled      = true
-  local_account_disabled    = false
-  sku_tier                  = "Standard"
-  tags                      = local.tags
+module "aks" {
+  source = "./modules/aks"
 
-  default_node_pool {
-    name         = "system"
-    vm_size      = var.node_vm_size
-    node_count   = var.node_count
-    os_disk_type = "Ephemeral"
-    os_sku       = "AzureLinux"
-    max_pods     = 60
-    type         = "VirtualMachineScaleSets"
-    upgrade_settings {
-      max_surge = "33%"
-    }
-  }
-
-  identity {
-    type = "SystemAssigned"
-  }
-
-  network_profile {
-    network_plugin      = "azure"
-    network_plugin_mode = "overlay"
-    network_data_plane  = "cilium"
-    network_policy      = "cilium"
-    load_balancer_sku   = "standard"
-  }
-
-  # Azure NGINX add-on (Application Routing).
-  # dns_zone_ids attaches the existing public DNS zone; managed identity for the
-  # add-on automatically gets the DNS Zone Contributor role on the listed zones.
-  web_app_routing {
-    dns_zone_ids = [data.azurerm_dns_zone.this.id]
-  }
-
-  oms_agent {
-    log_analytics_workspace_id = azurerm_log_analytics_workspace.this.id
-  }
-}
-
-# --- Key Vault for ingress TLS certificate ------------------------------------
-
-resource "azurerm_key_vault" "this" {
-  name                       = local.key_vault_name
+  cluster_name               = local.cluster_name
   location                   = azurerm_resource_group.this.location
   resource_group_name        = azurerm_resource_group.this.name
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  sku_name                   = "standard"
-  rbac_authorization_enabled = true
-  purge_protection_enabled   = false
-  soft_delete_retention_days = 7
+  node_resource_group        = local.node_resource_group
+  kubernetes_version         = var.kubernetes_version
+  node_count                 = var.node_count
+  node_vm_size               = var.node_vm_size
+  dns_zone_id                = data.azurerm_dns_zone.this.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.this.id
   tags                       = local.tags
 }
 
-# Allow the Terraform principal to import the certificate.
-resource "azurerm_role_assignment" "tf_kv_cert_officer" {
-  scope                = azurerm_key_vault.this.id
-  role_definition_name = "Key Vault Certificates Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+# --- Key Vault + TLS certificate ----------------------------------------------
+
+module "keyvault" {
+  source = "./modules/keyvault"
+
+  key_vault_name           = local.key_vault_name
+  location                 = azurerm_resource_group.this.location
+  resource_group_name      = azurerm_resource_group.this.name
+  tenant_id                = data.azurerm_client_config.current.tenant_id
+  deployer_object_id       = data.azurerm_client_config.current.object_id
+  app_routing_object_id    = module.aks.web_app_routing_object_id
+  certificate_name         = local.certificate_name
+  certificate_pfx_base64   = filebase64(var.certificate_pfx_path)
+  certificate_pfx_password = var.certificate_pfx_password
+  aks_cluster_name         = module.aks.cluster_name
+  aks_resource_group_name  = azurerm_resource_group.this.name
+  tags                     = local.tags
 }
 
-# Allow the App Routing add-on managed identity to read the certificate. The
-# add-on uses the cluster's web_app_routing_identity (kubelet-style identity
-# created for the add-on) to pull the cert via Secrets Store CSI.
-resource "azurerm_role_assignment" "approuting_kv_secrets_user" {
-  scope                = azurerm_key_vault.this.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_kubernetes_cluster.this.web_app_routing[0].web_app_routing_identity[0].object_id
+# --- Microsoft Entra ID application for SSO -----------------------------------
+
+module "entra" {
+  source = "./modules/entra"
+
+  application_display_name = "argocd-${var.project}-${var.environment}"
+  owner_object_id          = data.azuread_client_config.current.object_id
+  argocd_hostname          = var.argocd_hostname
+  extra_redirect_uris      = var.extra_redirect_uris
 }
 
-resource "azurerm_key_vault_certificate" "ingress" {
-  name         = local.certificate_name
-  key_vault_id = azurerm_key_vault.this.id
+# --- Argo CD cluster extension ------------------------------------------------
 
-  certificate {
-    contents = filebase64(var.certificate_pfx_path)
-    password = var.certificate_pfx_password
-  }
+module "argocd_extension" {
+  source = "./modules/argocd-extension"
 
-  depends_on = [azurerm_role_assignment.tf_kv_cert_officer]
-}
-
-# --- Attach Key Vault to the App Routing add-on -------------------------------
-# The azurerm provider does not yet expose this directly; use the Azure CLI to
-# call `az aks approuting update --enable-kv --attach-kv`. Idempotent: running
-# again with the same KV is a no-op.
-
-resource "null_resource" "approuting_attach_kv" {
-  triggers = {
-    cluster_id   = azurerm_kubernetes_cluster.this.id
-    key_vault_id = azurerm_key_vault.this.id
-  }
-
-  provisioner "local-exec" {
-    command     = <<-EOT
-      az aks approuting update \
-        --resource-group ${azurerm_resource_group.this.name} \
-        --name ${azurerm_kubernetes_cluster.this.name} \
-        --enable-kv \
-        --attach-kv ${azurerm_key_vault.this.id}
-    EOT
-    interpreter = ["/bin/bash", "-c"]
-  }
-
-  depends_on = [
-    azurerm_role_assignment.approuting_kv_secrets_user,
-    azurerm_key_vault_certificate.ingress,
-  ]
+  cluster_id                 = module.aks.cluster_id
+  argocd_namespace           = local.argocd_namespace
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  client_id                  = module.entra.application_client_id
+  client_secret              = module.entra.client_secret
+  argocd_hostname            = var.argocd_hostname
+  admin_group_object_id      = var.argocd_admin_group_object_id
+  entra_service_principal_id = module.entra.service_principal_id
+  keyvault_ready             = module.keyvault.key_vault_id
 }

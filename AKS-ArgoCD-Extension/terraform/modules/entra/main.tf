@@ -6,9 +6,9 @@
 # group to the built-in admin role.
 
 resource "azuread_application" "argocd" {
-  display_name     = "argocd-${var.project}-${var.environment}"
+  display_name     = var.application_display_name
   sign_in_audience = "AzureADMyOrg"
-  owners           = [data.azuread_client_config.current.object_id]
+  owners           = [var.owner_object_id]
 
   web {
     redirect_uris = distinct(concat(
@@ -59,7 +59,7 @@ resource "azuread_application" "argocd" {
 
 resource "azuread_service_principal" "argocd" {
   client_id = azuread_application.argocd.client_id
-  owners    = [data.azuread_client_config.current.object_id]
+  owners    = [var.owner_object_id]
 }
 
 resource "azuread_application_password" "argocd" {

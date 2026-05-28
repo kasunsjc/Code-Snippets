@@ -19,19 +19,35 @@ References:
 ```
 AKS-ArgoCD-Extension/
 ├── README.md
-├── commands.sh                       # Post-apply helper (kubeconfig, ingress, DNS, sample app)
+├── commands.sh                             # Post-apply helper (kubeconfig, ingress, DNS, sample app)
 ├── terraform/
-│   ├── providers.tf                  # azurerm / azuread / azapi / random
-│   ├── variables.tf                  # All tunables (DNS zone, cert, admin group...)
-│   ├── main.tf                       # RG, Log Analytics, AKS (+App Routing), Key Vault, cert
-│   ├── entra.tf                      # Entra ID app, SP, client secret for Argo CD SSO
-│   ├── argocd.tf                     # Microsoft.ArgoCD extension (azapi)
+│   ├── providers.tf                        # azurerm / azuread / azapi / random
+│   ├── variables.tf                        # All tunables (DNS zone, cert, admin group...)
+│   ├── main.tf                             # Root – RG, Log Analytics, module calls
 │   ├── outputs.tf
-│   └── terraform.tfvars.example
+│   ├── terraform.tfvars.example
+│   └── modules/
+│       ├── aks/                            # AKS cluster with App Routing + Cilium
+│       │   ├── main.tf
+│       │   ├── variables.tf
+│       │   └── outputs.tf
+│       ├── keyvault/                       # Key Vault, cert import, App Routing KV attach
+│       │   ├── main.tf
+│       │   ├── variables.tf
+│       │   └── outputs.tf
+│       ├── entra/                          # Entra ID app, SP, client secret for SSO
+│       │   ├── main.tf
+│       │   ├── variables.tf
+│       │   └── outputs.tf
+│       └── argocd-extension/               # Microsoft.ArgoCD extension (azapi)
+│           ├── main.tf
+│           ├── variables.tf
+│           ├── versions.tf
+│           └── outputs.tf
 └── k8s/
-    ├── argocd-ingress.yaml           # Argo CD ingress (App Routing + KV cert)
-    ├── argocd-rbac-cm.yaml           # Entra group → admin role mapping
-    └── sample-application.yaml       # Demo Argo CD Application (guestbook)
+    ├── argocd-ingress.yaml                 # Argo CD ingress (App Routing + KV cert)
+    ├── argocd-rbac-cm.yaml                 # Entra group → admin role mapping
+    └── sample-application.yaml             # Demo Argo CD Application (guestbook)
 ```
 
 ## 🧱 What gets created
