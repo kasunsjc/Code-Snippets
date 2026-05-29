@@ -48,3 +48,23 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# --- User node pool -----------------------------------------------------------
+
+variable "user_node_pool_name" {
+  description = "Name of the user node pool."
+  type        = string
+  default     = "user"
+}
+
+variable "user_node_pool_vm_size" {
+  description = "VM size for the user node pool."
+  type        = string
+  default     = "Standard_D4ds_v5"
+}
+
+variable "user_node_pool_node_count" {
+  description = "Node count for the user node pool."
+  type        = number
+  default     = 2
+}

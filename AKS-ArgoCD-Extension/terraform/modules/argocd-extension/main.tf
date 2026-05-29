@@ -24,6 +24,11 @@ resource "azapi_resource" "argocd" {
       configurationSettings = {
         "namespaceInstall" = "false"
 
+        # Disable HA — single replica per component
+        "controller.replicas" = "1"
+        "server.replicas"     = "1"
+        "repoServer.replicas" = "1"
+
         # Microsoft Entra ID SSO
         "sso.provider"        = "entra"
         "sso.entra.tenantId"  = var.tenant_id

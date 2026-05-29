@@ -59,6 +59,9 @@ module "aks" {
   kubernetes_version         = var.kubernetes_version
   node_count                 = var.node_count
   node_vm_size               = var.node_vm_size
+  user_node_pool_name        = var.user_node_pool_name
+  user_node_pool_vm_size     = var.user_node_pool_vm_size
+  user_node_pool_node_count  = var.user_node_pool_node_count
   dns_zone_id                = data.azurerm_dns_zone.this.id
   log_analytics_workspace_id = azurerm_log_analytics_workspace.this.id
   tags                       = local.tags
