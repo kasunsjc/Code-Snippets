@@ -95,6 +95,17 @@ module "entra" {
   extra_redirect_uris      = var.extra_redirect_uris
 }
 
+# --- DNS Zone Contributor for App Routing (external-dns) ---------------------
+# The App Routing managed identity runs external-dns and must be able to
+# create/update A records in the Azure DNS zone. Without this role assignment
+# the external-dns pod fails to update DNS records for Ingress resources.
+
+resource "azurerm_role_assignment" "approuting_dns_zone_contributor" {
+  scope                = data.azurerm_dns_zone.this.id
+  role_definition_name = "DNS Zone Contributor"
+  principal_id         = module.aks.web_app_routing_object_id
+}
+
 # --- Argo CD cluster extension ------------------------------------------------
 
 module "argocd_extension" {
