@@ -52,6 +52,12 @@ resource "azapi_resource" "argocd" {
   schema_validation_enabled = false
   response_export_values    = ["properties.provisioningState", "properties.statuses"]
 
+  timeouts {
+    create = "60m"
+    update = "60m"
+    delete = "30m"
+  }
+
   lifecycle {
     ignore_changes = [body]
   }
