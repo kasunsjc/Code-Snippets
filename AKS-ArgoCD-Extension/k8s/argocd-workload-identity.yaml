@@ -1,0 +1,35 @@
+# Patch the ArgoCD service accounts to use the Azure Workload Identity.
+#
+# The annotation azure.workload.identity/client-id tells the Azure Workload
+# Identity mutating webhook which managed identity to project a token for.
+# The label azure.workload.identity/use: "true" on the pod is injected
+# automatically by the extension when the service account is annotated.
+#
+# Replace <WORKLOAD_IDENTITY_CLIENT_ID> with:
+#   terraform output -raw argocd_workload_identity_client_id
+#
+# This file is applied by deploy.sh after the Argo CD extension is ready.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    azure.workload.identity/client-id: "<WORKLOAD_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-application-controller
+  namespace: argocd
+  annotations:
+    azure.workload.identity/client-id: "<WORKLOAD_IDENTITY_CLIENT_ID>"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+  annotations:
+    azure.workload.identity/client-id: "<WORKLOAD_IDENTITY_CLIENT_ID>"

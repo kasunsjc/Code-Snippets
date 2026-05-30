@@ -106,6 +106,36 @@ resource "azurerm_role_assignment" "approuting_dns_zone_contributor" {
   principal_id         = module.aks.web_app_routing_object_id
 }
 
+# --- Workload Identity for Argo CD -------------------------------------------
+# A User Assigned Managed Identity with federated credentials allows ArgoCD
+# pods (server, application-controller, repo-server) to authenticate to Azure
+# services (Key Vault, ACR, etc.) via OIDC without client secrets.
+
+resource "azurerm_user_assigned_identity" "argocd" {
+  name                = "id-argocd-${local.name_prefix}"
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
+  tags                = local.tags
+}
+
+locals {
+  argocd_service_accounts = toset([
+    "argocd-server",
+    "argocd-application-controller",
+    "argocd-repo-server",
+  ])
+}
+
+resource "azurerm_federated_identity_credential" "argocd" {
+  for_each            = local.argocd_service_accounts
+  name                = "fic-${replace(each.key, "-", "")}-${local.name_prefix}"
+  resource_group_name = azurerm_resource_group.this.name
+  parent_id           = azurerm_user_assigned_identity.argocd.id
+  audience            = ["api://AzureADTokenExchange"]
+  issuer              = module.aks.oidc_issuer_url
+  subject             = "system:serviceaccount:${local.argocd_namespace}:${each.key}"
+}
+
 # --- Argo CD cluster extension ------------------------------------------------
 
 module "argocd_extension" {

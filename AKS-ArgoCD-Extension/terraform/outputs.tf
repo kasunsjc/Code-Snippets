@@ -49,3 +49,13 @@ output "argocd_extension_id" {
   description = "Resource ID of the Argo CD cluster extension."
   value       = module.argocd_extension.extension_id
 }
+
+output "argocd_workload_identity_client_id" {
+  description = "Client ID of the ArgoCD workload identity — annotate ArgoCD service accounts with this value."
+  value       = azurerm_user_assigned_identity.argocd.client_id
+}
+
+output "argocd_workload_identity_principal_id" {
+  description = "Principal ID of the ArgoCD workload identity managed identity."
+  value       = azurerm_user_assigned_identity.argocd.principal_id
+}

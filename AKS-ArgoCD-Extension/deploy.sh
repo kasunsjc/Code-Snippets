@@ -80,6 +80,7 @@ CLUSTER_NAME=$(terraform output -raw aks_cluster_name)
 KEY_VAULT_CERT_URI=$(terraform output -raw key_vault_certificate_uri)
 ARGOCD_HOST=$(terraform output -raw argocd_hostname)
 ADMIN_GROUP_ID=$(terraform output -raw argocd_admin_group_object_id)
+WI_CLIENT_ID=$(terraform output -raw argocd_workload_identity_client_id)
 
 # --- Step 3: Get kubeconfig -----------------------------------------------
 
@@ -127,7 +128,15 @@ echo ""
 info "Applying sample Argo CD Application..."
 kubectl apply -f "${K8S_DIR}/sample-application.yaml"
 
-# --- Step 8: Print admin password ------------------------------------------
+# --- Step 8: Annotate ArgoCD service accounts with Workload Identity ------
+
+info "Annotating ArgoCD service accounts with Workload Identity client ID..."
+sed "s|<WORKLOAD_IDENTITY_CLIENT_ID>|${WI_CLIENT_ID}|g" \
+  "${K8S_DIR}/argocd-workload-identity.yaml" | kubectl apply -f -
+
+ok "ArgoCD service accounts annotated."
+
+# --- Step 9: Print admin password ------------------------------------------
 
 info "Argo CD initial admin password:"
 kubectl -n argocd get secret argocd-initial-admin-secret \
