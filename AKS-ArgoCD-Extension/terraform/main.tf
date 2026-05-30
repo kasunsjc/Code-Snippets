@@ -149,6 +149,5 @@ module "argocd_extension" {
   workload_identity_client_id = azurerm_user_assigned_identity.argocd.client_id
   argocd_hostname             = var.argocd_hostname
   admin_group_object_id       = module.entra.admin_group_object_id
-  entra_service_principal_id  = module.entra.service_principal_id
   keyvault_ready              = module.keyvault.key_vault_id
 }

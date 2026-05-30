@@ -34,12 +34,6 @@ variable "admin_group_object_id" {
   type        = string
 }
 
-variable "entra_service_principal_id" {
-  description = "ID of the Entra service principal (used for depends_on ordering)."
-  type        = string
-  default     = ""
-}
-
 variable "keyvault_ready" {
   description = "Sentinel value — pass any output from the keyvault module to enforce ordering."
   type        = string
