@@ -56,8 +56,9 @@ resource "azapi_resource" "argocd" {
         "azure.workloadIdentity.entraSSOClientId" = var.client_id
 
         # OIDC SSO via workload identity (no client secret required)
-        "configs.cm.url"           = "https://${var.argocd_hostname}/"
-        "configs.cm.oidc\\.config" = local.oidc_config
+        "configs.cm.url"              = "https://${var.argocd_hostname}/"
+        "configs.cm.oidc\\.config"    = local.oidc_config
+        "configs.cm.admin\\.enabled"  = "false"
 
         # RBAC
         "configs.rbac.policy\\.default" = "role:readonly"

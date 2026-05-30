@@ -1,14 +1,29 @@
 # Microsoft Entra ID application used as the OIDC IdP for Argo CD SSO.
 #
-# Argo CD's Dex (bundled with the AKS Argo CD extension) is configured with the
-# client id / secret of this app and authenticates users against Entra ID. The
-# `groups` optional claim is emitted so the argocd-rbac-cm can map an Entra
-# group to the built-in admin role.
+# Argo CD's built-in OIDC client is configured with the client ID of this app
+# and authenticates users against Entra ID via workload identity (no secret).
+# The `groups` optional claim is emitted so the argocd-rbac-cm can map an
+# Entra group to the built-in admin role.
+
+# --- Data sources for Microsoft Graph ----------------------------------------
+
+data "azuread_application_published_app_ids" "well_known" {}
+
+data "azuread_service_principal" "msgraph" {
+  client_id = data.azuread_application_published_app_ids.well_known.result["MicrosoftGraph"]
+}
+
+# --- Argo CD Entra ID application --------------------------------------------
 
 resource "azuread_application" "argocd" {
   display_name     = var.application_display_name
   sign_in_audience = "AzureADMyOrg"
   owners           = [var.owner_object_id]
+
+  # ApplicationGroup — only groups explicitly assigned to this app are included
+  # in the token. Combined with azuread_app_role_assignment below, this keeps
+  # token size small and avoids leaking unrelated group memberships.
+  group_membership_claims = ["ApplicationGroup"]
 
   web {
     redirect_uris = distinct(concat(
@@ -26,32 +41,29 @@ resource "azuread_application" "argocd" {
 
   optional_claims {
     id_token {
-      name                  = "groups"
-      additional_properties = []
-      essential             = false
-    }
-
-    access_token {
-      name                  = "groups"
-      additional_properties = []
-      essential             = false
+      name      = "groups"
+      essential = true
     }
   }
 
-  group_membership_claims = ["SecurityGroup"]
-
   required_resource_access {
-    # Microsoft Graph
-    resource_app_id = "00000003-0000-0000-c000-000000000000"
+    resource_app_id = "00000003-0000-0000-c000-000000000000" # Microsoft Graph
 
-    # User.Read - delegated
+    # openid, profile, email, User.Read — delegated scopes for OIDC login
     resource_access {
-      id   = "e1fe6dd8-ba31-4d61-89e7-88639da4683d"
+      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["openid"]
       type = "Scope"
     }
-    # GroupMember.Read.All - delegated
     resource_access {
-      id   = "bc024368-1153-4739-b217-4326f2e966d0"
+      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["profile"]
+      type = "Scope"
+    }
+    resource_access {
+      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["email"]
+      type = "Scope"
+    }
+    resource_access {
+      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["User.Read"]
       type = "Scope"
     }
   }
@@ -60,6 +72,13 @@ resource "azuread_application" "argocd" {
 resource "azuread_service_principal" "argocd" {
   client_id = azuread_application.argocd.client_id
   owners    = [var.owner_object_id]
+}
+
+# Pre-consent Graph permissions so users won't see a consent prompt at login.
+resource "azuread_service_principal_delegated_permission_grant" "argocd" {
+  service_principal_object_id          = azuread_service_principal.argocd.object_id
+  resource_service_principal_object_id = data.azuread_service_principal.msgraph.object_id
+  claim_values                         = ["openid", "profile", "email", "User.Read"]
 }
 
 # Federated identity credential — lets argocd-server exchange its Kubernetes
@@ -84,4 +103,12 @@ resource "azuread_group" "argocd_admins" {
 resource "azuread_group_member" "current_user" {
   group_object_id  = azuread_group.argocd_admins.object_id
   member_object_id = var.owner_object_id
+}
+
+# Assign the admin group to the app's default role so group membership appears
+# in the token when group_membership_claims = ["ApplicationGroup"].
+resource "azuread_app_role_assignment" "argocd_admins" {
+  app_role_id         = "00000000-0000-0000-0000-000000000000" # default access role
+  principal_object_id = azuread_group.argocd_admins.object_id
+  resource_object_id  = azuread_service_principal.argocd.object_id
 }

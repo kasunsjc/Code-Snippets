@@ -94,6 +94,7 @@ module "entra" {
   argocd_hostname          = var.argocd_hostname
   extra_redirect_uris      = var.extra_redirect_uris
   oidc_issuer_url          = module.aks.oidc_issuer_url
+  admin_group_name         = "AKS-admins"
 }
 
 # --- DNS Zone Contributor for App Routing (external-dns) ---------------------
