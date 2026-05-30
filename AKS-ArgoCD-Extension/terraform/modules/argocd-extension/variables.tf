@@ -19,10 +19,9 @@ variable "client_id" {
   type        = string
 }
 
-variable "client_secret" {
-  description = "Entra ID application client secret for SSO."
+variable "workload_identity_client_id" {
+  description = "Client ID of the user-assigned managed identity used for Argo CD workload identity (Azure resource access)."
   type        = string
-  sensitive   = true
 }
 
 variable "argocd_hostname" {

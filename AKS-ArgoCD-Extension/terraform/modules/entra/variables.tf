@@ -24,3 +24,8 @@ variable "admin_group_name" {
   type        = string
   default     = "argocd-admins"
 }
+
+variable "oidc_issuer_url" {
+  description = "OIDC issuer URL of the AKS cluster — used to create a federated identity credential on the Entra app so argocd-server can exchange its K8s SA token for an Entra ID token."
+  type        = string
+}

@@ -4,6 +4,26 @@
 #   https://learn.microsoft.com/azure/azure-arc/kubernetes/tutorial-use-gitops-argocd
 #   https://blog.aks.azure.com/2026/04/22/argocd-extension-with-microsoft-entra
 
+locals {
+  # OIDC config YAML passed to configs.cm — uses workload identity so no
+  # client secret is required. argocd-server exchanges its projected K8s SA
+  # token for an Entra ID token via OIDC federation.
+  oidc_config = yamlencode({
+    name     = "Microsoft Entra ID"
+    issuer   = "https://login.microsoftonline.com/${var.tenant_id}/v2.0"
+    clientID = var.client_id
+    azure = {
+      useWorkloadIdentity = true
+    }
+    requestedIDTokenClaims = {
+      groups = {
+        essential = true
+      }
+    }
+    requestedScopes = ["openid", "profile", "email"]
+  })
+}
+
 resource "azapi_resource" "argocd" {
   type      = "Microsoft.KubernetesConfiguration/extensions@2023-05-01"
   name      = "argocd"
@@ -29,27 +49,26 @@ resource "azapi_resource" "argocd" {
         "server.replicas"     = "1"
         "repoServer.replicas" = "1"
 
-        # Microsoft Entra ID SSO
-        "sso.provider"        = "entra"
-        "sso.entra.tenantId"  = var.tenant_id
-        "sso.entra.clientId"  = var.client_id
-        "sso.entra.issuerUrl" = "https://login.microsoftonline.com/${var.tenant_id}/v2.0"
-        "sso.redirectUrl"     = "https://${var.argocd_hostname}/auth/callback"
+        # Workload identity — the extension labels pods and annotates service
+        # accounts automatically once these three keys are set.
+        "azure.workloadIdentity.enabled"          = "true"
+        "azure.workloadIdentity.clientId"         = var.workload_identity_client_id
+        "azure.workloadIdentity.entraSSOClientId" = var.client_id
+
+        # OIDC SSO via workload identity (no client secret required)
+        "configs.cm.url"           = "https://${var.argocd_hostname}/"
+        "configs.cm.oidc\\.config" = local.oidc_config
 
         # RBAC
-        "rbac.policy.default" = "role:readonly"
-        "rbac.policy.csv"     = "g, ${var.admin_group_object_id}, role:admin"
-        "rbac.scopes"         = "[groups]"
+        "configs.rbac.policy\\.default" = "role:readonly"
+        "configs.rbac.policy\\.csv"     = "g, ${var.admin_group_object_id}, role:admin"
+        "configs.rbac.scopes"           = "[groups]"
 
         # Ingress via AKS managed NGINX (App Routing)
         "server.ingress.enabled"          = "true"
         "server.ingress.ingressClassName" = "webapprouting.kubernetes.azure.com"
         "server.ingress.hostname"         = var.argocd_hostname
         "server.ingress.tls"              = "true"
-      }
-
-      configurationProtectedSettings = {
-        "sso.entra.clientSecret" = var.client_secret
       }
     }
   }

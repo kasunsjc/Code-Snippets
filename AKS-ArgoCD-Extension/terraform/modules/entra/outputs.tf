@@ -8,12 +8,6 @@ output "application_object_id" {
   value       = azuread_application.argocd.object_id
 }
 
-output "client_secret" {
-  description = "Client secret value for Argo CD SSO."
-  value       = azuread_application_password.argocd.value
-  sensitive   = true
-}
-
 output "service_principal_id" {
   description = "Object ID of the service principal."
   value       = azuread_service_principal.argocd.id

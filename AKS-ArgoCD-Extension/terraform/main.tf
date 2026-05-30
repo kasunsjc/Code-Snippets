@@ -93,6 +93,7 @@ module "entra" {
   owner_object_id          = data.azuread_client_config.current.object_id
   argocd_hostname          = var.argocd_hostname
   extra_redirect_uris      = var.extra_redirect_uris
+  oidc_issuer_url          = module.aks.oidc_issuer_url
 }
 
 # --- DNS Zone Contributor for App Routing (external-dns) ---------------------
@@ -141,13 +142,13 @@ resource "azurerm_federated_identity_credential" "argocd" {
 module "argocd_extension" {
   source = "./modules/argocd-extension"
 
-  cluster_id                 = module.aks.cluster_id
-  argocd_namespace           = local.argocd_namespace
-  tenant_id                  = data.azurerm_client_config.current.tenant_id
-  client_id                  = module.entra.application_client_id
-  client_secret              = module.entra.client_secret
-  argocd_hostname            = var.argocd_hostname
-  admin_group_object_id      = module.entra.admin_group_object_id
-  entra_service_principal_id = module.entra.service_principal_id
-  keyvault_ready             = module.keyvault.key_vault_id
+  cluster_id                  = module.aks.cluster_id
+  argocd_namespace            = local.argocd_namespace
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  client_id                   = module.entra.application_client_id
+  workload_identity_client_id = azurerm_user_assigned_identity.argocd.client_id
+  argocd_hostname             = var.argocd_hostname
+  admin_group_object_id       = module.entra.admin_group_object_id
+  entra_service_principal_id  = module.entra.service_principal_id
+  keyvault_ready              = module.keyvault.key_vault_id
 }

@@ -62,10 +62,14 @@ resource "azuread_service_principal" "argocd" {
   owners    = [var.owner_object_id]
 }
 
-resource "azuread_application_password" "argocd" {
+# Federated identity credential — lets argocd-server exchange its Kubernetes
+# projected service account token for an Entra ID token (workload identity SSO).
+resource "azuread_application_federated_identity_credential" "argocd_server" {
   application_id = azuread_application.argocd.id
-  display_name   = "argocd-sso"
-  end_date       = "2099-12-31T23:59:59Z"
+  display_name   = "argocd-server-wi"
+  audiences      = ["api://AzureADTokenExchange"]
+  issuer         = var.oidc_issuer_url
+  subject        = "system:serviceaccount:argocd:argocd-server"
 }
 
 # --- Argo CD admin group & membership ----------------------------------------
