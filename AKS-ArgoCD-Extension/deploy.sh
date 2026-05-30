@@ -116,11 +116,20 @@ kubectl -n app-routing-system rollout restart deployment external-dns
 kubectl -n app-routing-system rollout status deployment external-dns --timeout=3m
 ok "external-dns is running."
 
-# --- Step 5: Apply ingress manifest ----------------------------------------
+# --- Step 5: Configure NginxIngressController with KV default SSL cert -----
+# This mirrors what the Azure Portal does: set spec.defaultSSLCertificate.keyVaultURI
+# on the NginxIngressController CR so the App Routing operator syncs the cert
+# from Key Vault at the controller level. Every ingress using
+# webapprouting.kubernetes.azure.com then gets the real cert automatically
+# — no per-ingress annotation needed.
+
+info "Configuring NginxIngressController default SSL certificate from Key Vault..."
+kubectl patch nginxingresscontroller default \
+  --type=merge \
+  -p "{\"spec\":{\"defaultSSLCertificate\":{\"keyVaultURI\":\"${KEY_VAULT_CERT_URI}\"}}}"
 
 info "Applying Argo CD ingress manifest..."
 sed \
-  -e "s#https://<key-vault-name>.vault.azure.net/certificates/argocd-ingress-tls#${KEY_VAULT_CERT_URI}#g" \
   -e "s#argocd.example.com#${ARGOCD_HOST}#g" \
   "${K8S_DIR}/argocd-ingress.yaml" | kubectl apply -f -
 

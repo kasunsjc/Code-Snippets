@@ -1,18 +1,18 @@
 # Ingress for the Argo CD server, exposed via the AKS managed NGINX add-on
-# (Application Routing). TLS is terminated using a certificate stored in
-# Azure Key Vault and pulled by the App Routing controller via Secrets Store
-# CSI - referenced through the kubernetes.azure.com/tls-cert-keyvault-uri
-# annotation.
+# (Application Routing). TLS is terminated by the nginx controller using the
+# default SSL certificate configured on the NginxIngressController CR:
 #
-# Replace the annotation value with the output of:
-#   terraform output -raw key_vault_certificate_uri
+#   kubectl patch nginxingresscontroller default --type=merge \
+#     -p '{"spec":{"defaultSSLCertificate":{"keyVaultURI":"<kv-cert-uri>"}}}
+#
+# This matches the Azure Portal flow: domain + KV cert are configured at the
+# controller level, so no per-ingress annotation is required.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: argocd-server
   namespace: argocd
   annotations:
-    kubernetes.azure.com/tls-cert-keyvault-uri: "https://<key-vault-name>.vault.azure.net/certificates/argocd-ingress-tls"
     # Argo CD server speaks HTTPS to its own pod when TLS is enabled; if you
     # disabled internal TLS, change this to HTTP and drop the next annotation.
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
