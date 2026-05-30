@@ -42,6 +42,13 @@ resource "azurerm_kubernetes_cluster" "this" {
     dns_zone_ids = [var.dns_zone_id]
   }
 
+  # Secrets Store CSI Driver with the Azure Key Vault provider.
+  # Required for App Routing to mount Key Vault certificates as TLS secrets.
+  key_vault_secrets_provider {
+    secret_rotation_enabled  = true
+    secret_rotation_interval = "2m"
+  }
+
   oms_agent {
     log_analytics_workspace_id = var.log_analytics_workspace_id
   }

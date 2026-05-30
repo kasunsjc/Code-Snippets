@@ -18,9 +18,10 @@ resource "azurerm_role_assignment" "tf_kv_cert_officer" {
 }
 
 # Allow the App Routing add-on managed identity to read the certificate.
-resource "azurerm_role_assignment" "approuting_kv_secrets_user" {
+# Key Vault Certificate User is the role assigned by `az aks approuting update --attach-kv`.
+resource "azurerm_role_assignment" "approuting_kv_cert_user" {
   scope                = azurerm_key_vault.this.id
-  role_definition_name = "Key Vault Secrets User"
+  role_definition_name = "Key Vault Certificate User"
   principal_id         = var.app_routing_object_id
 }
 
