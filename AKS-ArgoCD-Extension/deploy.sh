@@ -117,16 +117,49 @@ kubectl -n app-routing-system rollout status deployment external-dns --timeout=3
 ok "external-dns is running."
 
 # --- Step 5: Configure NginxIngressController with KV default SSL cert -----
-# This mirrors what the Azure Portal does: set spec.defaultSSLCertificate.keyVaultURI
-# on the NginxIngressController CR so the App Routing operator syncs the cert
-# from Key Vault at the controller level. Every ingress using
-# webapprouting.kubernetes.azure.com then gets the real cert automatically
-# — no per-ingress annotation needed.
+#
+# WHY THIS IS NEEDED:
+#   The AKS App Routing addon manages an nginx ingress controller. By default
+#   it serves a self-signed certificate, causing ERR_CERT_AUTHORITY_INVALID.
+#
+# WHAT THIS DOES (mirrors the Azure Portal flow):
+#   1. Patches the NginxIngressController CR with the Key Vault certificate URI.
+#   2. The App Routing operator sees the change and creates a SecretProviderClass
+#      in app-routing-system namespace.
+#   3. The Secrets Store CSI driver (enabled via key_vault_secrets_provider in
+#      Terraform) mounts the cert from Key Vault and writes it as a
+#      kubernetes.io/tls Secret (keyvault-nginx-default).
+#   4. The operator restarts nginx with:
+#        --default-ssl-certificate=app-routing-system/keyvault-nginx-default
+#   5. Every ingress using ingressClassName: webapprouting.kubernetes.azure.com
+#      is now served with the real certificate — no per-ingress annotation needed.
+#
+# NOTE: The NginxIngressController CR is created automatically by the App Routing
+# addon when the cluster first becomes ready. We wait for it before patching.
+
+info "Waiting for NginxIngressController CR to be available..."
+kubectl wait nginxingresscontroller default \
+  --for=condition=Available \
+  --timeout=5m
 
 info "Configuring NginxIngressController default SSL certificate from Key Vault..."
+# This is the Terraform/CLI equivalent of:
+#   Portal → AKS → App Routing → HTTPS → select Key Vault + certificate
 kubectl patch nginxingresscontroller default \
   --type=merge \
   -p "{\"spec\":{\"defaultSSLCertificate\":{\"keyVaultURI\":\"${KEY_VAULT_CERT_URI}\"}}}"
+
+info "Waiting for App Routing operator to sync the certificate from Key Vault..."
+# The operator creates the TLS secret asynchronously. We poll until it exists
+# so the nginx rollout that follows uses the real cert immediately.
+for i in $(seq 1 30); do
+  if kubectl -n app-routing-system get secret keyvault-nginx-default >/dev/null 2>&1; then
+    ok "Certificate synced (keyvault-nginx-default secret exists)."
+    break
+  fi
+  [[ $i -eq 30 ]] && { err "Timed out waiting for cert sync."; exit 1; }
+  sleep 5
+done
 
 info "Applying Argo CD ingress manifest..."
 sed \
