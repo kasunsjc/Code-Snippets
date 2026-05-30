@@ -36,6 +36,10 @@ data "azurerm_dns_zone" "this" {
   resource_group_name = var.dns_zone_resource_group
 }
 
+data "azurerm_resource_group" "dns_zones" {
+  name = var.dns_zone_resource_group
+}
+
 # --- Observability ------------------------------------------------------------
 
 resource "azurerm_log_analytics_workspace" "this" {
@@ -105,6 +109,16 @@ module "entra" {
 resource "azurerm_role_assignment" "approuting_dns_zone_contributor" {
   scope                = data.azurerm_dns_zone.this.id
   role_definition_name = "DNS Zone Contributor"
+  principal_id         = module.aks.web_app_routing_object_id
+}
+
+# external-dns lists DNS zones at the resource group level before accessing the
+# specific zone. DNS Zone Contributor scoped to the zone alone does not grant
+# Microsoft.Network/dnsZones/read at the resource group scope, causing a 403.
+# Reader at the resource group level resolves this without over-privileging.
+resource "azurerm_role_assignment" "approuting_dns_rg_reader" {
+  scope                = data.azurerm_resource_group.dns_zones.id
+  role_definition_name = "Reader"
   principal_id         = module.aks.web_app_routing_object_id
 }
 
