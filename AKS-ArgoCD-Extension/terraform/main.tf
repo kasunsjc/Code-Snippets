@@ -98,7 +98,7 @@ module "entra" {
   argocd_hostname          = var.argocd_hostname
   extra_redirect_uris      = var.extra_redirect_uris
   oidc_issuer_url          = module.aks.oidc_issuer_url
-  admin_group_name         = "AKS-admins"
+  admin_group_name         = "ArgoCdAdmins"
 }
 
 # --- DNS Zone Contributor for App Routing (external-dns) ---------------------
@@ -120,6 +120,18 @@ resource "azurerm_role_assignment" "approuting_dns_rg_reader" {
   scope                = data.azurerm_resource_group.dns_zones.id
   role_definition_name = "Reader"
   principal_id         = module.aks.web_app_routing_object_id
+}
+
+# Azure RBAC assignments can take up to 60 s to propagate. external-dns starts
+# immediately after the cluster is ready and will crash with 403 if it queries
+# the DNS zone before the new role assignments are active. This sleep ensures
+# Terraform waits before signalling that the DNS RBAC is fully ready.
+resource "time_sleep" "dns_rbac_propagation" {
+  depends_on = [
+    azurerm_role_assignment.approuting_dns_zone_contributor,
+    azurerm_role_assignment.approuting_dns_rg_reader,
+  ]
+  create_duration = "90s"
 }
 
 # --- Workload Identity for Argo CD -------------------------------------------

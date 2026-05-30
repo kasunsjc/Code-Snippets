@@ -74,6 +74,9 @@ terraform apply -auto-approve
 ok "Terraform apply complete."
 
 # --- Step 2: Read Terraform outputs ----------------------------------------
+# NOTE: The time_sleep resource inside Terraform already waits 90 s for RBAC
+# propagation. After kubeconfig is fetched we do one extra restart of
+# external-dns so it picks up the fresh role assignments cleanly.
 
 RESOURCE_GROUP=$(terraform output -raw resource_group_name)
 CLUSTER_NAME=$(terraform output -raw aks_cluster_name)
@@ -103,6 +106,15 @@ info "Waiting for argocd-server rollout..."
 kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
 
 ok "Argo CD extension is ready."
+
+# --- Step 4b: Restart external-dns to pick up fresh RBAC ------------------
+# The App Routing managed identity is recreated with each new cluster.
+# Restart external-dns so it acquires a fresh token after the role
+# assignments have propagated (time_sleep in Terraform already waited 90 s).
+info "Restarting external-dns to apply new role assignments..."
+kubectl -n app-routing-system rollout restart deployment external-dns
+kubectl -n app-routing-system rollout status deployment external-dns --timeout=3m
+ok "external-dns is running."
 
 # --- Step 5: Apply ingress manifest ----------------------------------------
 
