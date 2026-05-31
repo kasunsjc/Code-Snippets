@@ -607,6 +607,60 @@ az keyvault purge --name <kv-name> --location <region>
 
 ---
 
+### 11. "Too many redirects" loop opening the Argo CD URL
+
+**Root cause:** The extension enables ingress TLS (`server.ingress.tls=true`) but `argocd-server` defaults to **secure mode**. The managed NGINX ingress terminates TLS and forwards plain **HTTP** to the backend, which then `307`-redirects every request back to HTTPS — an infinite loop (`ERR_TOO_MANY_REDIRECTS`).
+
+**Fix:** Run `argocd-server` in insecure mode so TLS terminates only at the ingress. This repo sets it on the extension:
+```hcl
+# terraform/modules/argocd-extension/main.tf
+"configs.params.server\\.insecure" = "true"
+```
+
+For an already-running cluster, patch the live config:
+```bash
+kubectl -n argocd patch cm argocd-cmd-params-cm \
+  --type=merge -p '{"data":{"server.insecure":"true"}}'
+kubectl -n argocd rollout restart deploy/argocd-server
+```
+
+**Verify:**
+```bash
+curl -sS -o /dev/null -w "HTTP %{http_code} | redirects: %{num_redirects}\n" \
+  -L https://<argocd-hostname>/
+# Expect: HTTP 200 | redirects: 0
+```
+
+> Note: `azapi_resource.argocd` uses `ignore_changes = [body]`, so changing this value applies on a **fresh deploy** (or extension recreate), not in place on an existing extension — patch live as above in that case.
+
+---
+
+### 12. Site keeps loading the previous cluster's IP — stale `external-dns` records
+
+**Root cause:** Each new cluster gets a fresh `external-dns` instance with a new TXT **ownership ID**, and the NGINX public IP changes every deploy. `external-dns` refuses to modify an A record whose ownership TXT belongs to a *different* owner ID, so after a redeploy it logs *"All records are already up to date"* and keeps serving the **old IP**. `external-dns` is also torn down with the cluster, so it never cleans up after itself.
+
+**Diagnose:**
+```bash
+# Compare the A record IP with the current NGINX IP
+az network dns record-set a show -g <dns-rg> -z <zone> -n <record> \
+  --query "aRecords[].ipv4Address" -o tsv
+kubectl -n app-routing-system get svc -o wide | grep LoadBalancer
+kubectl -n app-routing-system logs deploy/external-dns | grep -iE 'up to date|owner'
+```
+
+**Fix:** `deploy.sh` now deletes the stale A/TXT records automatically so `external-dns` recreates them with the current IP and owner:
+- On **deploy** — before `external-dns` reconciles (Step 4a).
+- On **destroy** — *after* `terraform destroy` completes, so the torn-down `external-dns` cannot recreate them mid-teardown.
+
+Manual cleanup if needed:
+```bash
+az network dns record-set a   delete -g <dns-rg> -z <zone> -n <record>   --yes
+az network dns record-set txt delete -g <dns-rg> -z <zone> -n a-<record> --yes
+kubectl -n app-routing-system rollout restart deployment external-dns
+```
+
+---
+
 ## 💰 Approximate cost
 
 A back-of-envelope estimate for the default sizing in North Europe (USD/month):
