@@ -84,19 +84,25 @@ if [[ "${1:-}" == "--destroy" ]]; then
   info "Destroying all resources..."
   cd "${TF_DIR}"
 
-  # Remove the Argo CD DNS records before destroying. external-dns is torn down
-  # with the cluster and will not clean up after itself, so without this the
-  # zone accumulates stale A / TXT records that block the next deployment.
+  # Capture the DNS zone details from Terraform state BEFORE destroying, since
+  # the outputs disappear once the state is torn down.
   DNS_RG=$(terraform output -raw dns_zone_resource_group 2>/dev/null || true)
   DNS_ZONE=$(terraform output -raw dns_zone_name 2>/dev/null || true)
   ARGOCD_HOST=$(terraform output -raw argocd_hostname 2>/dev/null || true)
+
+  terraform destroy -auto-approve
+
+  # Clean up the Argo CD DNS records AFTER destroy completes. external-dns is
+  # torn down with the cluster and will not clean up after itself. Deleting the
+  # records *after* the cluster is gone guarantees external-dns cannot recreate
+  # them mid-teardown, otherwise the zone keeps stale A / TXT records that block
+  # the next deployment.
   if [[ -n "${DNS_RG}" && -n "${DNS_ZONE}" && -n "${ARGOCD_HOST}" ]]; then
     cleanup_stale_dns "${DNS_RG}" "${DNS_ZONE}" "${ARGOCD_HOST}"
   else
-    err "Could not read DNS outputs from Terraform state; skipping DNS cleanup."
+    err "Could not read DNS zone details from Terraform state; skipping DNS cleanup."
   fi
 
-  terraform destroy -auto-approve
   ok "All resources destroyed."
   exit 0
 fi
