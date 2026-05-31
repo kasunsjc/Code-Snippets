@@ -65,6 +65,13 @@ resource "azapi_resource" "argocd" {
         "configs.rbac.policy\\.csv"     = "g, ${var.admin_group_object_id}, role:admin"
         "configs.rbac.scopes"           = "[groups]"
 
+        # Run argocd-server in insecure mode (plain HTTP) so TLS terminates at
+        # the managed NGINX ingress. Without this the server keeps serving
+        # HTTPS and 307-redirects every request back to HTTPS, which produces
+        # an infinite "too many redirects" loop behind the TLS-terminating
+        # ingress. Sets server.insecure=true in argocd-cmd-params-cm.
+        "configs.params.server\\.insecure" = "true"
+
         # Ingress via AKS managed NGINX (App Routing)
         "server.ingress.enabled"          = "true"
         "server.ingress.ingressClassName" = "webapprouting.kubernetes.azure.com"
