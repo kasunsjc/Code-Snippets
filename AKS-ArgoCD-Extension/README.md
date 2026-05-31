@@ -85,11 +85,14 @@ AKS-ArgoCD-Extension/
 │       ├── entra/                          # Entra ID app, SP, federated identity, admin group
 │       └── argocd-extension/               # Microsoft.ArgoCD cluster extension (via azapi)
 └── k8s/
-    ├── argocd-ingress.yaml                 # Ingress for argocd-server (App Routing class)
     ├── argocd-rbac-cm.yaml                 # Reference RBAC ConfigMap (also set by extension)
     ├── argocd-workload-identity.yaml       # Reference SA annotations (set by extension)
     └── sample-application.yaml             # Demo Argo CD Application (guestbook)
 ```
+
+> The `argocd-server` Ingress is **managed by the extension** itself
+> (`server.ingress.*` settings in `modules/argocd-extension`), so there is no
+> standalone ingress manifest under `k8s/`.
 
 ### Module responsibilities
 
@@ -185,7 +188,13 @@ az provider show -n Microsoft.KubernetesConfiguration --query registrationState 
 
 ### Required variables
 
-Create `terraform/terraform.tfvars`:
+Copy the example file and edit the values:
+
+```bash
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+```
+
+A minimal `terraform/terraform.tfvars`:
 
 ```hcl
 dns_zone_name           = "example.com"
@@ -248,7 +257,7 @@ cd AKS-ArgoCD-Extension
 az login
 az account set --subscription "<your-subscription>"
 
-# 2. Create terraform.tfvars (see Configuration above)
+# 2. Create terraform.tfvars (copy terraform/terraform.tfvars.example; see Configuration above)
 
 # 3. Deploy
 ./deploy.sh
@@ -268,7 +277,7 @@ az account set --subscription "<your-subscription>"
 | 8 | Wait for `NginxIngressController` CR | `kubectl wait --for=condition=Available` |
 | 9 | Patch `NginxIngressController` | Adds `spec.defaultSSLCertificate.keyVaultURI` — mirrors what the Portal does when you enable HTTPS on App Routing |
 | 10 | Wait for KV cert sync | Polls until `app-routing-system/keyvault-nginx-default` secret exists |
-| 11 | Apply ingress | `k8s/argocd-ingress.yaml` with hostname substituted |
+| 11 | Ingress | Managed by the extension (`server.ingress.*`); no manifest applied here |
 | 12 | Print NGINX public IP | Verify DNS A record (auto-created by `external-dns`) |
 | 13 | Apply sample Application | `k8s/sample-application.yaml` (guestbook) |
 | 14 | Print bootstrap admin password | Use it once, then sign in via SSO and rotate or disable |

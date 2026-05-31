@@ -70,9 +70,19 @@ resource "azapi_resource" "argocd" {
         # HTTPS and 307-redirects every request back to HTTPS, which produces
         # an infinite "too many redirects" loop behind the TLS-terminating
         # ingress. Sets server.insecure=true in argocd-cmd-params-cm.
+        #
+        # This also makes the extension-managed Ingress (below) point at the
+        # argocd-server HTTP service port (80) instead of HTTPS (443), so nginx
+        # proxies plain HTTP to the backend — no backend-protocol annotation
+        # is required and there are no upstream TLS handshake errors.
         "configs.params.server\\.insecure" = "true"
 
-        # Ingress via AKS managed NGINX (App Routing)
+        # Ingress via AKS managed NGINX (App Routing). The extension is the
+        # single source of truth for the argocd-server Ingress — it is created
+        # and reconciled by the extension's Helm release, so no standalone
+        # Ingress manifest is applied. TLS is terminated by nginx using the
+        # controller-level default SSL certificate sourced from Key Vault
+        # (see deploy.sh NginxIngressController patch).
         "server.ingress.enabled"          = "true"
         "server.ingress.ingressClassName" = "webapprouting.kubernetes.azure.com"
         "server.ingress.hostname"         = var.argocd_hostname

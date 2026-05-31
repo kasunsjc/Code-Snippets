@@ -5,7 +5,8 @@
 #   1. Runs `terraform init` and `terraform apply` to provision all Azure
 #      infrastructure (AKS, Key Vault, Entra ID app + group, Argo CD extension).
 #   2. Fetches kubeconfig, waits for the extension to become ready.
-#   3. Applies post-deploy K8s manifests (ingress, sample app).
+#   3. Applies post-deploy K8s manifests (sample app). The Argo CD ingress is
+#      managed by the extension itself, not a standalone manifest.
 #   4. Prints connection info (NGINX IP, admin password).
 #
 # Prerequisites:
@@ -148,12 +149,42 @@ az aks get-credentials \
 # --- Step 4: Wait for Argo CD extension ------------------------------------
 
 info "Waiting for the Argo CD extension to finish provisioning..."
-az k8s-extension show \
-  --cluster-type managedClusters \
-  --cluster-name "${CLUSTER_NAME}" \
-  --resource-group "${RESOURCE_GROUP}" \
-  --name argocd \
-  --query "provisioningState" -o tsv
+# Poll az k8s-extension until provisioningState reaches a terminal state. The
+# extension installs Argo CD via Helm and can stay in Creating/Updating for
+# several minutes; until it reaches Succeeded the argocd-server deployment may
+# not exist yet, so the rollout-status call below would fail with
+# "deployments.apps argocd-server not found".
+EXT_WAIT_MAX_MINUTES="${EXT_WAIT_MAX_MINUTES:-30}"
+ext_state=""
+ext_iterations=$(( EXT_WAIT_MAX_MINUTES * 3 ))   # poll every 20 s
+for i in $(seq 1 "${ext_iterations}"); do
+  ext_state=$(az k8s-extension show \
+    --cluster-type managedClusters \
+    --cluster-name "${CLUSTER_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name argocd \
+    --query "provisioningState" -o tsv 2>/dev/null || true)
+  case "${ext_state}" in
+    Succeeded)
+      ok "Extension provisioningState: Succeeded."
+      break
+      ;;
+    Failed|Canceled)
+      err "Extension provisioningState: ${ext_state}. Inspect with:"
+      echo "    az k8s-extension show --cluster-type managedClusters \\"
+      echo "      --cluster-name ${CLUSTER_NAME} --resource-group ${RESOURCE_GROUP} --name argocd"
+      exit 1
+      ;;
+    *)
+      echo "  provisioningState=${ext_state:-<unknown>} (waiting ~$(( i * 20 / 60 )) min)..."
+      ;;
+  esac
+  if [[ "${i}" -eq "${ext_iterations}" ]]; then
+    err "Extension did not reach 'Succeeded' within ${EXT_WAIT_MAX_MINUTES} min (last state: ${ext_state:-<unknown>})."
+    exit 1
+  fi
+  sleep 20
+done
 
 info "Waiting for argocd-server rollout..."
 kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
@@ -254,10 +285,10 @@ for i in $(seq 1 30); do
   sleep 5
 done
 
-info "Applying Argo CD ingress manifest..."
-sed \
-  -e "s#argocd.example.com#${ARGOCD_HOST}#g" \
-  "${K8S_DIR}/argocd-ingress.yaml" | kubectl apply -f -
+info "Argo CD ingress is managed by the extension (server.ingress.enabled=true)."
+echo "  The argocd-server Ingress is created and reconciled by the extension's"
+echo "  Helm release — no standalone manifest is applied. nginx terminates TLS"
+echo "  with the controller default cert patched above."
 
 # --- Step 6: Print NGINX public IP for DNS --------------------------------
 
