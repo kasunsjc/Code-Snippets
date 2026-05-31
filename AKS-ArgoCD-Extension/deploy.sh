@@ -277,9 +277,17 @@ kubectl apply -f "${K8S_DIR}/sample-application.yaml"
 # --- Step 8: Print admin password ------------------------------------------
 
 info "Argo CD initial admin password:"
-kubectl -n argocd get secret argocd-initial-admin-secret \
-  -o jsonpath='{.data.password}' | base64 -d
-echo ""
+# The local admin account is disabled in the extension config
+# (configs.cm.admin.enabled=false) so Argo CD is SSO-only and the
+# argocd-initial-admin-secret is never created. Only print the bootstrap
+# password if the secret actually exists.
+if kubectl -n argocd get secret argocd-initial-admin-secret >/dev/null 2>&1; then
+  kubectl -n argocd get secret argocd-initial-admin-secret \
+    -o jsonpath='{.data.password}' | base64 -d
+  echo ""
+else
+  echo "  Local admin account is disabled — sign in with Microsoft Entra ID SSO."
+fi
 
 # --- Summary ---------------------------------------------------------------
 
