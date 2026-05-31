@@ -107,14 +107,48 @@ kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
 
 ok "Argo CD extension is ready."
 
-# --- Step 4b: Restart external-dns to pick up fresh RBAC ------------------
-# The App Routing managed identity is recreated with each new cluster.
-# Restart external-dns so it acquires a fresh token after the role
-# assignments have propagated (time_sleep in Terraform already waited 90 s).
-info "Restarting external-dns to apply new role assignments..."
-kubectl -n app-routing-system rollout restart deployment external-dns
-kubectl -n app-routing-system rollout status deployment external-dns --timeout=3m
-ok "external-dns is running."
+# --- Step 4b: Wait for external-dns RBAC to take effect -------------------
+# The App Routing managed identity is created fresh with every new cluster.
+# Azure RBAC grants on a brand-new managed identity can take well beyond the
+# 90 s Terraform time_sleep to become effective at ARM — commonly 15-30 min —
+# because ARM negative-caches the "no access" decision for new principals.
+# Until then external-dns crash-loops with a 403 "AuthorizationFailed" on
+# Microsoft.Network/dnsZones/read. This is NOT a misconfiguration: the role
+# assignments (DNS Zone Contributor on the zone + Reader on the zone RG) are
+# already in place. We simply poll, restarting periodically, until the
+# external-dns pod stops crash-looping and reports Ready.
+DNS_WAIT_MAX_MINUTES="${DNS_WAIT_MAX_MINUTES:-30}"
+info "Waiting for external-dns to pick up DNS RBAC (up to ${DNS_WAIT_MAX_MINUTES} min)..."
+echo "  (New managed-identity role assignments can take 15-30 min to propagate at ARM.)"
+
+dns_ready=false
+iterations=$(( DNS_WAIT_MAX_MINUTES * 2 ))   # poll every 30 s
+for i in $(seq 1 "${iterations}"); do
+  ready=$(kubectl -n app-routing-system get pods -l app=external-dns \
+    -o jsonpath='{range .items[*]}{.status.containerStatuses[0].ready}{"\n"}{end}' 2>/dev/null \
+    | grep -c true || true)
+  if [[ "${ready}" -ge 1 ]]; then
+    dns_ready=true
+    break
+  fi
+  # Every 4 minutes, restart the deployment to force a fresh token / ARM call.
+  if (( i % 8 == 0 )); then
+    echo "  external-dns still unauthorized after ~$(( i / 2 )) min; restarting it..."
+    kubectl -n app-routing-system rollout restart deployment external-dns >/dev/null 2>&1 || true
+  fi
+  sleep 30
+done
+
+if [[ "${dns_ready}" == "true" ]]; then
+  ok "external-dns is running and authorized for the DNS zone."
+else
+  err "external-dns did not become ready within ${DNS_WAIT_MAX_MINUTES} min."
+  echo "  The DNS role assignments are correct in Terraform, but ARM may still be"
+  echo "  propagating the grant for the new managed identity. external-dns will"
+  echo "  self-heal once propagation completes — no action needed. Re-check with:"
+  echo "    kubectl -n app-routing-system get pods -l app=external-dns"
+  echo "    kubectl -n app-routing-system logs deploy/external-dns --tail=20"
+fi
 
 # --- Step 5: Configure NginxIngressController with KV default SSL cert -----
 #
