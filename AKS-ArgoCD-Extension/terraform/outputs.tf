@@ -23,6 +23,16 @@ output "argocd_hostname" {
   value = var.argocd_hostname
 }
 
+output "dns_zone_name" {
+  description = "Name of the Azure DNS zone that hosts the Argo CD record."
+  value       = var.dns_zone_name
+}
+
+output "dns_zone_resource_group" {
+  description = "Resource group containing the Azure DNS zone."
+  value       = var.dns_zone_resource_group
+}
+
 output "argocd_entra_application_client_id" {
   value = module.entra.application_client_id
 }

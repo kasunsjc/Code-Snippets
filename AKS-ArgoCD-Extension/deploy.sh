@@ -44,6 +44,38 @@ check_prerequisites() {
   fi
 }
 
+# Delete any stale Argo CD A / TXT records left in the DNS zone by a previous
+# cluster. external-dns refuses to overwrite a record whose TXT ownership tag
+# belongs to a different external-dns instance (every fresh cluster gets a new
+# owner ID), so it silently keeps serving the old IP. Removing the records lets
+# the current external-dns recreate them with the correct IP and ownership.
+#
+# Args: $1 = DNS zone resource group, $2 = DNS zone name, $3 = Argo CD FQDN
+cleanup_stale_dns() {
+  local dns_rg="$1" zone="$2" fqdn="$3"
+  # Derive the relative record name (strip the trailing ".<zone>").
+  local record="${fqdn%.${zone}}"
+  [[ "${record}" == "${fqdn}" ]] && record="@"   # apex fallback
+
+  if ! command -v az >/dev/null; then
+    return 0
+  fi
+
+  info "Cleaning up stale DNS records for '${fqdn}' in zone '${zone}'..."
+  # A record (the address) and the matching external-dns TXT ownership record
+  # (external-dns prefixes A-record ownership TXT names with "a-").
+  for rs in "a:${record}" "txt:${record}" "txt:a-${record}"; do
+    local rtype="${rs%%:*}" rname="${rs##*:}"
+    if az network dns record-set "${rtype}" show \
+        -g "${dns_rg}" -z "${zone}" -n "${rname}" >/dev/null 2>&1; then
+      echo "  removing stale ${rtype} record '${rname}'"
+      az network dns record-set "${rtype}" delete \
+        -g "${dns_rg}" -z "${zone}" -n "${rname}" --yes >/dev/null 2>&1 || true
+    fi
+  done
+  ok "Stale DNS records cleared (external-dns will recreate them)."
+}
+
 # ---------------------------------------------------------------------------
 # Destroy path
 # ---------------------------------------------------------------------------
@@ -51,6 +83,19 @@ check_prerequisites() {
 if [[ "${1:-}" == "--destroy" ]]; then
   info "Destroying all resources..."
   cd "${TF_DIR}"
+
+  # Remove the Argo CD DNS records before destroying. external-dns is torn down
+  # with the cluster and will not clean up after itself, so without this the
+  # zone accumulates stale A / TXT records that block the next deployment.
+  DNS_RG=$(terraform output -raw dns_zone_resource_group 2>/dev/null || true)
+  DNS_ZONE=$(terraform output -raw dns_zone_name 2>/dev/null || true)
+  ARGOCD_HOST=$(terraform output -raw argocd_hostname 2>/dev/null || true)
+  if [[ -n "${DNS_RG}" && -n "${DNS_ZONE}" && -n "${ARGOCD_HOST}" ]]; then
+    cleanup_stale_dns "${DNS_RG}" "${DNS_ZONE}" "${ARGOCD_HOST}"
+  else
+    err "Could not read DNS outputs from Terraform state; skipping DNS cleanup."
+  fi
+
   terraform destroy -auto-approve
   ok "All resources destroyed."
   exit 0
@@ -83,6 +128,8 @@ CLUSTER_NAME=$(terraform output -raw aks_cluster_name)
 KEY_VAULT_CERT_URI=$(terraform output -raw key_vault_certificate_uri)
 ARGOCD_HOST=$(terraform output -raw argocd_hostname)
 ADMIN_GROUP_ID=$(terraform output -raw argocd_admin_group_object_id)
+DNS_ZONE_RG=$(terraform output -raw dns_zone_resource_group)
+DNS_ZONE_NAME=$(terraform output -raw dns_zone_name)
 
 # --- Step 3: Get kubeconfig -----------------------------------------------
 
@@ -106,6 +153,12 @@ info "Waiting for argocd-server rollout..."
 kubectl -n argocd rollout status deploy/argocd-server --timeout=10m
 
 ok "Argo CD extension is ready."
+
+# --- Step 4a: Remove stale DNS records from any previous cluster -----------
+# Must run before external-dns reconciles, otherwise it sees a record owned by
+# a different (old) external-dns instance and refuses to update it, leaving the
+# hostname pointing at the previous cluster's IP.
+cleanup_stale_dns "${DNS_ZONE_RG}" "${DNS_ZONE_NAME}" "${ARGOCD_HOST}"
 
 # --- Step 4b: Wait for external-dns RBAC to take effect -------------------
 # The App Routing managed identity is created fresh with every new cluster.
