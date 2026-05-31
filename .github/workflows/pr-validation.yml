@@ -16,6 +16,7 @@ jobs:
       bicep: ${{ steps.filter.outputs.bicep }}
       shell: ${{ steps.filter.outputs.shell }}
       yaml: ${{ steps.filter.outputs.yaml }}
+      terraform: ${{ steps.filter.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -33,6 +34,10 @@ jobs:
               - '**/*.yaml'
               - '**/*.yml'
               - '!.github/**'
+            terraform:
+              - '**/*.tf'
+              - '**/*.tfvars'
+              - '!**/.terraform/**'
 
   lint-dockerfiles:
     needs: detect-changes
@@ -143,6 +148,49 @@ jobs:
             -not -path './.github/*' \
             -exec yamllint -c .yamllint.yml {} +
 
+  validate-terraform:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.terraform == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Check Terraform formatting
+        run: |
+          exit_code=0
+          while IFS= read -r -d '' dir; do
+            echo "🔍 Checking format: $dir"
+            if terraform -chdir="$dir" fmt -check -recursive; then
+              echo "  ✅ Formatted correctly"
+            else
+              echo "  ❌ Formatting issues found — run 'terraform fmt -recursive' to fix"
+              exit_code=1
+            fi
+          done < <(find . -name '*.tf' -not -path './.git/*' -not -path '**/.terraform/*' -exec dirname {} \; | sort -u | while read -r d; do echo -ne "$d\0"; done)
+
+          exit $exit_code
+
+      - name: Validate Terraform configurations
+        run: |
+          exit_code=0
+          while IFS= read -r -d '' dir; do
+            echo "🔍 Validating: $dir"
+            if terraform -chdir="$dir" init -backend=false -input=false > /dev/null 2>&1 && \
+               terraform -chdir="$dir" validate; then
+              echo "  ✅ Valid"
+            else
+              echo "  ❌ Validation failed"
+              exit_code=1
+            fi
+          done < <(find . -name '*.tf' -not -path './.git/*' -not -path '**/.terraform/*' -exec dirname {} \; | sort -u | while read -r d; do echo -ne "$d\0"; done)
+
+          exit $exit_code
+
   check-readme-exists:
     runs-on: ubuntu-latest
     steps:
@@ -173,7 +221,7 @@ jobs:
           fi
 
   summary:
-    needs: [lint-dockerfiles, validate-bicep, lint-shell-scripts, validate-yaml, check-readme-exists]
+    needs: [lint-dockerfiles, validate-bicep, lint-shell-scripts, validate-yaml, validate-terraform, check-readme-exists]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -184,12 +232,13 @@ jobs:
           echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
 
-          for job in dockerfiles bicep shell yaml readme; do
+          for job in dockerfiles bicep shell yaml terraform readme; do
             case "$job" in
               dockerfiles) result="${{ needs.lint-dockerfiles.result }}" ; name="Dockerfile Lint" ;;
               bicep)       result="${{ needs.validate-bicep.result }}"   ; name="Bicep Validation" ;;
               shell)       result="${{ needs.lint-shell-scripts.result }}"; name="Shell Script Lint" ;;
               yaml)        result="${{ needs.validate-yaml.result }}"    ; name="YAML Lint" ;;
+              terraform)   result="${{ needs.validate-terraform.result }}"; name="Terraform Validation" ;;
               readme)      result="${{ needs.check-readme-exists.result }}"; name="README Check" ;;
             esac
 
