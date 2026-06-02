@@ -164,6 +164,43 @@ enable_gateway_api() {
     log_info "Gateway API enabled."
 }
 
+grant_cluster_access() {
+    log_section "Granting Cluster Access (Azure RBAC)"
+
+    # Get current user's object ID (required for Azure RBAC on AKS with Entra ID)
+    log_info "Getting current user identity..."
+    CURRENT_USER_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+    
+    if [[ -z "${CURRENT_USER_ID}" ]]; then
+        log_warn "Could not determine current user ID. Trying alternative method..."
+        CURRENT_USER_EMAIL=$(az account show --query user.name -o tsv)
+        CURRENT_USER_ID=$(az ad user show --id "${CURRENT_USER_EMAIL}" --query id -o tsv 2>/dev/null || true)
+    fi
+
+    if [[ -z "${CURRENT_USER_ID}" ]]; then
+        log_error "Failed to get current user object ID. You may need to manually grant cluster access."
+        log_info "Run this command manually:"
+        log_info "az role assignment create --role 'Azure Kubernetes Service Cluster Admin Role' --assignee YOUR_USER_EMAIL --scope \$(az aks show -g ${AKS_RG} -n ${CLUSTER_NAME} --query id -o tsv)"
+        return 1
+    fi
+
+    # Get AKS cluster resource ID
+    CLUSTER_RESOURCE_ID=$(az aks show \
+        --name "${CLUSTER_NAME}" \
+        --resource-group "${AKS_RG}" \
+        --query id -o tsv)
+
+    log_info "Granting 'Azure Kubernetes Service Cluster Admin Role' to current user..."
+    az role assignment create \
+        --role "Azure Kubernetes Service Cluster Admin Role" \
+        --assignee "${CURRENT_USER_ID}" \
+        --scope "${CLUSTER_RESOURCE_ID}" \
+        2>/dev/null || log_warn "Role assignment may already exist (this is normal)."
+
+    log_info "Cluster access granted. Waiting 10s for RBAC propagation..."
+    sleep 10
+}
+
 create_appnet_resource() {
     log_section "Creating Azure Kubernetes Application Network Resource"
 
@@ -286,6 +323,7 @@ register_feature
 install_appnet_extension
 deploy_infrastructure
 enable_gateway_api
+grant_cluster_access
 create_appnet_resource
 join_cluster_to_appnet
 configure_kubectl
