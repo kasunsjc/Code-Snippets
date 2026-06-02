@@ -180,7 +180,7 @@ grant_cluster_access() {
     if [[ -z "${CURRENT_USER_ID}" ]]; then
         log_error "Failed to get current user object ID. You may need to manually grant cluster access."
         log_info "Run this command manually:"
-        log_info "az role assignment create --role 'Azure Kubernetes Service Cluster Admin Role' --assignee YOUR_USER_EMAIL --scope \$(az aks show -g ${AKS_RG} -n ${CLUSTER_NAME} --query id -o tsv)"
+        log_info "az role assignment create --role 'Azure Kubernetes Service RBAC Cluster Admin' --assignee YOUR_USER_EMAIL --scope \$(az aks show -g ${AKS_RG} -n ${CLUSTER_NAME} --query id -o tsv)"
         return 1
     fi
 
@@ -190,15 +190,17 @@ grant_cluster_access() {
         --resource-group "${AKS_RG}" \
         --query id -o tsv)
 
-    log_info "Granting 'Azure Kubernetes Service Cluster Admin Role' to current user..."
+    log_info "Granting 'Azure Kubernetes Service RBAC Cluster Admin' to current user..."
     az role assignment create \
-        --role "Azure Kubernetes Service Cluster Admin Role" \
+        --role "Azure Kubernetes Service RBAC Cluster Admin" \
         --assignee "${CURRENT_USER_ID}" \
         --scope "${CLUSTER_RESOURCE_ID}" \
         2>/dev/null || log_warn "Role assignment may already exist (this is normal)."
 
-    log_info "Cluster access granted. Waiting 10s for RBAC propagation..."
-    sleep 10
+    log_info "Cluster access granted. Waiting 120s for RBAC propagation (Azure RBAC can take 2-5 minutes)..."
+    sleep 120
+    
+    log_info "RBAC propagation wait complete. Proceeding with kubectl operations..."
 }
 
 create_appnet_resource() {

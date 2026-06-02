@@ -199,7 +199,7 @@ AKS-Application-Network/
 ### Azure Requirements
 
 - **Subscription**: Owner or Contributor role
-- **User RBAC**: The deployment script will automatically grant the current user "Azure Kubernetes Service Cluster Admin Role" on the cluster
+- **User RBAC**: The deployment script will automatically grant the current user "Azure Kubernetes Service RBAC Cluster Admin" role on the cluster (requires 2-5 minutes for propagation)
 - **Quotas**: Sufficient quota for AKS (minimum 4 vCPUs)
 - **Preview Registration**: Feature flags registered (automated by `deploy.sh`)
 
@@ -269,7 +269,7 @@ graph TD
    - Creates Log Analytics workspace
    - Provisions custom node resource group
 6. **Gateway API Enablement**: Enables Kubernetes Gateway API on AKS
-7. **Cluster RBAC Access**: Grants current Azure user "Azure Kubernetes Service Cluster Admin Role" for kubectl access
+7. **Cluster RBAC Access**: Grants current Azure user "Azure Kubernetes Service RBAC Cluster Admin" role with 2-minute wait for propagation
 8. **Application Network Creation**:
    - Creates Application Network resource group (`rg-appnet-resource-demo`)
    - Provisions Application Network resource with system-assigned identity
@@ -621,15 +621,18 @@ CLUSTER_ID=$(az aks show -g "$AKS_RG" -n "$CLUSTER_NAME" --query id -o tsv)
 USER_ID=$(az ad signed-in-user show --query id -o tsv)
 
 az role assignment create \
-  --role "Azure Kubernetes Service Cluster Admin Role" \
+  --role "Azure Kubernetes Service RBAC Cluster Admin" \
   --assignee "$USER_ID" \
   --scope "$CLUSTER_ID"
 
-# Wait for RBAC propagation (30-60 seconds)
-sleep 30
+# Wait for RBAC propagation (2-5 minutes required for Azure RBAC)
+sleep 120
 
 # Refresh kubectl credentials
 az aks get-credentials -g "$AKS_RG" -n "$CLUSTER_NAME" --overwrite-existing
+
+# Test access
+kubectl get nodes
 ```
 
 ---
