@@ -1,0 +1,17 @@
+# Waypoint proxy for the demo namespace
+# A waypoint enables L7 traffic management (HTTP routing, traffic shifting, fault injection)
+# and L7 authorization policies via Istio Gateway API
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: waypoint
+  namespace: demo
+  annotations:
+    # Tells Application Network to deploy an Istio waypoint proxy for this gateway
+    istio.io/waypoint-for: service
+spec:
+  gatewayClassName: istio-waypoint
+  listeners:
+    - name: mesh
+      port: 15008
+      protocol: HBONE

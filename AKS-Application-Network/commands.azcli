@@ -1,0 +1,219 @@
+# ============================================================================
+# Azure Kubernetes Application Network for AKS - Demo Commands
+# Reference: https://learn.microsoft.com/en-us/azure/application-network/get-started
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 0. Environment Variables
+# ---------------------------------------------------------------------------
+export SUBSCRIPTION=$(az account show --query id -o tsv)
+export LOCATION="eastus"
+export ENVIRONMENT="demo"
+
+export AKS_RG="rg-appnet-${ENVIRONMENT}"
+export CLUSTER_NAME="aks-appnet-${ENVIRONMENT}"
+export APPNET_RG="rg-appnet-resource-${ENVIRONMENT}"
+export APPNET_NAME="appnet-${ENVIRONMENT}"
+export APPNET_MEMBER_NAME="member-${CLUSTER_NAME}"
+
+# ---------------------------------------------------------------------------
+# 1. Feature Registration
+# ---------------------------------------------------------------------------
+
+# Register the PublicPreview feature for Application Network
+az feature register --namespace Microsoft.AppLink --name PublicPreview --subscription $SUBSCRIPTION
+
+# Check registration status (wait until state = "Registered")
+az feature show --namespace Microsoft.AppLink --name PublicPreview --subscription $SUBSCRIPTION
+
+# Refresh the resource provider
+az provider register --namespace Microsoft.AppLink --subscription $SUBSCRIPTION
+
+# ---------------------------------------------------------------------------
+# 2. AppNet CLI Extension
+# ---------------------------------------------------------------------------
+
+# Install the extension
+az extension add --name appnet-preview
+
+# Verify installation
+az extension show --name appnet-preview
+
+# ---------------------------------------------------------------------------
+# 3. Deploy AKS Cluster (Bicep)
+# ---------------------------------------------------------------------------
+
+# Set active subscription
+az account set --subscription $SUBSCRIPTION
+
+# Deploy via Bicep (see deploy.sh for full script)
+az deployment sub create \
+    --location $LOCATION \
+    --template-file main.bicep \
+    --parameters main.bicepparam
+
+# Enable Gateway API on the cluster (required for Application Network)
+az aks update \
+    --name $CLUSTER_NAME \
+    --resource-group $AKS_RG \
+    --enable-gateway-api
+
+# Get credentials
+az aks get-credentials --name $CLUSTER_NAME --resource-group $AKS_RG --overwrite-existing
+
+# Verify cluster
+kubectl get nodes
+kubectl get namespaces
+
+# ---------------------------------------------------------------------------
+# 4. Create Azure Kubernetes Application Network Resource
+# ---------------------------------------------------------------------------
+
+# Create AppNet resource group
+az group create --name $APPNET_RG --location $LOCATION
+
+# Create Application Network resource with system-assigned managed identity
+az appnet create \
+    --resource-group $APPNET_RG \
+    --name $APPNET_NAME \
+    --location $LOCATION \
+    --identity-type SystemAssigned
+
+# View the resource
+az appnet show --resource-group $APPNET_RG --name $APPNET_NAME
+
+# ---------------------------------------------------------------------------
+# 5. Join AKS Cluster as Application Network Member
+# ---------------------------------------------------------------------------
+
+# Get the cluster resource ID
+CLUSTER_RESOURCE_ID=$(az aks show --name $CLUSTER_NAME --resource-group $AKS_RG --query id -o tsv)
+
+# Join with SelfManaged upgrade mode
+az appnet member join \
+    --resource-group $APPNET_RG \
+    --appnet-name $APPNET_NAME \
+    --member-name $APPNET_MEMBER_NAME \
+    --member-resource-id $CLUSTER_RESOURCE_ID \
+    --upgrade-mode SelfManaged
+
+# Join with FullyManaged upgrade mode (alternative)
+az appnet member join \
+    --resource-group $APPNET_RG \
+    --appnet-name $APPNET_NAME \
+    --member-name $APPNET_MEMBER_NAME \
+    --member-resource-id $CLUSTER_RESOURCE_ID \
+    --upgrade-mode FullyManaged
+
+# ---------------------------------------------------------------------------
+# 6. Verify Member Connectivity
+# ---------------------------------------------------------------------------
+
+# Show member details
+az appnet member show \
+    --resource-group $APPNET_RG \
+    --appnet-name $APPNET_NAME \
+    --member-name $APPNET_MEMBER_NAME
+
+# List all members
+az appnet member list \
+    --resource-group $APPNET_RG \
+    --appnet-name $APPNET_NAME \
+    --output table
+
+# Verify data plane components are running in the cluster
+kubectl get pods -n applink-system
+kubectl get daemonset -n applink-system   # ztunnel + Istio CNI
+kubectl get deployment -n applink-system  # waypoint proxies (if deployed)
+
+# View the Application Network-managed root CA certificate
+kubectl get configmap istio-root-cert -n applink-system -o yaml
+
+# ---------------------------------------------------------------------------
+# 7. Deploy Sample Applications
+# ---------------------------------------------------------------------------
+
+# Apply namespace and label it for ambient mesh
+kubectl apply -f sample-apps/namespace.yaml
+
+# Deploy HTTPBin (server) and Sleep (client)
+kubectl apply -f sample-apps/httpbin.yaml
+kubectl apply -f sample-apps/sleep.yaml
+
+# Verify pods are running
+kubectl get pods -n demo
+
+# Test basic connectivity (L4 mTLS is automatic)
+kubectl exec -n demo deploy/sleep -- curl -s http://httpbin.demo.svc.cluster.local/get
+
+# ---------------------------------------------------------------------------
+# 8. L7 Traffic Management - Waypoint Proxy
+# ---------------------------------------------------------------------------
+
+# Deploy a waypoint proxy for the demo namespace
+kubectl apply -f sample-apps/waypoint.yaml
+
+# Verify waypoint deployment
+kubectl get gateway -n demo
+kubectl get pods -n demo -l gateway.istio.io/managed=istio.io-mesh-controller
+
+# Label the namespace to use the waypoint
+kubectl label namespace demo istio.io/use-waypoint=waypoint
+
+# Test L7 traffic routing through the waypoint
+kubectl exec -n demo deploy/sleep -- curl -s http://httpbin.demo.svc.cluster.local/headers
+
+# ---------------------------------------------------------------------------
+# 9. Security - Authorization Policies
+# ---------------------------------------------------------------------------
+
+# Apply an AuthorizationPolicy to allow only the sleep service account
+kubectl apply -f sample-apps/authorization-policy.yaml
+
+# Verify the policy is applied
+kubectl get authorizationpolicy -n demo
+
+# Test allowed request (should succeed)
+kubectl exec -n demo deploy/sleep -- curl -s -o /dev/null -w "%{http_code}" http://httpbin.demo.svc.cluster.local/get
+
+# Test denied request (from a different pod/SA - should return 403)
+kubectl run test-denied --image=curlimages/curl --restart=Never -n demo \
+    -- curl -s -o /dev/null -w "%{http_code}" http://httpbin.demo.svc.cluster.local/get
+kubectl delete pod test-denied -n demo
+
+# ---------------------------------------------------------------------------
+# 10. Observability
+# ---------------------------------------------------------------------------
+
+# View Application Network metrics endpoint for the member
+az appnet member show \
+    --resource-group $APPNET_RG \
+    --appnet-name $APPNET_NAME \
+    --member-name $APPNET_MEMBER_NAME \
+    --query "properties.observabilityProfile"
+
+# Check Prometheus metrics scraped by ztunnel
+kubectl exec -n applink-system ds/ztunnel -- curl -s http://localhost:15020/metrics | head -50
+
+# ---------------------------------------------------------------------------
+# 11. Cleanup
+# ---------------------------------------------------------------------------
+
+# Remove Istio labels before leaving the Application Network
+kubectl label namespace demo istio.io/dataplane-mode- istio.io/use-waypoint- --overwrite
+
+# Remove the member from Application Network
+az appnet member remove \
+    --resource-group $APPNET_RG \
+    --appnet-name $APPNET_NAME \
+    --member-name $APPNET_MEMBER_NAME
+
+# List members to confirm removal
+az appnet member list --resource-group $APPNET_RG --appnet-name $APPNET_NAME
+
+# Delete Application Network resource (all members must be removed first)
+az appnet delete --resource-group $APPNET_RG --name $APPNET_NAME --yes
+
+# Delete resource groups
+az group delete --name $APPNET_RG --yes --no-wait
+az group delete --name $AKS_RG --yes --no-wait

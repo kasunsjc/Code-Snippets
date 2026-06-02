@@ -1,0 +1,18 @@
+# AuthorizationPolicy - allow only the 'sleep' service account to call httpbin
+# Uses SPIFFE-based workload identity (no IP addresses needed)
+# Format: spiffe://cluster.local/ns/<namespace>/sa/<service-account>
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-sleep-to-httpbin
+  namespace: demo
+spec:
+  selector:
+    matchLabels:
+      app: httpbin
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/demo/sa/sleep

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    # Label the namespace to enroll workloads into the Application Network ambient mesh
+    istio.io/dataplane-mode: ambient
