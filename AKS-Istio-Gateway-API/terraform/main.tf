@@ -58,12 +58,16 @@ resource "azurerm_role_assignment" "aks_network_contributor" {
 }
 
 # AKS Cluster with App Routing (Istio Gateway API)
+# Note: Some preview features may require post-deployment configuration via Azure CLI
 resource "azapi_resource" "aks" {
   type      = "Microsoft.ContainerService/managedClusters@2024-09-02-preview"
   name      = var.cluster_name
   location  = azurerm_resource_group.rg.location
   parent_id = azurerm_resource_group.rg.id
   tags      = var.tags
+
+  # Disable schema validation for preview features
+  schema_validation_enabled = false
 
   identity {
     type = "UserAssigned"
@@ -72,12 +76,12 @@ resource "azapi_resource" "aks" {
     ]
   }
 
-  body = {
+  body = jsonencode({
     properties = {
       dnsPrefix = var.cluster_name
       kubernetesVersion = var.kubernetes_version
       
-      # Enable Gateway API
+      # Enable Gateway API (preview feature)
       enableGatewayAPI = true
       
       # Network Profile
@@ -111,7 +115,7 @@ resource "azapi_resource" "aks" {
       ingressProfile = {
         webAppRouting = {
           enabled = true
-          # Enable Istio-based Gateway API implementation
+          # Enable Istio-based Gateway API implementation (preview)
           istioIngressGateway = {
             enabled = true
           }
@@ -144,7 +148,7 @@ resource "azapi_resource" "aks" {
       name = "Base"
       tier = "Standard"
     }
-  }
+  })
 
   depends_on = [
     azurerm_role_assignment.aks_network_contributor
