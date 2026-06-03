@@ -1,0 +1,26 @@
+---
+# HTTPRoute with header-based routing
+# Routes traffic to different backends based on HTTP headers
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: echo-header-routing
+  namespace: default
+spec:
+  parentRefs:
+  - name: echo-gateway
+  hostnames:
+  - "echo-headers.example.com"
+  rules:
+  # Route to v2 if header "version: v2" is present
+  - matches:
+    - headers:
+      - name: version
+        value: v2
+    backendRefs:
+    - name: echo-v2
+      port: 80
+  # Default route to v1
+  - backendRefs:
+    - name: echo-v1
+      port: 80

@@ -1,0 +1,16 @@
+# Example terraform.tfvars file
+# Copy this file to terraform.tfvars and customize as needed
+
+resource_group_name = "rg-aks-istio-gateway-demo"
+location            = "eastus"
+cluster_name        = "aks-istio-gateway-demo"
+kubernetes_version  = "1.31"
+system_node_count   = 2
+system_node_size    = "Standard_D4s_v5"
+
+tags = {
+  Environment = "Demo"
+  Project     = "AKS-Istio-Gateway-API"
+  ManagedBy   = "Terraform"
+  Owner       = "YourName"
+}

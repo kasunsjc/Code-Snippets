@@ -1,0 +1,53 @@
+---
+# Gateway resource using the approuting-istio GatewayClass
+# This provisions an Envoy-based gateway with LoadBalancer service, HPA, and PDB
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: httpbin-gateway
+  namespace: default
+spec:
+  # Use the AKS app routing Istio GatewayClass
+  gatewayClassName: approuting-istio
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: Same  # Only routes in the same namespace can attach
+---
+# HTTPRoute resource that defines routing rules
+# This route attaches to the Gateway and defines traffic rules
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin
+  namespace: default
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  hostnames:
+  - "httpbin.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /get
+    backendRefs:
+    - name: httpbin
+      port: 8000
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /headers
+    backendRefs:
+    - name: httpbin
+      port: 8000
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /status
+    backendRefs:
+    - name: httpbin
+      port: 8000
