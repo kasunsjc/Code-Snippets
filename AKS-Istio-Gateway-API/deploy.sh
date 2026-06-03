@@ -5,6 +5,7 @@ set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${GREEN}========================================${NC}"
@@ -12,24 +13,34 @@ echo -e "${GREEN}AKS Istio Gateway API Demo - Deployment${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
+# Configuration Variables
+RESOURCE_GROUP="${RESOURCE_GROUP:-rg-aks-istio-gateway-demo}"
+LOCATION="${LOCATION:-eastus}"
+CLUSTER_NAME="${CLUSTER_NAME:-aks-istio-gateway-demo}"
+VNET_NAME="${VNET_NAME:-vnet-aks-istio-demo}"
+SUBNET_NAME="${SUBNET_NAME:-snet-aks}"
+NODE_COUNT="${NODE_COUNT:-2}"
+NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"
+K8S_VERSION="${K8S_VERSION:-1.31}"
+
+echo -e "${BLUE}Configuration:${NC}"
+echo "  Resource Group: $RESOURCE_GROUP"
+echo "  Location: $LOCATION"
+echo "  Cluster Name: $CLUSTER_NAME"
+echo "  Node Count: $NODE_COUNT"
+echo "  Node Size: $NODE_SIZE"
+echo "  Kubernetes Version: $K8S_VERSION"
+echo ""
+
 # Check prerequisites
 echo -e "${YELLOW}Checking prerequisites...${NC}"
 
-# Check if Terraform is installed
-if ! command -v terraform &> /dev/null; then
-    echo -e "${RED}Error: Terraform is not installed${NC}"
-    echo "Please install Terraform from https://www.terraform.io/downloads"
-    exit 1
-fi
-
-# Check if Azure CLI is installed
 if ! command -v az &> /dev/null; then
     echo -e "${RED}Error: Azure CLI is not installed${NC}"
     echo "Please install Azure CLI from https://docs.microsoft.com/cli/azure/install-azure-cli"
     exit 1
 fi
 
-# Check if kubectl is installed
 if ! command -v kubectl &> /dev/null; then
     echo -e "${RED}Error: kubectl is not installed${NC}"
     echo "Please install kubectl from https://kubernetes.io/docs/tasks/tools/"
@@ -48,7 +59,20 @@ if ! az account show &> /dev/null; then
 fi
 
 SUBSCRIPTION=$(az account show --query name -o tsv)
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 echo -e "${GREEN}✓ Logged into Azure subscription: ${SUBSCRIPTION}${NC}"
+echo ""
+
+# Install/update AKS preview extension
+echo -e "${YELLOW}Ensuring aks-preview CLI extension is installed...${NC}"
+if az extension show --name aks-preview &> /dev/null; then
+    echo "Updating aks-preview extension..."
+    az extension update --name aks-preview
+else
+    echo "Installing aks-preview extension..."
+    az extension add --name aks-preview
+fi
+echo -e "${GREEN}✓ aks-preview extension ready${NC}"
 echo ""
 
 # Register preview features
@@ -82,62 +106,72 @@ echo -e "${YELLOW}Re-registering Microsoft.ContainerService provider...${NC}"
 az provider register --namespace Microsoft.ContainerService
 echo ""
 
-# Install/update AKS preview extension
-echo -e "${YELLOW}Ensuring aks-preview CLI extension is installed...${NC}"
-if az extension show --name aks-preview &> /dev/null; then
-    echo "Updating aks-preview extension..."
-    az extension update --name aks-preview
-else
-    echo "Installing aks-preview extension..."
-    az extension add --name aks-preview
-fi
-echo -e "${GREEN}✓ aks-preview extension ready${NC}"
+# Create Resource Group
+echo -e "${YELLOW}Creating resource group...${NC}"
+az group create \
+    --name "$RESOURCE_GROUP" \
+    --location "$LOCATION" \
+    --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API" "ManagedBy=AzureCLI"
+
+echo -e "${GREEN}✓ Resource group created${NC}"
 echo ""
 
-# Navigate to Terraform directory
-cd terraform
+# Create Virtual Network
+echo -e "${YELLOW}Creating virtual network...${NC}"
+az network vnet create \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$VNET_NAME" \
+    --address-prefix 10.0.0.0/16 \
+    --subnet-name "$SUBNET_NAME" \
+    --subnet-prefix 10.0.0.0/22
 
-# Initialize Terraform
-echo -e "${YELLOW}Initializing Terraform...${NC}"
-terraform init
+SUBNET_ID=$(az network vnet subnet show \
+    --resource-group "$RESOURCE_GROUP" \
+    --vnet-name "$VNET_NAME" \
+    --name "$SUBNET_NAME" \
+    --query id -o tsv)
+
+echo -e "${GREEN}✓ Virtual network created${NC}"
 echo ""
 
-# Create terraform.tfvars if it doesn't exist
-if [ ! -f "terraform.tfvars" ]; then
-    echo -e "${YELLOW}Creating terraform.tfvars from example...${NC}"
-    cp terraform.tfvars.example terraform.tfvars
-    echo -e "${GREEN}✓ Created terraform.tfvars - please review and customize if needed${NC}"
-    echo ""
-fi
-
-# Plan infrastructure
-echo -e "${YELLOW}Planning infrastructure deployment...${NC}"
-terraform plan -out=tfplan
-echo ""
-
-# Ask for confirmation
-read -p "Do you want to proceed with deployment? (yes/no): " confirm
-if [[ "$confirm" != "yes" ]]; then
-    echo -e "${RED}Deployment cancelled${NC}"
-    exit 0
-fi
-
-# Apply infrastructure
-echo -e "${YELLOW}Deploying infrastructure...${NC}"
+# Create AKS Cluster with Gateway API and App Routing (Istio)
+echo -e "${YELLOW}Creating AKS cluster with Gateway API and Istio app routing...${NC}"
 echo "This may take 10-15 minutes..."
-terraform apply tfplan
 echo ""
 
-# Get outputs
-RESOURCE_GROUP=$(terraform output -raw resource_group_name)
-CLUSTER_NAME=$(terraform output -raw cluster_name)
+az aks create \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$CLUSTER_NAME" \
+    --location "$LOCATION" \
+    --kubernetes-version "$K8S_VERSION" \
+    --node-count "$NODE_COUNT" \
+    --node-vm-size "$NODE_SIZE" \
+    --network-plugin azure \
+    --vnet-subnet-id "$SUBNET_ID" \
+    --service-cidr 10.1.0.0/16 \
+    --dns-service-ip 10.1.0.10 \
+    --enable-managed-identity \
+    --enable-gateway-api \
+    --enable-app-routing-istio \
+    --tier standard \
+    --node-osdisk-type Managed \
+    --enable-cluster-autoscaler \
+    --min-count 1 \
+    --max-count 3 \
+    --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API"
 
-echo -e "${GREEN}✓ Infrastructure deployed successfully${NC}"
+echo ""
+echo -e "${GREEN}✓ AKS cluster created successfully${NC}"
 echo ""
 
 # Get AKS credentials
 echo -e "${YELLOW}Getting AKS credentials...${NC}"
-az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
+az aks get-credentials \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$CLUSTER_NAME" \
+    --overwrite-existing
+
+echo -e "${GREEN}✓ Credentials configured${NC}"
 echo ""
 
 # Wait for istiod to be ready
@@ -153,28 +187,30 @@ echo ""
 
 # Deploy sample applications
 echo -e "${YELLOW}Deploying sample applications...${NC}"
-cd ../kubernetes-manifests
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANIFESTS_DIR="$SCRIPT_DIR/kubernetes-manifests"
 
 echo "Deploying httpbin application..."
-kubectl apply -f 01-httpbin-app.yaml
+kubectl apply -f "$MANIFESTS_DIR/01-httpbin-app.yaml"
 
 echo "Deploying Gateway and HTTPRoute for httpbin..."
-kubectl apply -f 02-gateway-httproute.yaml
+kubectl apply -f "$MANIFESTS_DIR/02-gateway-httproute.yaml"
 
 echo "Deploying echo applications (v1 and v2)..."
-kubectl apply -f 03-echo-apps.yaml
+kubectl apply -f "$MANIFESTS_DIR/03-echo-apps.yaml"
 
 echo "Deploying advanced routing examples..."
-kubectl apply -f 04-advanced-traffic-splitting.yaml
-kubectl apply -f 05-header-based-routing.yaml
-kubectl apply -f 06-path-based-routing.yaml
+kubectl apply -f "$MANIFESTS_DIR/04-advanced-traffic-splitting.yaml"
+kubectl apply -f "$MANIFESTS_DIR/05-header-based-routing.yaml"
+kubectl apply -f "$MANIFESTS_DIR/06-path-based-routing.yaml"
 
 echo ""
 echo -e "${GREEN}✓ Sample applications deployed${NC}"
 echo ""
 
 # Wait for Gateway to be programmed
-echo -e "${YELLOW}Waiting for Gateway to be programmed...${NC}"
+echo -e "${YELLOW}Waiting for Gateways to be programmed...${NC}"
 kubectl wait --for=condition=programmed gateway/httpbin-gateway --timeout=300s
 kubectl wait --for=condition=programmed gateway/echo-gateway --timeout=300s
 echo ""
@@ -188,6 +224,11 @@ echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "${YELLOW}Cluster Information:${NC}"
+echo "  Resource Group: $RESOURCE_GROUP"
+echo "  Cluster Name: $CLUSTER_NAME"
+echo "  Subscription: $SUBSCRIPTION"
 echo ""
 echo -e "${YELLOW}Gateway Information:${NC}"
 echo "  httpbin-gateway IP: $HTTPBIN_IP"
@@ -216,4 +257,7 @@ echo "  kubectl get pods -n aks-istio-system"
 echo "  kubectl get gateway"
 echo "  kubectl get httproute"
 echo "  kubectl describe gateway httpbin-gateway"
+echo ""
+echo -e "${YELLOW}Azure Portal:${NC}"
+echo "  https://portal.azure.com/#resource/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$RESOURCE_GROUP/overview"
 echo ""

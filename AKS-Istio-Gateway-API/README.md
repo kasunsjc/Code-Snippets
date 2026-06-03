@@ -59,17 +59,17 @@ The Ingress-NGINX project was retired in March 2026. Microsoft provides:
 ## 🚀 Prerequisites
 
 ### Required Tools
-- **Terraform** >= 1.9.0
-- **Azure CLI** >= 2.63.0
-- **kubectl** >= 1.30
-- Active Azure subscription
+- **Azure CLI** (`az`) version 2.60.0 or later - [Install](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- **kubectl** >= 1.30 - [Install](https://kubernetes.io/docs/tasks/tools/)
+- **jq** (optional, for JSON parsing test outputs) - [Install](https://jqlang.github.io/jq/download/)
+- Active Azure subscription with contributor access
 
 ### Azure Preview Features
 
 This demo uses preview features that must be registered:
 
 ```bash
-# Register preview features
+# Register preview features (the deploy.sh script does this automatically)
 az feature register --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
 az feature register --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
 
@@ -91,11 +91,16 @@ az extension update --name aks-preview
 
 ## 📦 What's Included
 
-### Infrastructure (Terraform)
-- **AKS cluster** with Gateway API and App Routing enabled
-- **Virtual Network** with dedicated AKS subnet
-- **User-assigned managed identity** for AKS
-- **Auto-scaling** configured for system node pool
+### Infrastructure (Azure CLI)
+
+The demo uses Azure CLI for deployment, providing the best support for these preview features.
+
+**Provisioned Resources:**
+- **AKS cluster** with Gateway API and App Routing (Istio) enabled
+- **Virtual Network** with dedicated AKS subnet (10.0.0.0/16)
+- **Managed identity** for AKS
+- **Auto-scaling** configured for system node pool (1-3 nodes)
+- **Istio control plane** (meshless) via App Routing
 
 ### Kubernetes Resources
 
@@ -112,56 +117,122 @@ az extension update --name aks-preview
 
 ## 🛠️ Deployment
 
-### Quick Start
+### Quick Start (Automated)
 
 ```bash
-# 1. Navigate to the demo directory
+# Navigate to the demo directory
 cd AKS-Istio-Gateway-API
 
-# 2. Run the deployment script
+# Run the deployment script
 ./deploy.sh
 ```
 
 The script will:
-1. ✅ Check prerequisites
-2. ✅ Register Azure preview features (if needed)
-3. ✅ Deploy infrastructure with Terraform
-4. ✅ Configure kubectl access
-5. ✅ Deploy sample applications
-6. ✅ Wait for Gateways to be ready
-7. ✅ Display test commands
+1. ✅ Check prerequisites (Azure CLI, kubectl)
+2. ✅ Install/update aks-preview CLI extension
+3. ✅ Register Azure preview features (if needed)
+4. ✅ Create resource group and virtual network
+5. ✅ Deploy AKS cluster with Gateway API and Istio app routing
+6. ✅ Configure kubectl access
+7. ✅ Deploy sample applications
+8. ✅ Wait for Gateways to be ready
+9. ✅ Display test commands and gateway IPs
 
-### Manual Deployment
+**Customization:**
 
-If you prefer manual steps:
+You can customize the deployment by setting environment variables before running the script:
 
 ```bash
-# 1. Initialize Terraform
-cd terraform
-terraform init
+export RESOURCE_GROUP="my-rg"
+export LOCATION="westus2"
+export CLUSTER_NAME="my-aks-cluster"
+export NODE_COUNT="3"
+export NODE_SIZE="Standard_D8s_v5"
+export K8S_VERSION="1.31"
 
-# 2. Create terraform.tfvars (customize as needed)
-cp terraform.tfvars.example terraform.tfvars
+./deploy.sh
+```
 
-# 3. Deploy infrastructure
-terraform plan
-terraform apply
+### Manual Step-by-Step Deployment
 
-# 4. Get AKS credentials
-RESOURCE_GROUP=$(terraform output -raw resource_group_name)
-CLUSTER_NAME=$(terraform output -raw cluster_name)
-az aks get-credentials --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME
+If you prefer to run commands manually:
 
-# 5. Verify Istio control plane
+```bash
+# 1. Install the aks-preview extension
+az extension add --name aks-preview
+az extension update --name aks-preview
+
+# 2. Register preview features
+az feature register --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
+az feature register --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
+
+# 3. Wait for registration (check status)
+az feature show --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
+az feature show --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
+
+# 4. Re-register provider
+az provider register --namespace Microsoft.ContainerService
+
+# 5. Create resource group
+az group create --name rg-aks-istio-gateway-demo --location eastus
+
+# 6. Create virtual network
+az network vnet create \
+  --resource-group rg-aks-istio-gateway-demo \
+  --name vnet-aks-istio-demo \
+  --address-prefix 10.0.0.0/16 \
+  --subnet-name snet-aks \
+  --subnet-prefix 10.0.0.0/22
+
+# 7. Get subnet ID
+SUBNET_ID=$(az network vnet subnet show \
+  --resource-group rg-aks-istio-gateway-demo \
+  --vnet-name vnet-aks-istio-demo \
+  --name snet-aks \
+  --query id -o tsv)
+
+# 8. Create AKS cluster with Gateway API and Istio
+az aks create \
+  --resource-group rg-aks-istio-gateway-demo \
+  --name aks-istio-gateway-demo \
+  --location eastus \
+  --kubernetes-version 1.31 \
+  --node-count 2 \
+  --node-vm-size Standard_D4s_v5 \
+  --network-plugin azure \
+  --vnet-subnet-id "$SUBNET_ID" \
+  --service-cidr 10.1.0.0/16 \
+  --dns-service-ip 10.1.0.10 \
+  --enable-managed-identity \
+  --enable-gateway-api \
+  --enable-app-routing-istio \
+  --tier standard \
+  --enable-cluster-autoscaler \
+  --min-count 1 \
+  --max-count 3
+
+# 9. Get credentials
+az aks get-credentials \
+  --resource-group rg-aks-istio-gateway-demo \
+  --name aks-istio-gateway-demo \
+  --overwrite-existing
+
+# 10. Verify Istio is running
 kubectl get pods -n aks-istio-system
 
-# 6. Deploy applications
-cd ../kubernetes-manifests
-kubectl apply -f .
+# 11. Verify GatewayClass
+kubectl get gatewayclass approuting-istio
 
-# 7. Wait for Gateways
+# 12. Deploy applications
+kubectl apply -f kubernetes-manifests/
+
+# 13. Wait for gateways to be programmed
 kubectl wait --for=condition=programmed gateway/httpbin-gateway --timeout=300s
 kubectl wait --for=condition=programmed gateway/echo-gateway --timeout=300s
+
+# 14. Get gateway IP addresses
+kubectl get gateway httpbin-gateway -o jsonpath='{.status.addresses[0].value}'
+kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}'
 ```
 
 ## 🧪 Testing the Demo
@@ -248,14 +319,17 @@ kubectl get gateway
 kubectl describe gateway httpbin-gateway
 
 # View HTTPRoutes
-kubectl get httproute
-kubectl describe httproute httpbin
+kubeczure CLI Deployment
+
+```bash
+# Run the cleanup script
+./cleanup-cli.sh
+
+# Or manually delete the resource group
+az group delete --name rg-aks-istio-gateway-demo --yes
 ```
 
-### Check Gateway Infrastructure
-
-When you create a Gateway, AKS automatically provisions:
-
+### Terraform Deployment
 ```bash
 # View the Envoy deployment
 kubectl get deployment -l gateway.networking.k8s.io/gateway-name=httpbin-gateway
