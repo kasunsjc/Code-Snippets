@@ -38,6 +38,18 @@ else
 fi
 echo ""
 
+# Clean up kubectl context
+CLUSTER_NAME="${CLUSTER_NAME:-aks-istio-gateway-demo}"
+echo -e "${YELLOW}Cleaning up kubectl context...${NC}"
+CONTEXT_NAME=$(kubectl config get-contexts -o name | grep "$CLUSTER_NAME" || true)
+if [[ -n "$CONTEXT_NAME" ]]; then
+    kubectl config delete-context "$CONTEXT_NAME" || true
+    echo -e "${GREEN}✓ Kubectl context removed: $CONTEXT_NAME${NC}"
+else
+    echo -e "${YELLOW}No kubectl context found for cluster: $CLUSTER_NAME${NC}"
+fi
+echo ""
+
 # Delete resource group
 echo -e "${YELLOW}Deleting resource group and all resources...${NC}"
 az group delete \
