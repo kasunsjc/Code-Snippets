@@ -43,24 +43,26 @@ spec:
   hostnames:
   - "httpbin.__DOMAIN_NAME__"  # Domain will be substituted during deployment
   rules:
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /get
-    backendRefs:
+  # Catch-all: forward all traffic to httpbin (browser root / also works)
+  - backendRefs:
     - name: httpbin
       port: 8000
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /headers
-    backendRefs:
-    - name: httpbin
-      port: 8000
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /status
-    backendRefs:
-    - name: httpbin
-      port: 8000
+---
+# HTTP → HTTPS redirect for httpbin-gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-http-redirect
+  namespace: default
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+    sectionName: http  # Attach to the HTTP listener
+  hostnames:
+  - "httpbin.__DOMAIN_NAME__"
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301

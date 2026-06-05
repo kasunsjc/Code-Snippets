@@ -136,7 +136,22 @@ One of the interesting parts of this setup is how certificates travel from Azure
 
 2. **The AKS CSI Secrets Store Driver** runs as a DaemonSet on every node. When a pod mounts a `SecretProviderClass` volume, the driver uses the AKS managed identity to authenticate to Key Vault and fetch the secret.
 
-3. **The `SecretProviderClass` object** (`00-tls-secret-sync.yaml`) maps the Key Vault certificate to a Kubernetes `kubernetes.io/tls` Secret called `gateway-tls-secret`. It tells the driver exactly what to fetch and how to format it.
+3. **The `SecretProviderClass` object** maps the Key Vault certificate to a Kubernetes `kubernetes.io/tls` Secret called `gateway-tls-secret`. A certificate imported via `az keyvault certificate import` stores its private key and public cert as two separate logical objects in Key Vault. The driver needs to fetch them independently:
+
+   ```yaml
+   objects: |
+     array:
+       - objectName: gateway-tls-cert
+         objectType: secret   # fetches the private key
+         objectAlias: "gateway-tls-key"
+       - objectName: gateway-tls-cert
+         objectType: cert     # fetches the public certificate
+         objectAlias: "gateway-tls-crt"
+   ```
+
+   The `secretObjects` section then maps those aliases to the `tls.key` and `tls.crt` fields of the Kubernetes Secret. Using the wrong `objectType` (e.g. `secret` for both) causes the Gateway to report `InvalidCertificateRef` because the cert data is malformed.
+
+   > **Reference:** [Secure ingress with App Routing Gateway API — AKS Docs](https://learn.microsoft.com/en-gb/azure/aks/app-routing-gateway-api-tls)
 
 4. **The TLS sync pod** is a small busybox pod that exists solely to keep the CSI volume mounted. Without a running pod mounting the volume, the Kubernetes Secret wouldn't be created or kept updated.
 
@@ -152,24 +167,36 @@ This is a clean, production-grade approach: no secrets in YAML, full audit trail
 
 This demo covers four distinct routing patterns. Here's the intuition behind each.
 
-### 1. Basic Path-Based Routing (`02-gateway-httproute.yaml`)
+### 1. Catch-all Routing + HTTP→HTTPS Redirect (`02-gateway-httproute.yaml`)
 
-The simplest case. Requests to `httpbin.yourdomain.com` are routed to the httpbin service based on URL path prefix.
+The httpbin gateway uses two HTTPRoutes working together:
+
+**Catch-all HTTPS route** — no `matches` block means every path is forwarded to the backend. This is what makes `https://httpbin.yourdomain.com/` work in a browser, not just `/get`:
 
 ```yaml
 hostnames:
 - "httpbin.__DOMAIN_NAME__"
 rules:
-- matches:
-  - path:
-      type: PathPrefix
-      value: /get
-  backendRefs:
+- backendRefs:          # no matches: block = catch-all
   - name: httpbin
     port: 8000
 ```
 
-Use this when you have a single service and want to expose specific URL paths. Notice that there are no annotations anywhere — this is pure, portable Kubernetes API.
+**HTTP→HTTPS redirect route** — attaches to the `http` listener (port 80) and issues a `301` redirect. Without this, browsers loading `http://` get no response at all because the HTTP listener has no route:
+
+```yaml
+parentRefs:
+- name: httpbin-gateway
+  sectionName: http     # port 80 listener
+rules:
+- filters:
+  - type: RequestRedirect
+    requestRedirect:
+      scheme: https
+      statusCode: 301
+```
+
+Notice there are no annotations anywhere — this is pure, portable Kubernetes Gateway API.
 
 ### 2. Canary / Traffic Splitting (`04-advanced-traffic-splitting.yaml`)
 
@@ -508,14 +535,22 @@ echo "echo gateway:    https://echo.$DOMAIN_NAME     ($ECHO_IP)"
 ### Test 1 — Basic HTTPS routing
 
 ```bash
-# Full request details
-curl -k -s -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/get" | jq .
+# Root path — works because of the catch-all route (no path restriction)
+curl -k -s "https://httpbin.$DOMAIN_NAME/" | jq .url
 
-# See request headers as received by the backend
-curl -k -s -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/headers" | jq .
+# Any path is forwarded to httpbin
+curl -k -s "https://httpbin.$DOMAIN_NAME/get" | jq .
+curl -k -s "https://httpbin.$DOMAIN_NAME/headers" | jq .
+curl -k -s "https://httpbin.$DOMAIN_NAME/anything/foo" | jq .
+
+# HTTP → HTTPS redirect (expect 301, not a hang)
+curl -sI --max-time 5 "http://httpbin.$DOMAIN_NAME/" | grep -i 'HTTP\|location'
+# Expected:
+#   HTTP/1.1 301 Moved Permanently
+#   location: https://httpbin.<domain>/
 
 # Verify the TLS certificate — should show your domain in SAN
-curl -vI -k -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP" 2>&1 \
+curl -vI -k "https://httpbin.$DOMAIN_NAME" 2>&1 \
   | grep -i 'subject\|issuer\|expire'
 ```
 

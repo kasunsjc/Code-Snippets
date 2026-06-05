@@ -29,7 +29,7 @@ CERT_NAME="${CERT_NAME:-gateway-tls-cert}"              # Certificate name in Ke
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-aks-istio-gateway-demo}"               # Main resource group name
 NODE_RESOURCE_GROUP="${NODE_RESOURCE_GROUP:-rg-aks-istio-gateway-demo-nodes}"  # AKS-managed node resource group
 LOCATION="${LOCATION:-eastus}"                          # Azure region
-KEYVAULT_NAME="${KEYVAULT_NAME:-kv-aks-istio-6743}"  # Key Vault name (must be globally unique)
+KEYVAULT_NAME="${KEYVAULT_NAME:-kv-aks-istio-675}"  # Key Vault name (must be globally unique)
 
 # === AKS Cluster Configuration ===
 CLUSTER_NAME="${CLUSTER_NAME:-aks-istio-gateway-demo}" # AKS cluster name
@@ -403,9 +403,9 @@ spec:
   - secretName: gateway-tls-secret
     type: kubernetes.io/tls
     data:
-    - objectName: $CERT_NAME
+    - objectName: gateway-tls-key   # matches objectAlias below — private key
       key: tls.key
-    - objectName: $CERT_NAME
+    - objectName: gateway-tls-crt   # matches objectAlias below — certificate
       key: tls.crt
   parameters:
     usePodIdentity: "false"
@@ -418,7 +418,11 @@ spec:
         - |
           objectName: $CERT_NAME
           objectType: secret
-          objectVersion: ""
+          objectAlias: "gateway-tls-key"
+        - |
+          objectName: $CERT_NAME
+          objectType: cert
+          objectAlias: "gateway-tls-crt"
     tenantId: "$(az account show --query tenantId -o tsv)"
 EOF
 
@@ -503,29 +507,35 @@ fi
 if [ "$DNS_ZONE_FOUND" = "true" ]; then
     echo -e "${YELLOW}Creating/updating DNS A records in zone '$DNS_ZONE_NAME'...${NC}"
 
+    # Helper: delete the existing record set (if any) then create fresh with one IP.
+    # This prevents stale IPs accumulating across re-runs.
+    upsert_dns_record() {
+        local NAME="$1"
+        local IP="$2"
+        az network dns record-set a delete \
+            --resource-group "$DNS_ZONE_RG" \
+            --zone-name "$DNS_ZONE_NAME" \
+            --name "$NAME" --yes --output none 2>/dev/null || true
+        az network dns record-set a add-record \
+            --resource-group "$DNS_ZONE_RG" \
+            --zone-name "$DNS_ZONE_NAME" \
+            --record-set-name "$NAME" \
+            --ipv4-address "$IP" \
+            --ttl 300 \
+            --output none
+    }
+
     # httpbin subdomain → httpbin-gateway IP
-    az network dns record-set a add-record \
-        --resource-group "$DNS_ZONE_RG" \
-        --zone-name "$DNS_ZONE_NAME" \
-        --record-set-name "httpbin" \
-        --ipv4-address "$HTTPBIN_IP" \
-        --ttl 300 \
-        --output none
+    upsert_dns_record "httpbin" "$HTTPBIN_IP"
     echo -e "${GREEN}  ✓ httpbin.$DNS_ZONE_NAME  →  $HTTPBIN_IP${NC}"
 
     # echo, echo-headers, app subdomains → echo-gateway IP
     for SUBDOMAIN in "echo" "echo-headers" "app"; do
-        az network dns record-set a add-record \
-            --resource-group "$DNS_ZONE_RG" \
-            --zone-name "$DNS_ZONE_NAME" \
-            --record-set-name "$SUBDOMAIN" \
-            --ipv4-address "$ECHO_IP" \
-            --ttl 300 \
-            --output none
+        upsert_dns_record "$SUBDOMAIN" "$ECHO_IP"
         echo -e "${GREEN}  ✓ $SUBDOMAIN.$DNS_ZONE_NAME  →  $ECHO_IP${NC}"
     done
 
-    echo -e "${GREEN}✓ All DNS records created successfully${NC}"
+    echo -e "${GREEN}✓ All DNS records updated successfully${NC}"
 else
     echo -e "${YELLOW}No Azure DNS zone found for '$DNS_ZONE_NAME'.${NC}"
     echo -e "${YELLOW}Add the following A records manually with your DNS provider:${NC}"
