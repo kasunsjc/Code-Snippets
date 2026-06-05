@@ -1,137 +1,323 @@
 # AKS Istio Gateway API Demo
 
-This demo showcases the new **AKS App Routing with Istio-based Gateway API implementation** (preview), announced in March 2026. This feature brings modern, role-oriented traffic management to Azure Kubernetes Service without requiring a full Istio service mesh.
+> **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March 2026](https://blog.aks.azure.com/2026/03/18/app-routing-gateway-api)
 
-## 📋 Overview
+If you've been running workloads on AKS for a while, you've probably used NGINX as your ingress controller. It worked — and it worked well. But in March 2026, the Ingress-NGINX project was officially retired. Security patches will continue until November 2026, but there's a clear message from the Kubernetes community: it's time to move on.
 
-The AKS app routing add-on now supports the Kubernetes Gateway API through a lightweight Istio control plane. This provides:
+That's where this demo comes in. We'll walk through the **new AKS App Routing add-on with Istio-based Gateway API support** — Microsoft's recommended path forward. Don't let the word "Istio" worry you — you don't need to run a full service mesh. This is a much lighter approach, and it's genuinely exciting.
 
-- **Envoy-based gateway infrastructure** - High-performance traffic routing
-- **No sidecar injection** - Istio manages only the gateway, not your workloads
-- **Gateway API standard** - Modern, role-oriented networking model
-- **Automatic infrastructure** - AKS provisions LoadBalancer, HPA, and PDB for gateways
-- **Advanced routing** - Traffic splitting, header-based routing, path-based routing
-- **SSL/TLS Termination** - Integrated with Azure Key Vault for certificate management
-- **Secure Secrets** - Key Vault Secrets Provider for secure certificate storage
+---
 
-### Why Gateway API?
+## 📖 The Story So Far: Why We're Moving Away from Ingress
 
-The Kubernetes Ingress API has served well but has limitations:
-- Minimal spec requiring vendor-specific annotations
-- Flat model that doesn't separate platform and application concerns
-- Limited support for modern routing patterns
+The Kubernetes Ingress API was designed years ago when the primary problem was simple: "how do I get traffic into my cluster?" It solved that, but it aged poorly. Here's what you run into with Ingress in the real world:
 
-Gateway API addresses these with a layered, role-oriented model:
-- **GatewayClass** - Infrastructure type (managed by platform team)
-- **Gateway** - Gateway instance (managed by cluster operators)
-- **HTTPRoute/GRPCRoute** - Traffic rules (managed by app developers)
+- **Annotation overload.** Want header-based routing? Canary weights? Rate limiting? Every ingress controller invented its own proprietary annotations. Your YAML ends up littered with `nginx.ingress.kubernetes.io/...` entries that only work with that one controller.
+- **The "all or nothing" ownership model.** With Ingress, whoever manages the controller owns everything. Developers can't safely self-serve their routing rules without risking breaking the platform.
+- **Limited expressiveness.** Traffic splitting by weight? Header matching? You can do it, but it's clunky, annotation-driven, and non-portable.
 
-### Migration Path from Ingress-NGINX
+The Kubernetes community spent years designing a replacement that addresses all of this: the **Gateway API**.
 
-The Ingress-NGINX project was retired in March 2026. Microsoft provides:
-- Security patches until **November 2026**
-- **This Gateway API implementation as the recommended migration path**
+---
 
-## 🏗️ Architecture
+## 🧠 Understanding the Gateway API
+
+The Gateway API introduces a layered model where responsibilities are clearly separated. Think of it like a building — different teams own different floors:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  GatewayClass  — "What kind of gateway infrastructure?" │
+│  (Managed by the Platform/Infra team)                   │
+│  Example: approuting-istio                               │
+└──────────────────────────┬──────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────┐
+│  Gateway  — "Spin up an actual gateway instance"        │
+│  (Managed by Cluster Operators)                         │
+│  Example: my-app-gateway listening on port 443          │
+└────────────┬─────────────────────────┬──────────────────┘
+             │                         │
+┌────────────▼──────────┐  ┌───────────▼──────────────────┐
+│  HTTPRoute            │  │  HTTPRoute                   │
+│  (App Developers)     │  │  (App Developers)            │
+│  /api/* → service-a   │  │  /web/* → service-b          │
+└───────────────────────┘  └──────────────────────────────┘
+```
+
+**GatewayClass** is the blueprint. It defines what technology implements the gateway. AKS registers a built-in `GatewayClass` called `approuting-istio` — you don't create it, it just exists once the add-on is enabled.
+
+**Gateway** is the actual running gateway instance. When you create a `Gateway` object pointing to `approuting-istio`, AKS automatically provisions:
+- An Envoy-based proxy deployment
+- An Azure Load Balancer with a public IP
+- A Horizontal Pod Autoscaler (HPA) to scale Envoy under load
+- A PodDisruptionBudget (PDB) to keep Envoy available during node maintenance
+
+**HTTPRoute** is the routing rule. Developers create these independently and attach them to a Gateway. Multiple teams can deploy their own HTTPRoutes to the same Gateway without interfering with each other.
+
+This separation of concerns is the core promise of the Gateway API — and it's a genuine improvement over the Ingress model.
+
+---
+
+## 🤔 Wait, Istio? Do I Need a Service Mesh?
+
+No. This is the part that trips people up.
+
+AKS has *two* different Istio-related features, and they're very different things:
+
+| | **App Routing (Istio) — this demo** | Istio Service Mesh Add-on |
+|---|---|---|
+| **What it does** | Manages ingress traffic only | Full east-west + north-south mesh |
+| **Sidecar injection** | ❌ None | ✅ Enabled cluster-wide |
+| **Istio CRDs installed** | ❌ No | ✅ Yes |
+| **GatewayClass name** | `approuting-istio` | `istio` |
+| **Complexity** | Low | High |
+| **Good for** | "I just need modern ingress" | "I need mTLS between all services, circuit breaking, observability" |
+| **Can coexist?** | ❌ Not on the same cluster | ❌ Not on the same cluster |
+
+With **App Routing (Istio)**, you get an Envoy-powered gateway managed by a lightweight Istio control plane (`istiod`) — but that control plane *only* manages the gateway pods. Your application pods know nothing about Istio. No sidecars, no mesh, no complexity.
+
+It's the best of both worlds: Envoy's performance and capabilities, without the operational overhead of a full service mesh.
+
+---
+
+## 🏗️ How Everything Fits Together
+
+Here's the full picture of what this demo builds and how the pieces connect:
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                    Azure Key Vault                            │
-│  ┌────────────────────────────────────────────────────┐      │
-│  │  SSL/TLS Certificate (PFX)                          │      │
-│  │  - Subject: *.demo.example.com                      │      │
-│  │  - Type: Self-signed (or bring your own)            │      │
-│  └────────────────┬───────────────────────────────────┘      │
-└────────────────────┼──────────────────────────────────────────┘
-                     │ Key Vault Secrets Provider CSI Driver
-                     │ (Syncs to Kubernetes Secret)
-                     ▼
+│                     Azure Key Vault                           │
+│   ┌──────────────────────────────────────────────────────┐   │
+│   │  SSL/TLS Certificate (PFX)                            │   │
+│   │  - Subject: *.yourdomain.com                          │   │
+│   │  - Self-signed (or bring your own CA certificate)     │   │
+│   └────────────────────┬─────────────────────────────────┘   │
+└────────────────────────┼──────────────────────────────────────┘
+                         │
+                         │  CSI Secrets Store Driver
+                         │  (Polls Key Vault every 2 min, syncs to K8s Secret)
+                         ▼
 ┌──────────────────────────────────────────────────────────────┐
-│              Kubernetes Secret: gateway-tls-secret            │
-│                (type: kubernetes.io/tls)                      │
-└────────────────────┬─────────────────────────────────────────┘
-                     │
-                     │ Referenced by Gateway
-                     ▼
+│            Kubernetes Secret: gateway-tls-secret              │
+│                  (type: kubernetes.io/tls)                    │
+└────────────────────────┬─────────────────────────────────────┘
+                         │ referenced by Gateway TLS config
+                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     Azure Load Balancer                      │
-│                  (External IP: Programmed)                   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│              Gateway (approuting-istio)                      │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Envoy Pods (HPA: 2-5 replicas, PDB: min 1)         │  │
-│  │  - Listener: HTTP (80)                               │  │
-│  │  - Listener: HTTPS (443) with TLS Termination        │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────┬────────────────┬─────────────────────────────┘
-              │                │
-┌─────────────▼──────┐    ┌───▼──────────────────┐
-│   HTTPRoute        │    │   HTTPRoute          │
-│   (httpbin)        │    │   (echo-canary)      │
-│   HTTPS listener   │    │   HTTPS listener     │
-└─────────┬──────────┘    └───┬──────────────────┘
-          │                   │
-┌─────────▼──────────┐    ┌───▼──────┐  ┌────────┐
-│  httpbin Service   │    │ echo-v1  │  │echo-v2 │
-│     (port 8000)    │    │  (90%)   │  │ (10%)  │
-└────────────────────┘    └──────────┘  └────────┘
+│                   Azure Load Balancer                        │
+│              (Public IP, auto-provisioned by AKS)           │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────────┐
+│           Envoy Gateway  (approuting-istio)                  │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  HPA-managed Envoy pods (auto-scales 2–5)            │   │
+│  │  Listener: :80  HTTP                                 │   │
+│  │  Listener: :443 HTTPS  ← TLS terminated here        │   │
+│  └──────────────────────────────────────────────────────┘   │
+└────────┬──────────────────┬────────────────┬────────────────┘
+         │                  │                │
+  ┌──────▼──────┐  ┌────────▼──────┐  ┌──────▼──────────┐
+  │  HTTPRoute  │  │  HTTPRoute    │  │  HTTPRoute      │
+  │  (httpbin)  │  │  (echo-canary)│  │  (path-based)   │
+  └──────┬──────┘  └──────┬────────┘  └──────┬──────────┘
+         │                │                  │
+  ┌──────▼──────┐  ┌───────▼──┐  ┌──────┐  ┌─▼───────┐
+  │   httpbin   │  │ echo-v1  │  │echo-v2│  │echo-v1/2│
+  │  Service    │  │  (90%)   │  │ (10%) │  │         │
+  └─────────────┘  └──────────┘  └───────┘  └─────────┘
 ```
 
-## 🚀 Prerequisites
+### The SSL/TLS Certificate Pipeline in Detail
 
-### Required Tools
-- **Azure CLI** (`az`) version 2.60.0 or later - [Install](https://docs.microsoft.com/cli/azure/install-azure-cli)
-- **kubectl** >= 1.30 - [Install](https://kubernetes.io/docs/tasks/tools/)
-- **OpenSSL** - For SSL certificate generation (usually pre-installed on macOS/Linux)
-- **jq** (optional, for JSON parsing test outputs) - [Install](https://jqlang.github.io/jq/download/)
-- Active Azure subscription with contributor access
+One of the interesting parts of this setup is how certificates travel from Azure Key Vault into the Envoy gateway. Let's trace the full journey:
 
-### Domain Name Configuration
+1. **You upload a certificate** (PFX format) to Azure Key Vault. The deploy script does this automatically — either generating a self-signed cert or importing the one you provide.
 
-The demo generates a self-signed certificate for `demo.example.com` by default. **You should customize this** for your use case:
+2. **The AKS CSI Secrets Store Driver** runs as a DaemonSet on every node. When a pod mounts a `SecretProviderClass` volume, the driver uses the AKS managed identity to authenticate to Key Vault and fetch the secret.
 
-**Option 1: Environment Variable (Recommended)**
+3. **The `SecretProviderClass` object** (`00-tls-secret-sync.yaml`) maps the Key Vault certificate to a Kubernetes `kubernetes.io/tls` Secret called `gateway-tls-secret`. It tells the driver exactly what to fetch and how to format it.
+
+4. **The TLS sync pod** is a small busybox pod that exists solely to keep the CSI volume mounted. Without a running pod mounting the volume, the Kubernetes Secret wouldn't be created or kept updated.
+
+5. **The Gateway** references `gateway-tls-secret` in its HTTPS listener. Envoy loads it and terminates TLS for all inbound traffic on port 443.
+
+6. **Automatic rotation** runs every 2 minutes. If you update the certificate in Key Vault, the Kubernetes Secret is updated and Envoy picks it up — no pod restarts, no downtime.
+
+This is a clean, production-grade approach: no secrets in YAML, full audit trail in Key Vault, automatic rotation.
+
+---
+
+## 🚦 Routing Patterns Explained
+
+This demo covers four distinct routing patterns. Here's the intuition behind each.
+
+### 1. Basic Path-Based Routing (`02-gateway-httproute.yaml`)
+
+The simplest case. Requests to `httpbin.yourdomain.com` are routed to the httpbin service based on URL path prefix.
+
+```yaml
+hostnames:
+- "httpbin.__DOMAIN_NAME__"
+rules:
+- matches:
+  - path:
+      type: PathPrefix
+      value: /get
+  backendRefs:
+  - name: httpbin
+    port: 8000
+```
+
+Use this when you have a single service and want to expose specific URL paths. Notice that there are no annotations anywhere — this is pure, portable Kubernetes API.
+
+### 2. Canary / Traffic Splitting (`04-advanced-traffic-splitting.yaml`)
+
+This is the pattern for **progressive delivery** — shipping a new version to a small slice of users first, watching for errors, then gradually expanding. The `weight` field controls the percentage split.
+
+```yaml
+hostnames:
+- "echo.__DOMAIN_NAME__"
+rules:
+- backendRefs:
+  - name: echo-v1
+    port: 80
+    weight: 90   # 90% of traffic goes to stable
+  - name: echo-v2
+    port: 80
+    weight: 10   # 10% goes to the canary
+```
+
+To complete the rollout: update the weights to 0/100 and redeploy. To roll back: change it back to 100/0. This is natively expressed in the API — no external tooling required.
+
+### 3. Header-Based Routing (`05-header-based-routing.yaml`)
+
+Instead of splitting by percentage, route based on what's **in** the request. This is perfect for internal testing — your QA team sends a special header to always reach the new version, while regular users stay on stable.
+
+```yaml
+hostnames:
+- "echo-headers.__DOMAIN_NAME__"
+rules:
+# If the request has "version: v2" header → go to v2
+- matches:
+  - headers:
+    - name: version
+      value: v2
+  backendRefs:
+  - name: echo-v2
+    port: 80
+# Everyone else → stable v1
+- backendRefs:
+  - name: echo-v1
+    port: 80
+```
+
+You can match on any header value. This unlocks patterns like feature flags (`X-Feature-Flag: new-checkout`), tenant routing (`X-Tenant-ID: acme-corp`), and A/B testing — all without touching application code.
+
+### 4. Multi-Service Path Routing (`06-path-based-routing.yaml`)
+
+One gateway, one hostname, multiple completely different backends. A single HTTPRoute fans out traffic to the right microservice based on URL path prefix.
+
+```yaml
+hostnames:
+- "app.__DOMAIN_NAME__"
+rules:
+- matches:
+  - path: { type: PathPrefix, value: /v1 }
+  backendRefs:
+  - name: echo-v1
+    port: 80
+- matches:
+  - path: { type: PathPrefix, value: /v2 }
+  backendRefs:
+  - name: echo-v2
+    port: 80
+- matches:
+  - path: { type: PathPrefix, value: /httpbin }
+  backendRefs:
+  - name: httpbin
+    port: 8000
+```
+
+This is the API gateway pattern — one public entry point, multiple internal services. The path-based fan-out lives in Kubernetes, not in a separate API Management layer.
+
+---
+
+## 🏗️ What Gets Deployed in Azure
+
+Here's every Azure resource `deploy.sh` creates, and why it exists:
+
+| Resource | Why it's there |
+|---|---|
+| **Resource Group** | Logical boundary for everything |
+| **Virtual Network** (10.0.0.0/16) | Isolated network for the AKS cluster |
+| **AKS Subnet** (10.0.0.0/22) | Provides ~1000 IPs for nodes and pods |
+| **AKS Cluster** | The Kubernetes cluster itself |
+| **Node Resource Group** (`rg-...-nodes`) | Custom-named RG for node VMs, NICs, disks — uses readable name instead of default `MC_*` format |
+| **System-assigned Managed Identity** | AKS's identity for Azure API calls, used to access Key Vault |
+| **Azure Key Vault** | Stores the TLS certificate — the source of truth for cert rotation |
+| **Key Vault Secrets Provider add-on** | Syncs KV secrets into K8s Secrets via CSI driver |
+| **Azure Load Balancer** | Auto-created by AKS per `Gateway` object — each Gateway gets its own public IP |
+| **DNS A Records** | Created in your Azure DNS zone (if configured) — maps hostnames to gateway IPs |
+
+---
+
+## 🚀 Getting Started
+
+### What You'll Need
+
+- **Azure CLI** 2.60.0+ — [Install guide](https://docs.microsoft.com/cli/azure/install-azure-cli)
+- **kubectl** 1.30+ — [Install guide](https://kubernetes.io/docs/tasks/tools/)
+- **OpenSSL** — Pre-installed on macOS and most Linux distros
+- **jq** (optional, makes JSON output readable) — [Install guide](https://jqlang.github.io/jq/download/)
+- An Azure subscription with Contributor access
+
+### Enable the Preview Features
+
+This feature is in **public preview** and requires two feature flags registered on your subscription. The `deploy.sh` script handles this automatically, but here's what it does and why:
+
 ```bash
-export DOMAIN_NAME="yourdomain.com"
-./deploy.sh
+# ManagedGatewayAPIPreview: enables Gateway API objects (GatewayClass, Gateway, HTTPRoute)
+az feature register --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
+
+# AppRoutingIstioGatewayAPIPreview: enables the approuting-istio GatewayClass
+az feature register --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
+
+# Check status (run these until both show "Registered" — can take 10-15 min)
+az feature show --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview" \
+  --query properties.state -o tsv
+az feature show --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview" \
+  --query properties.state -o tsv
+
+# Refresh the provider after both are registered
+az provider register --namespace Microsoft.ContainerService
 ```
 
-**Option 2: Edit deploy.sh**
-
-Update line ~24 in `deploy.sh`:
-```bash
-DOMAIN_NAME="${DOMAIN_NAME:-yourdomain.com}"  # <-- Change default here
-```
-
-The script will generate a wildcard certificate for:
-- `*.DOMAIN_NAME` (e.g., `*.yourdomain.com`)
-- `httpbin.DOMAIN_NAME` (e.g., `httpbin.yourdomain.com`)
-- `echo.DOMAIN_NAME` (e.g., `echo.yourdomain.com`)
-- And other subdomains used in the demo
-
-### SSL Certificate Configuration
-
-**Default Behavior**: The script generates a self-signed certificate automatically.
-
-**Bring Your Own Certificate**: If you have a certificate from a Certificate Authority (CA), you can provide it:
+You'll also need the `aks-preview` CLI extension — the `--enable-gateway-api` and `--enable-app-routing-istio` flags don't exist without it:
 
 ```bash
-# Provide your PFX certificate path and password (if any)
-export SSL_PFX_PATH="/path/to/your/certificate.pfx"
-export SSL_PFX_PASSWORD="your-certificate-password"  # Optional, leave empty if no password
-export DOMAIN_NAME="yourdomain.com"  # Should match certificate domain
-
-./deploy.sh
+az extension add --name aks-preview
+# or update if already installed:
+az extension update --name aks-preview
 ```
 
-**Supported Certificate Formats**:
-- **PFX/PKCS12** format (`.pfx` or `.p12` file)
-- Must contain both the certificate and private key
-- Optionally password-protected
+### Choosing Your Certificate
 
-**Converting from PEM to PFX** (if you have separate `.crt` and `.key` files):
+Before running the deploy, decide which certificate approach you want:
+
+**Self-signed (default — great for this demo)**  
+Leave `SSL_PFX_PATH` unset. The script generates a wildcard self-signed certificate for `*.yourdomain.com` with proper Subject Alternative Names using OpenSSL and uploads it to Key Vault. You'll need `-k` in curl commands to skip certificate verification.
+
+**Your own CA-signed certificate**  
+Export your certificate as PFX (PKCS#12 format) and point the script at it:
+
+```bash
+export SSL_PFX_PATH="/path/to/cert.pfx"
+export SSL_PFX_PASSWORD="your-pfx-password"  # Leave empty if not password-protected
+```
+
+If you only have `.crt` and `.key` files, convert to PFX first:
+
 ```bash
 openssl pkcs12 -export \
   -in certificate.crt \
@@ -140,195 +326,117 @@ openssl pkcs12 -export \
   -password pass:YourPassword
 ```
 
-**For Production**: Always use certificates from a trusted CA (Let's Encrypt, DigiCert, etc.) instead of self-signed certificates.
+---
 
-### Azure Preview Features
+## 🛠️ Deploying the Demo
 
-This demo uses preview features that must be registered:
+### Configure and Run
 
-```bash
-# Register preview features (the deploy.sh script does this automatically)
-az feature register --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
-az feature register --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
-
-# Check registration status
-az feature show --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
-az feature show --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
-
-# Re-register provider after features are registered
-az provider register --namespace Microsoft.ContainerService
-```
-
-### AKS Preview CLI Extension
-
-```bash
-# Install or update
-az extension add --name aks-preview
-az extension update --name aks-preview
-```
-
-## 📦 What's Included
-
-### Infrastructure (Azure CLI)
-
-The demo uses Azure CLI for deployment, providing the best support for these preview features.
-
-**Provisioned Resources:**
-- **AKS cluster** with Gateway API and App Routing (Istio) enabled
-- **Custom node resource group** with readable name (not default MC_* format)
-- **Azure Key Vault** for secure SSL certificate storage
-- **Key Vault Secrets Provider** add-on enabled on AKS
-- **SSL/TLS certificate** - Either custom PFX (if provided) or self-signed (auto-generated)
-- **Virtual Network** with dedicated AKS subnet (10.0.0.0/16)
-- **Managed identity** for AKS with Key Vault RBAC permissions
-- **Auto-scaling** configured for system node pool (1-3 nodes)
-- **Istio control plane** (meshless) via App Routing
-
-### Kubernetes Resources
-
-#### Sample Applications
-1. **httpbin** - HTTP testing service
-2. **echo-v1** - Echo service version 1
-3. **echo-v2** - Echo service version 2
-
-#### Gateway API Resources
-1. **TLS Secret Sync Pod** - Syncs SSL certificate from Key Vault to Kubernetes
-2. **SecretProviderClass** - Configures Key Vault integration for TLS certificates
-3. **Gateways with HTTPS** - Both HTTP (80) and HTTPS (443) listeners
-4. **Basic Gateway & HTTPRoute** - Simple path-based routing with SSL termination
-5. **Traffic Splitting** - Canary deployment (90/10 split) over HTTPS
-6. **Header-based Routing** - Route by HTTP headers over HTTPS
-7. **Path-based Routing** - Multiple services on one gateway over HTTPS
-
-## 🛠️ Deployment
-
-### Quick Start (Automated)
-
-```bash
-# Navigate to the demo directory
-cd AKS-Istio-Gateway-API
-
-# Run the deployment script
-./deploy.sh
-```
-
-The script will:
-1. ✅ Check prerequisites (Azure CLI, kubectl, openssl)
-2. ✅ Install/update aks-preview CLI extension
-3. ✅ Register Azure preview features (if needed)
-4. ✅ Create resource group and virtual network
-5. ✅ **Create Azure Key Vault**
-6. ✅ **Generate self-signed SSL certificate**
-7. ✅ **Import certificate to Key Vault**
-8. ✅ Deploy AKS cluster with Gateway API, Istio app routing, and Key Vault Secrets Provider
-9. ✅ **Configure Key Vault RBAC for AKS**
-10. ✅ **Create SecretProviderClass for TLS certificates**
-11. ✅ Configure kubectl access
-12. ✅ Deploy sample applications with HTTPS
-13. ✅ Wait for Gateways to be ready
-14. ✅ Display test commands and gateway IPs
-
-### Configuration Variables
-
-All deployment settings can be customized via environment variables. Set them before running the script:
+All settings are controlled by environment variables. Copy the entire block below, customize the values, paste into your terminal, then run `./deploy.sh`:
 
 ```bash
 #############################################
 # CONFIGURATION VARIABLES
-# Copy, customize, and paste this entire block to configure the deployment
+# Copy, customize, and paste this entire block
 #############################################
 
-# === Domain & SSL Configuration (IMPORTANT: Customize for your use case) ===
-export DOMAIN_NAME="yourdomain.com"              # Your domain (cert will be for *.yourdomain.com)
-export SSL_PFX_PATH=""                            # Optional: /path/to/certificate.pfx (leave empty for self-signed)
-export SSL_PFX_PASSWORD=""                        # Optional: Certificate password (leave empty if no password)
-export CERT_NAME="gateway-tls-cert"              # Certificate name in Key Vault
+# === Domain & SSL ===
+export DOMAIN_NAME="yourdomain.com"              # Your domain — cert covers *.yourdomain.com
+export SSL_PFX_PATH=""                            # Path to PFX cert (empty = auto-generate self-signed)
+export SSL_PFX_PASSWORD=""                        # PFX password (empty = no password)
+export CERT_NAME="gateway-tls-cert"              # Name of the cert inside Key Vault
 
-# === Azure Resource Configuration ===
-export RESOURCE_GROUP="rg-aks-istio-demo"        # Main resource group name
-export NODE_RESOURCE_GROUP="rg-aks-istio-nodes"  # AKS-managed node resource group (VMs, disks, NICs)
-export LOCATION="eastus"                          # Azure region (eastus, westus2, etc.)
-export KEYVAULT_NAME="kv-aks-istio-demo"         # Key Vault name (must be globally unique, 3-24 chars)
+# === Azure Resources ===
+export RESOURCE_GROUP="rg-aks-istio-demo"
+export NODE_RESOURCE_GROUP="rg-aks-istio-nodes"  # Node RG — VMs, disks, NICs live here
+export LOCATION="eastus"
+export KEYVAULT_NAME="kv-aks-istio-demo"         # Globally unique, 3-24 chars, alphanumeric
 
-# === AKS Cluster Configuration ===
-export CLUSTER_NAME="aks-istio-demo"             # AKS cluster name
-export K8S_VERSION="1.34"                         # Kubernetes version
-export NODE_COUNT="2"                             # Initial node count (autoscales 1-3)
-export NODE_SIZE="Standard_D4s_v5"               # VM size (Standard_D4s_v5, Standard_D8s_v5, etc.)
+# === AKS Cluster ===
+export CLUSTER_NAME="aks-istio-demo"
+export K8S_VERSION="1.34"
+export NODE_COUNT="2"                             # Autoscales 1–3
+export NODE_SIZE="Standard_D4s_v5"
 
-# === Network Configuration (Advanced - typically no need to change) ===
-export VNET_NAME="vnet-aks-istio-demo"           # Virtual network name
-export SUBNET_NAME="snet-aks"                     # Subnet name
+# === Network (usually fine as defaults) ===
+export VNET_NAME="vnet-aks-istio-demo"
+export SUBNET_NAME="snet-aks"
 
-# === DNS Configuration (Optional - for automatic A record creation) ===
-# If set, the script will auto-create DNS A records in your Azure DNS zone.
-# Leave DNS_ZONE_RG empty to let the script auto-detect the zone across the subscription.
-export DNS_ZONE_NAME="mycompany.com"              # Azure DNS zone name (defaults to DOMAIN_NAME)
-export DNS_ZONE_RG="rg-dns"                       # Resource group containing the DNS zone (auto-detected if empty)
+# === Azure DNS (optional — auto-creates A records if you have a zone) ===
+export DNS_ZONE_NAME="yourdomain.com"            # Azure DNS zone name
+export DNS_ZONE_RG="rg-dns"                       # RG of the DNS zone (auto-detected if empty)
 
 # Run deployment
 ./deploy.sh
 ```
 
-**Quick Start Examples:**
+**The script is fully idempotent.** Run it twice and it won't fail — it checks whether each resource exists before creating it. This means you can safely re-run after a partial failure, or re-run to re-deploy updated manifests without rebuilding the cluster.
+
+### What deploy.sh Does, Step by Step
+
+| Step | What happens |
+|---|---|
+| 1 | Verifies `az`, `kubectl`, `openssl` are installed |
+| 2 | Installs/updates `aks-preview` CLI extension |
+| 3 | Registers the two preview feature flags; polls until `Registered` |
+| 4 | Creates resource group (skips if exists) |
+| 5 | Creates VNet + subnet (skips if exists) |
+| 6 | Creates Azure Key Vault with RBAC authorization (skips if exists) |
+| 7 | Generates self-signed cert with SAN **or** validates your provided PFX |
+| 8 | Assigns `Key Vault Certificates Officer` to your user (skips if already assigned) |
+| 9 | Imports cert to Key Vault (skips if cert already exists there) |
+| 10 | Creates AKS cluster with `--enable-gateway-api --enable-app-routing-istio --enable-addons azure-keyvault-secrets-provider` (skips if exists) |
+| 11 | Runs `az aks get-credentials` to configure `kubectl` |
+| 12 | Assigns `Key Vault Secrets User` + `Key Vault Certificate User` roles to the AKS Secrets Provider identity |
+| 13 | Creates the `SecretProviderClass` Kubernetes object |
+| 14 | Waits for `istiod` pods to be ready in `aks-istio-system` |
+| 15 | Verifies the `approuting-istio` GatewayClass exists |
+| 16 | Deploys all manifests — substituting `__DOMAIN_NAME__` with your domain using `sed` |
+| 17 | Waits for both Gateways to show `Programmed: True` (i.e., have a public IP) |
+| 18 | Creates/updates DNS A records — or prints a manual DNS table if no Azure DNS zone found |
+| 19 | Prints final test commands with your actual IPs and domain |
+
+### Quick Customization Examples
 
 ```bash
-# Minimal configuration (with your domain)
+# Minimal — just set your domain
 export DOMAIN_NAME="mycompany.com"
 ./deploy.sh
 
-# With Azure DNS (auto-create A records)
+# With Azure DNS auto-management
 export DOMAIN_NAME="mycompany.com"
-export DNS_ZONE_RG="rg-dns"        # script auto-creates httpbin/echo/echo-headers/app records
+export DNS_ZONE_RG="rg-dns"
 ./deploy.sh
 
-# With custom certificate
+# With your own CA certificate
 export DOMAIN_NAME="mycompany.com"
 export SSL_PFX_PATH="/path/to/mycompany.pfx"
-export SSL_PFX_PASSWORD="MySecurePassword"
+export SSL_PFX_PASSWORD="SecurePassword123"
 ./deploy.sh
 
-# Custom Azure resources
+# Larger cluster for load testing
 export DOMAIN_NAME="mycompany.com"
-export RESOURCE_GROUP="rg-production-aks"
-export NODE_RESOURCE_GROUP="rg-production-aks-nodes"
-export LOCATION="westus2"
-export CLUSTER_NAME="aks-prod-cluster"
+export RESOURCE_GROUP="rg-aks-loadtest"
+export NODE_RESOURCE_GROUP="rg-aks-loadtest-nodes"
+export CLUSTER_NAME="aks-loadtest"
 export NODE_COUNT="3"
 export NODE_SIZE="Standard_D8s_v5"
 ./deploy.sh
 ```
 
-**Important Notes:**
-- **DOMAIN_NAME**: If not set, defaults to `demo.example.com` (placeholder - not routable)
-- **SSL Certificate**: If `SSL_PFX_PATH` is empty, a self-signed certificate is generated automatically
-- **Key Vault Name**: Must be globally unique across Azure (3-24 alphanumeric characters)
-- **Node Resource Group**: Custom readable name instead of Azure's default `MC_*` format
-
-### Manual Step-by-Step Deployment
-
-If you prefer to run commands manually:
+### Manual Step-by-Step (if you prefer)
 
 ```bash
-# 1. Install the aks-preview extension
+# 1. Install preview extension
 az extension add --name aks-preview
-az extension update --name aks-preview
 
-# 2. Register preview features
+# 2. Register features (wait for "Registered" before continuing)
 az feature register --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
 az feature register --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
-
-# 3. Wait for registration (check status)
-az feature show --namespace "Microsoft.ContainerService" --name "ManagedGatewayAPIPreview"
-az feature show --namespace "Microsoft.ContainerService" --name "AppRoutingIstioGatewayAPIPreview"
-
-# 4. Re-register provider
 az provider register --namespace Microsoft.ContainerService
 
-# 5. Create resource group
+# 3. Create infrastructure
 az group create --name rg-aks-istio-gateway-demo --location eastus
-
-# 6. Create virtual network
 az network vnet create \
   --resource-group rg-aks-istio-gateway-demo \
   --name vnet-aks-istio-demo \
@@ -336,274 +444,303 @@ az network vnet create \
   --subnet-name snet-aks \
   --subnet-prefix 10.0.0.0/22
 
-# 7. Get subnet ID
 SUBNET_ID=$(az network vnet subnet show \
   --resource-group rg-aks-istio-gateway-demo \
-  --vnet-name vnet-aks-istio-demo \
-  --name snet-aks \
-  --query id -o tsv)
+  --vnet-name vnet-aks-istio-demo --name snet-aks --query id -o tsv)
 
-# 8. Create AKS cluster with Gateway API and Istio
+# 4. Create AKS — the three key flags are highlighted
 az aks create \
   --resource-group rg-aks-istio-gateway-demo \
   --name aks-istio-gateway-demo \
   --location eastus \
-  --kubernetes-version 1.31 \
-  --node-count 2 \
-  --node-vm-size Standard_D4s_v5 \
-  --network-plugin azure \
-  --vnet-subnet-id "$SUBNET_ID" \
-  --service-cidr 10.1.0.0/16 \
-  --dns-service-ip 10.1.0.10 \
+  --kubernetes-version 1.34 \
+  --node-count 2 --node-vm-size Standard_D4s_v5 \
+  --network-plugin azure --vnet-subnet-id "$SUBNET_ID" \
+  --service-cidr 10.1.0.0/16 --dns-service-ip 10.1.0.10 \
   --enable-managed-identity \
-  --enable-gateway-api \
-  --enable-app-routing-istio \
+  --enable-gateway-api \                        # ← enables Gateway API CRDs
+  --enable-app-routing-istio \                  # ← registers approuting-istio GatewayClass
+  --enable-addons azure-keyvault-secrets-provider \  # ← CSI driver for KV sync
+  --enable-secret-rotation --rotation-poll-interval 2m \
   --tier standard \
-  --enable-cluster-autoscaler \
-  --min-count 1 \
-  --max-count 3
+  --enable-cluster-autoscaler --min-count 1 --max-count 3
 
-# 9. Get credentials
+# 5. Configure kubectl
 az aks get-credentials \
   --resource-group rg-aks-istio-gateway-demo \
-  --name aks-istio-gateway-demo \
-  --overwrite-existing
+  --name aks-istio-gateway-demo --overwrite-existing
 
-# 10. Verify Istio is running
-kubectl get pods -n aks-istio-system
-
-# 11. Verify GatewayClass
+# 6. Verify the GatewayClass was registered by AKS
 kubectl get gatewayclass approuting-istio
 
-# 12. Deploy applications
-kubectl apply -f kubernetes-manifests/
+# 7. Deploy apps (substitute your domain)
+export DOMAIN_NAME="yourdomain.com"
+for f in kubernetes-manifests/*.yaml; do
+  sed "s/__DOMAIN_NAME__/$DOMAIN_NAME/g" "$f" | kubectl apply -f -
+done
 
-# 13. Wait for gateways to be programmed
+# 8. Wait for gateways to be programmed
 kubectl wait --for=condition=programmed gateway/httpbin-gateway --timeout=300s
 kubectl wait --for=condition=programmed gateway/echo-gateway --timeout=300s
 
-# 14. Get gateway IP addresses
-kubectl get gateway httpbin-gateway -o jsonpath='{.status.addresses[0].value}'
-kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}'
+# 9. Get the public IPs
+kubectl get gateway -o wide
 ```
+
+---
 
 ## 🧪 Testing the Demo
 
-**Important**: The manifests use placeholder `__DOMAIN_NAME__` which is automatically substituted during deployment with your configured domain.
-
-### Set Your Domain for Testing
+Once deployed, set your domain and grab the gateway IPs:
 
 ```bash
-# Use the same domain you configured during deployment
-export DOMAIN_NAME="demo.example.com"  # Replace with your actual domain
+export DOMAIN_NAME="yourdomain.com"
 
-# Or if you already set it during deployment, it should still be in your environment
-echo "Testing with domain: $DOMAIN_NAME"
-```
-
-### 1. Get Gateway IP Addresses
-
-```bash
 HTTPBIN_IP=$(kubectl get gateway httpbin-gateway -o jsonpath='{.status.addresses[0].value}')
 ECHO_IP=$(kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}')
 
-echo "httpbin Gateway: $HTTPBIN_IP"
-echo "echo Gateway: $ECHO_IP"
+echo "httpbin gateway: https://httpbin.$DOMAIN_NAME  ($HTTPBIN_IP)"
+echo "echo gateway:    https://echo.$DOMAIN_NAME     ($ECHO_IP)"
 ```
 
-### 2. Test Basic Routing with HTTPS (httpbin)
+> **About `-k`:** We use `-k` to skip TLS verification for self-signed certs. Drop it if you deployed with a CA-signed certificate and have DNS pointing to the gateway IPs.
 
-**Note:** Since we're using a self-signed certificate, add `-k` flag to curl to skip certificate verification.
+### Test 1 — Basic HTTPS routing
 
 ```bash
-# Test /get endpoint over HTTPS
-curl -k -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/get"
+# Full request details
+curl -k -s -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/get" | jq .
 
-# Test /headers endpoint
-curl -k -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/headers"
+# See request headers as received by the backend
+curl -k -s -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/headers" | jq .
 
-# Test /status endpoint
-curl -k -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP/status/200"
-
-# Verify SSL certificate
-curl -vI -k -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP" 2>&1 | grep -i 'subject\|issuer'
+# Verify the TLS certificate — should show your domain in SAN
+curl -vI -k -H "Host: httpbin.$DOMAIN_NAME" "https://$HTTPBIN_IP" 2>&1 \
+  | grep -i 'subject\|issuer\|expire'
 ```
 
-### 3. Test Traffic Splitting (Canary Deployment) over HTTPS
+### Test 2 — Canary split (90/10)
 
-The echo-canary route splits traffic 90% to v1 and 10% to v2:
+Run 20 requests — you should see roughly 18 going to v1 and 2 to v2:
 
 ```bash
-# Run multiple requests to see distribution
-for i in {1..20}; do 
+for i in {1..20}; do
   curl -k -s -H "Host: echo.$DOMAIN_NAME" "https://$ECHO_IP/" | grep -o "Echo v[12]"
-done
-
-# Expected output: ~18 "Echo v1", ~2 "Echo v2"
+done | sort | uniq -c
+# Expected output:
+#  18 Echo v1
+#   2 Echo v2
 ```
 
-### 4. Test Header-Based Routing over HTTPS
+### Test 3 — Header-based routing
 
 ```bash
-# Default route (goes to v1)
+# No header → always v1
 curl -k -s -H "Host: echo-headers.$DOMAIN_NAME" "https://$ECHO_IP/" | grep "Echo v"
 
-# With version header (goes to v2)
-curl -k -s -H "Host: echo-headers.$DOMAIN_NAME" -H "version: v2" "https://$ECHO_IP/" | grep "Echo v"
+# With "version: v2" header → always v2
+curl -k -s \
+  -H "Host: echo-headers.$DOMAIN_NAME" \
+  -H "version: v2" \
+  "https://$ECHO_IP/" | grep "Echo v"
+
+# Any other value → falls back to v1
+curl -k -s \
+  -H "Host: echo-headers.$DOMAIN_NAME" \
+  -H "version: v99" \
+  "https://$ECHO_IP/" | grep "Echo v"
 ```
 
-### 5. Test Path-Based Routing over HTTPS
+### Test 4 — Multi-service path routing
 
 ```bash
-# Route to echo-v1
+# /v1/* → echo-v1
 curl -k -s -H "Host: app.$DOMAIN_NAME" "https://$ECHO_IP/v1/" | grep "Echo v"
 
-# Route to echo-v2
+# /v2/* → echo-v2
 curl -k -s -H "Host: app.$DOMAIN_NAME" "https://$ECHO_IP/v2/" | grep "Echo v"
 
-# Route to httpbin
-curl -k -s -H "Host: app.$DOMAIN_NAME" "https://$ECHO_IP/httpbin/get" | jq .
+# /httpbin/* → different service entirely
+curl -k -s -H "Host: app.$DOMAIN_NAME" "https://$ECHO_IP/httpbin/get" | jq .url
 ```
 
-### 6. Verify TLS Certificate from Key Vault
+### Test 5 — Verify the Key Vault certificate sync
 
 ```bash
-# Check the TLS secret was created from Key Vault
-kubectl get secret gateway-tls-secret
-
-# Verify SecretProviderClass
-kubectl get secretproviderclass gateway-tls-cert-spc -o yaml
-
-# Check the sync pod is running
+# Confirm the sync pod is keeping the CSI volume mounted
 kubectl get pod tls-secret-sync
 
-# View certificate details
-kubectl get secret gateway-tls-secret -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -text -noout | grep -A2 "Subject:\|Issuer:\|DNS:"
+# Confirm the TLS secret was materialized
+kubectl get secret gateway-tls-secret
+# Should show: type=kubernetes.io/tls
+
+# Inspect the certificate — should list your domain's SANs
+kubectl get secret gateway-tls-secret \
+  -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d \
+  | openssl x509 -text -noout \
+  | grep -A5 "Subject Alternative Name"
+
+# Check the SecretProviderClass config
+kubectl describe secretproviderclass gateway-tls-cert-spc
 ```
+
+---
 
 ## 🔍 Exploring the Cluster
 
-### View Istio Control Plane
+Once testing is done, it's worth looking at what AKS actually provisioned for you.
+
+### The Istio control plane
 
 ```bash
-# Check istiod pods
+# istiod runs in its own namespace and manages only the gateway Envoy pods
 kubectl get pods -n aks-istio-system
 
-# View istiod logs
-kubectl logs -n aks-istio-system -l app=istiod --tail=50
+# Watch istiod logs while you make requests — see Envoy xDS config pushes
+kubectl logs -n aks-istio-system -l app=istiod --tail=50 -f
 ```
 
-### Inspect Gateway API Resources
+### The auto-provisioned Gateway infrastructure
+
+Creating a single `Gateway` object causes AKS to automatically provision all of this:
 
 ```bash
-# List GatewayClasses
-kubectl get gatewayclass
+# The GatewayClass that AKS registered at cluster creation
+kubectl describe gatewayclass approuting-istio
 
-# View Gateway status
-kubectl get gateway
-kubectl describe gateway httpbin-gateway
+# All gateways with their programmed status and public IPs
+kubectl get gateway -o wide
 
-# View HTTPRoutes
-kubeczure CLI Deployment
-
-```bash
-# Run the cleanup script
-./cleanup-cli.sh
-
-# Or manually delete the resource group
-az group delete --name rg-aks-istio-gateway-demo --yes
-```
-
-### Terraform Deployment
-```bash
-# View the Envoy deployment
+# The Envoy deployment backing the gateway (AKS manages this)
 kubectl get deployment -l gateway.networking.k8s.io/gateway-name=httpbin-gateway
 
-# View the LoadBalancer service
+# The LoadBalancer service that holds the public Azure IP
 kubectl get service -l gateway.networking.k8s.io/gateway-name=httpbin-gateway
 
-# View the HorizontalPodAutoscaler
+# The HPA keeping Envoy scaled with traffic
 kubectl get hpa -l gateway.networking.k8s.io/gateway-name=httpbin-gateway
 
-# View the PodDisruptionBudget
+# The PDB preventing all Envoy pods from being evicted simultaneously
 kubectl get pdb -l gateway.networking.k8s.io/gateway-name=httpbin-gateway
 ```
 
-## 📚 Learn More
+### Gateway and route status
 
-### Gateway API Features Demonstrated
+```bash
+# Full Gateway status — look for Programmed: True and listener conditions
+kubectl describe gateway httpbin-gateway
 
-| Feature | File | Description |
-|---------|------|-------------|
-| Basic Gateway | `02-gateway-httproute.yaml` | Simple HTTP gateway with path-based routing |
-| Traffic Splitting | `04-advanced-traffic-splitting.yaml` | Weighted routing for canary deployments |
-| Header Routing | `05-header-based-routing.yaml` | Route based on HTTP headers |
-| Path Routing | `06-path-based-routing.yaml` | Multiple backends on one gateway |
+# All HTTPRoutes and which gateway they're attached to
+kubectl get httproute -o wide
 
-### Key Differences from Istio Service Mesh
+# Detailed route status — look for Accepted: True and ResolvedRefs: True
+kubectl describe httproute httpbin
+```
 
-| Feature | App Routing (Istio) | Istio Service Mesh Add-on |
-|---------|---------------------|---------------------------|
-| GatewayClass | `approuting-istio` | `istio` |
-| Sidecar Injection | ❌ Not enabled | ✅ Enabled cluster-wide |
-| Istio CRDs | ❌ Not installed | ✅ Installed |
-| Use Case | Ingress only | Full service mesh |
-| Upgrades | In-place | Canary upgrades |
+When everything is healthy: Gateway shows `Programmed: True`, and each HTTPRoute shows `Accepted: True` with `ResolvedRefs: True`. If a route isn't working, the conditions on `kubectl describe httproute` are where to look first.
 
-**Note:** Both add-ons cannot run simultaneously on the same cluster.
+---
 
-## ⚠️ Current Limitations
+## 📋 Repository Structure
 
-1. **DNS & TLS Management** - Not yet automated via app routing add-on
-   - Manual TLS configuration required (see [TLS docs](https://learn.microsoft.com/azure/aks/app-routing-gateway-api-tls))
-2. **SNI Passthrough** - TLSRoute not supported
-3. **Egress** - Egress traffic management not available
-4. **Mutual Exclusivity** - Cannot run with Istio service mesh add-on
+```
+AKS-Istio-Gateway-API/
+├── deploy.sh                               # Idempotent deployment script
+├── cleanup.sh                              # Full cleanup including DNS records
+├── README.md                               # You are here
+└── kubernetes-manifests/
+    ├── 00-tls-secret-sync.yaml             # Busybox pod to keep KV cert synced to K8s Secret
+    ├── 01-httpbin-app.yaml                 # HTTP testing backend service
+    ├── 02-gateway-httproute.yaml           # Gateway + basic path routing (httpbin)
+    ├── 03-echo-apps.yaml                   # Echo v1 + v2 deployments
+    ├── 04-advanced-traffic-splitting.yaml  # 90/10 canary routing (echo)
+    ├── 05-header-based-routing.yaml        # Route by "version" header
+    └── 06-path-based-routing.yaml          # /v1, /v2, /httpbin → different services
+```
+
+All manifests use `__DOMAIN_NAME__` as a placeholder for the hostname. `deploy.sh` substitutes it at apply time with `sed`. To apply a manifest manually:
+
+```bash
+export DOMAIN_NAME="yourdomain.com"
+sed "s/__DOMAIN_NAME__/$DOMAIN_NAME/g" kubernetes-manifests/02-gateway-httproute.yaml \
+  | kubectl apply -f -
+```
+
+---
 
 ## 🧹 Cleanup
 
-### Automated Cleanup
+The cleanup script removes everything in the right order:
 
 ```bash
-# Run the cleanup script
 ./cleanup.sh
 ```
 
-### Manual Cleanup
+It will:
+1. Delete all Kubernetes manifests from the cluster
+2. Remove the `kubectl` context for this cluster from your kubeconfig
+3. Find and delete the four DNS A records from your Azure DNS zone (auto-detected or use `DNS_ZONE_RG`)
+4. Delete the Azure resource group and all resources inside it (runs async)
+
+Monitor deletion progress with:
 
 ```bash
-# Delete Kubernetes resources
-kubectl delete -f kubernetes-manifests/
-
-# Destroy infrastructure
-cd terraform
-terraform destroy
+az group show --name rg-aks-istio-gateway-demo \
+  --query properties.provisioningState -o tsv
 ```
 
-## 🔗 References
+---
+
+## ⚠️ Current Limitations (as of June 2026)
+
+**This is a preview feature** — test thoroughly before considering it for production.
+
+| Limitation | Details |
+|---|---|
+| **No automated DNS/cert integration** | The App Routing add-on has external-dns + cert-manager integration for NGINX paths. This Istio path doesn't yet — we manage DNS and certs manually in this demo. |
+| **No SNI passthrough** | Only `TLS mode: Terminate` is supported. `TLSRoute` for pass-through scenarios isn't available. |
+| **Ingress only** | This gateway handles north-south (inbound) traffic only. East-west service-to-service traffic management requires the full Istio service mesh add-on. |
+| **Mutual exclusivity** | You cannot run the Istio service mesh add-on and App Routing Istio on the same cluster — they share `istiod`. |
+| **GRPCRoute maturity** | `GRPCRoute` support is still evolving — check current docs before building on it. |
+
+---
+
+## 📚 Further Reading
 
 ### Official Documentation
-- [AKS Blog: Gateway API Support](https://blog.aks.azure.com/2026/03/18/app-routing-gateway-api)
+
+- [AKS Blog: Announcing Gateway API support for App Routing (preview)](https://blog.aks.azure.com/2026/03/18/app-routing-gateway-api) — the announcement
 - [AKS App Routing Gateway API Quickstart](https://learn.microsoft.com/azure/aks/app-routing-gateway-api)
 - [TLS with App Routing Gateway API](https://learn.microsoft.com/azure/aks/app-routing-gateway-api-tls)
-- [Kubernetes Gateway API](https://gateway-api.sigs.k8s.io/)
+- [Kubernetes Gateway API official documentation](https://gateway-api.sigs.k8s.io/)
 
-### Related Resources
-- [Ingress-NGINX Retirement Announcement](https://www.kubernetes.dev/blog/2025/11/12/ingress-nginx-retirement/)
-- [Istio Service Mesh Add-on](https://learn.microsoft.com/azure/aks/istio-about)
-- [Gateway API vs Ingress](https://gateway-api.sigs.k8s.io/#ingress-vs-gateway-api)
+### Background and Context
 
-## 📝 Notes
+- [Ingress-NGINX Retirement Announcement](https://www.kubernetes.dev/blog/2025/11/12/ingress-nginx-retirement/) — why this migration matters
+- [AKS Istio Service Mesh Add-on](https://learn.microsoft.com/azure/aks/istio-about) — the full mesh, when you need it
+- [Gateway API vs Ingress](https://gateway-api.sigs.k8s.io/#ingress-vs-gateway-api) — official comparison
+- [AKS Key Vault Secrets Provider](https://learn.microsoft.com/azure/aks/csi-secrets-store-driver) — how the cert pipeline works
 
-- This feature is in **preview** - not recommended for production without thorough testing
-- Feature registration can take 10-15 minutes
-- AKS cluster deployment takes approximately 10-15 minutes
-- Gateway programming typically completes in 1-2 minutes
-- **Custom node resource group**: Uses readable name `rg-aks-istio-gateway-demo-nodes` instead of Azure's default `MC_*` format for better resource management and organization
+---
+
+## 💡 Key Takeaways
+
+- The **Gateway API** is not just "a new Ingress" — it's a fundamentally better model that properly separates platform infrastructure concerns from application routing concerns. Teams can own their own HTTPRoutes without touching each other's configuration.
+
+- **App Routing with Istio** lets you get Envoy's capabilities (advanced load balancing, HTTP/2, header manipulation, traffic splitting) without running a service mesh. The Istio control plane manages only the gateway pods — your application pods are completely unaffected.
+
+- **Azure Key Vault + CSI Secrets Provider** is the right way to handle TLS certificates in AKS. The certificate is never in your YAML, never in your Git history, automatically rotated, and fully audited in Key Vault.
+
+- **The deploy script is idempotent** — run it twice, it won't fail or duplicate resources. This makes it safe to use as both an initial deployment and an update mechanism for manifests.
+
+- **If you're starting something new today**, build it on Gateway API. The Ingress-NGINX retirement clock is ticking, and Gateway API is genuinely better — not just as a migration target but as a first-class approach to Kubernetes traffic management.
+
+---
 
 ## 🤝 Contributing
 
-Found an issue or want to improve this demo? Contributions are welcome!
+Found a bug, got a question, or want to add another routing example? PRs are welcome.
 
 ## 📄 License
 
@@ -611,5 +748,5 @@ This demo is provided as-is for educational purposes.
 
 ---
 
-**Created:** June 2026  
+**Created:** June 2026 | **Branch:** `feature/add-aks-istio-gateway-api`  
 **AKS Blog Reference:** [Announcing Gateway API support for App Routing (preview)](https://blog.aks.azure.com/2026/03/18/app-routing-gateway-api)

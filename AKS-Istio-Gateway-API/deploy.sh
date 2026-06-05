@@ -29,7 +29,7 @@ CERT_NAME="${CERT_NAME:-gateway-tls-cert}"              # Certificate name in Ke
 RESOURCE_GROUP="${RESOURCE_GROUP:-rg-aks-istio-gateway-demo}"               # Main resource group name
 NODE_RESOURCE_GROUP="${NODE_RESOURCE_GROUP:-rg-aks-istio-gateway-demo-nodes}"  # AKS-managed node resource group
 LOCATION="${LOCATION:-eastus}"                          # Azure region
-KEYVAULT_NAME="${KEYVAULT_NAME:-kv-aks-istio-$RANDOM}"  # Key Vault name (must be globally unique)
+KEYVAULT_NAME="${KEYVAULT_NAME:-kv-aks-istio-6743}"  # Key Vault name (must be globally unique)
 
 # === AKS Cluster Configuration ===
 CLUSTER_NAME="${CLUSTER_NAME:-aks-istio-gateway-demo}" # AKS cluster name
@@ -150,47 +150,56 @@ echo ""
 
 # Create Resource Group
 echo -e "${YELLOW}Creating resource group...${NC}"
-az group create \
-    --name "$RESOURCE_GROUP" \
-    --location "$LOCATION" \
-    --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API" "ManagedBy=AzureCLI"
-
-echo -e "${GREEN}✓ Resource group created${NC}"
+if az group show --name "$RESOURCE_GROUP" &>/dev/null; then
+    echo -e "${GREEN}✓ Resource group '$RESOURCE_GROUP' already exists — skipping${NC}"
+else
+    az group create \
+        --name "$RESOURCE_GROUP" \
+        --location "$LOCATION" \
+        --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API" "ManagedBy=AzureCLI"
+    echo -e "${GREEN}✓ Resource group created${NC}"
+fi
 echo ""
 
 # Create Virtual Network
 echo -e "${YELLOW}Creating virtual network...${NC}"
-az network vnet create \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$VNET_NAME" \
-    --address-prefix 10.0.0.0/16 \
-    --subnet-name "$SUBNET_NAME" \
-    --subnet-prefix 10.0.0.0/22
+if az network vnet show --resource-group "$RESOURCE_GROUP" --name "$VNET_NAME" &>/dev/null; then
+    echo -e "${GREEN}✓ VNet '$VNET_NAME' already exists — skipping${NC}"
+else
+    az network vnet create \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$VNET_NAME" \
+        --address-prefix 10.0.0.0/16 \
+        --subnet-name "$SUBNET_NAME" \
+        --subnet-prefix 10.0.0.0/22
+    echo -e "${GREEN}✓ Virtual network created${NC}"
+fi
 
 SUBNET_ID=$(az network vnet subnet show \
     --resource-group "$RESOURCE_GROUP" \
     --vnet-name "$VNET_NAME" \
     --name "$SUBNET_NAME" \
     --query id -o tsv)
-
-echo -e "${GREEN}✓ Virtual network created${NC}"
 echo ""
 
 # Create Azure Key Vault
 echo -e "${YELLOW}Creating Azure Key Vault...${NC}"
-az keyvault create \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$KEYVAULT_NAME" \
-    --location "$LOCATION" \
-    --enable-rbac-authorization true \
-    --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API"
+if az keyvault show --name "$KEYVAULT_NAME" --resource-group "$RESOURCE_GROUP" &>/dev/null; then
+    echo -e "${GREEN}✓ Key Vault '$KEYVAULT_NAME' already exists — skipping${NC}"
+else
+    az keyvault create \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$KEYVAULT_NAME" \
+        --location "$LOCATION" \
+        --enable-rbac-authorization true \
+        --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API"
+    echo -e "${GREEN}✓ Key Vault created: $KEYVAULT_NAME${NC}"
+fi
 
 KEYVAULT_ID=$(az keyvault show \
     --name "$KEYVAULT_NAME" \
     --resource-group "$RESOURCE_GROUP" \
     --query id -o tsv)
-
-echo -e "${GREEN}✓ Key Vault created: $KEYVAULT_NAME${NC}"
 echo ""
 
 # Prepare SSL certificate for import
@@ -269,58 +278,64 @@ USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
 
 # Assign Key Vault Secrets Officer role to current user (to import certificate)
 echo -e "${YELLOW}Assigning Key Vault permissions...${NC}"
-az role assignment create \
-    --role "Key Vault Certificates Officer" \
-    --assignee "$USER_OBJECT_ID" \
-    --scope "$KEYVAULT_ID" \
-    --output none
-
-# Wait a bit for RBAC propagation
-sleep 10
+if az role assignment list --role "Key Vault Certificates Officer" --assignee "$USER_OBJECT_ID" --scope "$KEYVAULT_ID" --query '[0].id' -o tsv 2>/dev/null | grep -q .; then
+    echo -e "${GREEN}✓ Key Vault Certificates Officer role already assigned — skipping${NC}"
+else
+    az role assignment create \
+        --role "Key Vault Certificates Officer" \
+        --assignee "$USER_OBJECT_ID" \
+        --scope "$KEYVAULT_ID" \
+        --output none
+    # Wait a bit for RBAC propagation
+    sleep 10
+fi
 
 # Import certificate to Key Vault
 echo -e "${YELLOW}Importing certificate to Key Vault...${NC}"
-az keyvault certificate import \
-    --vault-name "$KEYVAULT_NAME" \
-    --name "$CERT_NAME" \
-    --file "$CERT_FILE" \
-    --password "$CERT_PASSWORD"
-
-echo -e "${GREEN}✓ Certificate imported to Key Vault${NC}"
+if az keyvault certificate show --vault-name "$KEYVAULT_NAME" --name "$CERT_NAME" &>/dev/null; then
+    echo -e "${GREEN}✓ Certificate '$CERT_NAME' already exists in Key Vault — skipping${NC}"
+else
+    az keyvault certificate import \
+        --vault-name "$KEYVAULT_NAME" \
+        --name "$CERT_NAME" \
+        --file "$CERT_FILE" \
+        --password "$CERT_PASSWORD"
+    echo -e "${GREEN}✓ Certificate imported to Key Vault${NC}"
+fi
 echo ""
 
 # Create AKS Cluster with Gateway API and App Routing (Istio)
 echo -e "${YELLOW}Creating AKS cluster with Gateway API and Istio app routing...${NC}"
-echo "This may take 10-15 minutes..."
-echo ""
-
-az aks create \
-    --resource-group "$RESOURCE_GROUP" \
-    --name "$CLUSTER_NAME" \
-    --location "$LOCATION" \
-    --node-resource-group "$NODE_RESOURCE_GROUP" \
-    --kubernetes-version "$K8S_VERSION" \
-    --node-count "$NODE_COUNT" \
-    --node-vm-size "$NODE_SIZE" \
-    --network-plugin azure \
-    --vnet-subnet-id "$SUBNET_ID" \
-    --service-cidr 10.1.0.0/16 \
-    --dns-service-ip 10.1.0.10 \
-    --enable-managed-identity \
-    --enable-gateway-api \
-    --enable-app-routing-istio \
-    --enable-addons azure-keyvault-secrets-provider \
-    --enable-secret-rotation \
-    --rotation-poll-interval 2m \
-    --tier standard \
-    --node-osdisk-type Managed \
-    --enable-cluster-autoscaler \
-    --min-count 1 \
-    --max-count 3 \
-    --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API"
-
-echo ""
-echo -e "${GREEN}✓ AKS cluster created successfully${NC}"
+if az aks show --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" &>/dev/null; then
+    echo -e "${GREEN}✓ AKS cluster '$CLUSTER_NAME' already exists — skipping create${NC}"
+else
+    echo "This may take 10-15 minutes..."
+    az aks create \
+        --resource-group "$RESOURCE_GROUP" \
+        --name "$CLUSTER_NAME" \
+        --location "$LOCATION" \
+        --node-resource-group "$NODE_RESOURCE_GROUP" \
+        --kubernetes-version "$K8S_VERSION" \
+        --node-count "$NODE_COUNT" \
+        --node-vm-size "$NODE_SIZE" \
+        --network-plugin azure \
+        --vnet-subnet-id "$SUBNET_ID" \
+        --service-cidr 10.1.0.0/16 \
+        --dns-service-ip 10.1.0.10 \
+        --enable-managed-identity \
+        --enable-gateway-api \
+        --enable-app-routing-istio \
+        --enable-addons azure-keyvault-secrets-provider \
+        --enable-secret-rotation \
+        --rotation-poll-interval 2m \
+        --tier standard \
+        --node-osdisk-type Managed \
+        --enable-cluster-autoscaler \
+        --min-count 1 \
+        --max-count 3 \
+        --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API"
+    echo -e "${GREEN}✓ AKS cluster created successfully${NC}"
+fi
 echo ""
 
 # Get AKS credentials
@@ -348,20 +363,28 @@ SECRETS_PROVIDER_OBJECT_ID=$(az ad sp show \
     --query id -o tsv)
 
 # Assign Key Vault Secrets User role to read secrets
-az role assignment create \
-    --role "Key Vault Secrets User" \
-    --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" \
-    --assignee-principal-type ServicePrincipal \
-    --scope "$KEYVAULT_ID" \
-    --output none
+if az role assignment list --role "Key Vault Secrets User" --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" --scope "$KEYVAULT_ID" --query '[0].id' -o tsv 2>/dev/null | grep -q .; then
+    echo -e "${GREEN}✓ Key Vault Secrets User role already assigned — skipping${NC}"
+else
+    az role assignment create \
+        --role "Key Vault Secrets User" \
+        --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" \
+        --assignee-principal-type ServicePrincipal \
+        --scope "$KEYVAULT_ID" \
+        --output none
+fi
 
 # Assign Key Vault Certificate User role to read certificates
-az role assignment create \
-    --role "Key Vault Certificate User" \
-    --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" \
-    --assignee-principal-type ServicePrincipal \
-    --scope "$KEYVAULT_ID" \
-    --output none
+if az role assignment list --role "Key Vault Certificate User" --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" --scope "$KEYVAULT_ID" --query '[0].id' -o tsv 2>/dev/null | grep -q .; then
+    echo -e "${GREEN}✓ Key Vault Certificate User role already assigned — skipping${NC}"
+else
+    az role assignment create \
+        --role "Key Vault Certificate User" \
+        --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" \
+        --assignee-principal-type ServicePrincipal \
+        --scope "$KEYVAULT_ID" \
+        --output none
+fi
 
 echo -e "${GREEN}✓ Key Vault access configured${NC}"
 echo ""
@@ -446,7 +469,7 @@ echo ""
 # Get Gateway IP addresses
 echo -e "${YELLOW}Retrieving Gateway IP addresses...${NC}"
 HTTPBIN_IP=$(kubectl get gateway httpbin-gateway -o jsonpath='{.status.addresses[0].value}')
-ECHO_IP=$(kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}')HOST_BIN_IP="$HTTPBIN_IP"
+ECHO_IP=$(kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}')
 # ─────────────────────────────────────────────
 # DNS Configuration
 # ─────────────────────────────────────────────
