@@ -80,7 +80,7 @@ DNS_ZONE_FOUND=false
 if [ -z "$DNS_ZONE_RG" ]; then
     DETECTED_DNS_RG=$(az network dns zone list \
         --query "[?name=='$DNS_ZONE_NAME'].resourceGroup" \
-        -o tsv 2>/dev/null | head -1)
+        -o tsv 2>/dev/null | tr -d '\r\n' | head -1)
     if [ -n "$DETECTED_DNS_RG" ]; then
         DNS_ZONE_RG="$DETECTED_DNS_RG"
         DNS_ZONE_FOUND=true
