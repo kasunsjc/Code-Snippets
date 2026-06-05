@@ -13,23 +13,59 @@ echo -e "${GREEN}AKS Istio Gateway API Demo - Deployment${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-# Configuration Variables
-RESOURCE_GROUP="${RESOURCE_GROUP:-rg-aks-istio-gateway-demo}"
-LOCATION="${LOCATION:-eastus}"
-CLUSTER_NAME="${CLUSTER_NAME:-aks-istio-gateway-demo}"
-VNET_NAME="${VNET_NAME:-vnet-aks-istio-demo}"
-SUBNET_NAME="${SUBNET_NAME:-snet-aks}"
-NODE_COUNT="${NODE_COUNT:-2}"
-NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"
-K8S_VERSION="${K8S_VERSION:-1.31}"
+#############################################
+# CONFIGURATION SECTION
+# Set these via environment variables or edit the defaults below
+# Example: export DOMAIN_NAME="yourdomain.com" && export RESOURCE_GROUP="my-rg" && ./deploy.sh
+#############################################
+
+# === Domain & SSL Configuration (IMPORTANT: Customize for your use case) ===
+DOMAIN_NAME="${DOMAIN_NAME:-demo.example.com}"          # Your domain name (certificate will be for *.DOMAIN_NAME)
+SSL_PFX_PATH="${SSL_PFX_PATH:-}"                        # Optional: Path to your PFX certificate (leave empty for self-signed)
+SSL_PFX_PASSWORD="${SSL_PFX_PASSWORD:-}"                # Optional: PFX password (leave empty if no password)
+CERT_NAME="${CERT_NAME:-gateway-tls-cert}"              # Certificate name in Key Vault
+
+# === Azure Resource Configuration ===
+RESOURCE_GROUP="${RESOURCE_GROUP:-rg-aks-istio-gateway-demo}"               # Main resource group name
+NODE_RESOURCE_GROUP="${NODE_RESOURCE_GROUP:-rg-aks-istio-gateway-demo-nodes}"  # AKS-managed node resource group
+LOCATION="${LOCATION:-eastus}"                          # Azure region
+KEYVAULT_NAME="${KEYVAULT_NAME:-kv-aks-istio-$RANDOM}"  # Key Vault name (must be globally unique)
+
+# === AKS Cluster Configuration ===
+CLUSTER_NAME="${CLUSTER_NAME:-aks-istio-gateway-demo}" # AKS cluster name
+K8S_VERSION="${K8S_VERSION:-1.34}"                      # Kubernetes version
+NODE_COUNT="${NODE_COUNT:-2}"                           # Initial node count
+NODE_SIZE="${NODE_SIZE:-Standard_D4s_v5}"               # VM size for nodes
+
+# === Network Configuration ===
+VNET_NAME="${VNET_NAME:-vnet-aks-istio-demo}"           # Virtual network name
+SUBNET_NAME="${SUBNET_NAME:-snet-aks}"                  # Subnet name for AKS
+
+# === DNS Configuration (Optional) ===
+# If you have an Azure DNS zone, the script will automatically create A records.
+# Leave DNS_ZONE_RG empty to auto-detect the zone across the subscription.
+DNS_ZONE_NAME="${DNS_ZONE_NAME:-$DOMAIN_NAME}"          # Azure DNS zone name (defaults to DOMAIN_NAME)
+DNS_ZONE_RG="${DNS_ZONE_RG:-}"                          # Resource group containing the DNS zone (auto-detected if empty)
+
+# End of Configuration Section
+#############################################
 
 echo -e "${BLUE}Configuration:${NC}"
 echo "  Resource Group: $RESOURCE_GROUP"
+echo "  Node Resource Group: $NODE_RESOURCE_GROUP"
+echo "  Domain Name: $DOMAIN_NAME"
+if [ -n "$SSL_PFX_PATH" ]; then
+    echo "  SSL Certificate: Custom PFX (${SSL_PFX_PATH})"
+else
+    echo "  SSL Certificate: Self-signed (will be generated)"
+fi
 echo "  Location: $LOCATION"
 echo "  Cluster Name: $CLUSTER_NAME"
 echo "  Node Count: $NODE_COUNT"
 echo "  Node Size: $NODE_SIZE"
 echo "  Kubernetes Version: $K8S_VERSION"
+echo "  Key Vault Name: $KEYVAULT_NAME"
+echo "  Domain Name: $DOMAIN_NAME"
 echo ""
 
 # Check prerequisites
@@ -44,6 +80,12 @@ fi
 if ! command -v kubectl &> /dev/null; then
     echo -e "${RED}Error: kubectl is not installed${NC}"
     echo "Please install kubectl from https://kubernetes.io/docs/tasks/tools/"
+    exit 1
+fi
+
+if ! command -v openssl &> /dev/null; then
+    echo -e "${RED}Error: openssl is not installed${NC}"
+    echo "Please install openssl for SSL certificate generation"
     exit 1
 fi
 
@@ -134,6 +176,119 @@ SUBNET_ID=$(az network vnet subnet show \
 echo -e "${GREEN}✓ Virtual network created${NC}"
 echo ""
 
+# Create Azure Key Vault
+echo -e "${YELLOW}Creating Azure Key Vault...${NC}"
+az keyvault create \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$KEYVAULT_NAME" \
+    --location "$LOCATION" \
+    --enable-rbac-authorization true \
+    --tags "Environment=Demo" "Project=AKS-Istio-Gateway-API"
+
+KEYVAULT_ID=$(az keyvault show \
+    --name "$KEYVAULT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query id -o tsv)
+
+echo -e "${GREEN}✓ Key Vault created: $KEYVAULT_NAME${NC}"
+echo ""
+
+# Prepare SSL certificate for import
+if [ -n "$SSL_PFX_PATH" ]; then
+    # User provided their own PFX certificate
+    echo -e "${YELLOW}Using custom PFX certificate: $SSL_PFX_PATH${NC}"
+    
+    # Validate certificate file exists
+    if [ ! -f "$SSL_PFX_PATH" ]; then
+        echo -e "${RED}✗ Error: Certificate file not found: $SSL_PFX_PATH${NC}"
+        exit 1
+    fi
+    
+    CERT_FILE="$SSL_PFX_PATH"
+    CERT_PASSWORD="$SSL_PFX_PASSWORD"
+    echo -e "${GREEN}✓ Custom certificate validated${NC}"
+else
+    # Generate self-signed SSL certificate
+    echo -e "${YELLOW}Generating self-signed SSL certificate for domain: $DOMAIN_NAME${NC}"
+    CERT_DIR=$(mktemp -d)
+    trap "rm -rf $CERT_DIR" EXIT
+
+    # Create OpenSSL config for SAN (Subject Alternative Names)
+    cat > "$CERT_DIR/openssl.cnf" <<EOF
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+distinguished_name = dn
+req_extensions = v3_req
+
+[dn]
+C=US
+ST=WA
+L=Seattle
+O=Demo Organization
+OU=IT
+CN=$DOMAIN_NAME
+
+[v3_req]
+keyUsage = keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = $DOMAIN_NAME
+DNS.2 = *.$DOMAIN_NAME
+DNS.3 = httpbin.$DOMAIN_NAME
+DNS.4 = echo.$DOMAIN_NAME
+DNS.5 = echo-headers.$DOMAIN_NAME
+DNS.6 = app.$DOMAIN_NAME
+EOF
+
+# Generate private key and certificate
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout "$CERT_DIR/tls.key" \
+    -out "$CERT_DIR/tls.crt" \
+    -config "$CERT_DIR/openssl.cnf" \
+    -extensions v3_req
+
+    # Convert to PFX format for Key Vault
+    openssl pkcs12 -export \
+        -in "$CERT_DIR/tls.crt" \
+        -inkey "$CERT_DIR/tls.key" \
+        -out "$CERT_DIR/certificate.pfx" \
+        -password pass:
+
+    CERT_FILE="$CERT_DIR/certificate.pfx"
+    CERT_PASSWORD=""
+    echo -e "${GREEN}✓ Self-signed SSL certificate generated${NC}"
+fi
+echo ""
+
+# Get current user's object ID for Key Vault RBAC
+USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+
+# Assign Key Vault Secrets Officer role to current user (to import certificate)
+echo -e "${YELLOW}Assigning Key Vault permissions...${NC}"
+az role assignment create \
+    --role "Key Vault Certificates Officer" \
+    --assignee "$USER_OBJECT_ID" \
+    --scope "$KEYVAULT_ID" \
+    --output none
+
+# Wait a bit for RBAC propagation
+sleep 10
+
+# Import certificate to Key Vault
+echo -e "${YELLOW}Importing certificate to Key Vault...${NC}"
+az keyvault certificate import \
+    --vault-name "$KEYVAULT_NAME" \
+    --name "$CERT_NAME" \
+    --file "$CERT_FILE" \
+    --password "$CERT_PASSWORD"
+
+echo -e "${GREEN}✓ Certificate imported to Key Vault${NC}"
+echo ""
+
 # Create AKS Cluster with Gateway API and App Routing (Istio)
 echo -e "${YELLOW}Creating AKS cluster with Gateway API and Istio app routing...${NC}"
 echo "This may take 10-15 minutes..."
@@ -143,6 +298,7 @@ az aks create \
     --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER_NAME" \
     --location "$LOCATION" \
+    --node-resource-group "$NODE_RESOURCE_GROUP" \
     --kubernetes-version "$K8S_VERSION" \
     --node-count "$NODE_COUNT" \
     --node-vm-size "$NODE_SIZE" \
@@ -153,6 +309,9 @@ az aks create \
     --enable-managed-identity \
     --enable-gateway-api \
     --enable-app-routing-istio \
+    --enable-addons azure-keyvault-secrets-provider \
+    --enable-secret-rotation \
+    --rotation-poll-interval 2m \
     --tier standard \
     --node-osdisk-type Managed \
     --enable-cluster-autoscaler \
@@ -172,6 +331,75 @@ az aks get-credentials \
     --overwrite-existing
 
 echo -e "${GREEN}✓ Credentials configured${NC}"
+echo ""
+
+# Configure Key Vault RBAC for AKS Secrets Provider
+echo -e "${YELLOW}Configuring Key Vault access for AKS...${NC}"
+
+# Get the Secrets Provider managed identity client ID
+SECRETS_PROVIDER_IDENTITY=$(az aks show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$CLUSTER_NAME" \
+    --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv)
+
+# Get the managed identity object ID
+SECRETS_PROVIDER_OBJECT_ID=$(az ad sp show \
+    --id "$SECRETS_PROVIDER_IDENTITY" \
+    --query id -o tsv)
+
+# Assign Key Vault Secrets User role to read secrets
+az role assignment create \
+    --role "Key Vault Secrets User" \
+    --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" \
+    --assignee-principal-type ServicePrincipal \
+    --scope "$KEYVAULT_ID" \
+    --output none
+
+# Assign Key Vault Certificate User role to read certificates
+az role assignment create \
+    --role "Key Vault Certificate User" \
+    --assignee-object-id "$SECRETS_PROVIDER_OBJECT_ID" \
+    --assignee-principal-type ServicePrincipal \
+    --scope "$KEYVAULT_ID" \
+    --output none
+
+echo -e "${GREEN}✓ Key Vault access configured${NC}"
+echo ""
+
+# Create SecretProviderClass for TLS certificate
+echo -e "${YELLOW}Creating SecretProviderClass for TLS certificate...${NC}"
+cat <<EOF | kubectl apply -f -
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: gateway-tls-cert-spc
+  namespace: default
+spec:
+  provider: azure
+  secretObjects:
+  - secretName: gateway-tls-secret
+    type: kubernetes.io/tls
+    data:
+    - objectName: $CERT_NAME
+      key: tls.key
+    - objectName: $CERT_NAME
+      key: tls.crt
+  parameters:
+    usePodIdentity: "false"
+    useVMManagedIdentity: "true"
+    userAssignedIdentityID: "$SECRETS_PROVIDER_IDENTITY"
+    keyvaultName: "$KEYVAULT_NAME"
+    cloudName: "AzurePublicCloud"
+    objects: |
+      array:
+        - |
+          objectName: $CERT_NAME
+          objectType: secret
+          objectVersion: ""
+    tenantId: "$(az account show --query tenantId -o tsv)"
+EOF
+
+echo -e "${GREEN}✓ SecretProviderClass created${NC}"
 echo ""
 
 # Wait for istiod to be ready
@@ -194,16 +422,16 @@ MANIFESTS_DIR="$SCRIPT_DIR/kubernetes-manifests"
 echo "Deploying httpbin application..."
 kubectl apply -f "$MANIFESTS_DIR/01-httpbin-app.yaml"
 
-echo "Deploying Gateway and HTTPRoute for httpbin..."
-kubectl apply -f "$MANIFESTS_DIR/02-gateway-httproute.yaml"
+echo "Deploying Gateway and HTTPRoute for httpbin (domain: httpbin.$DOMAIN_NAME)..."
+sed "s/__DOMAIN_NAME__/$DOMAIN_NAME/g" "$MANIFESTS_DIR/02-gateway-httproute.yaml" | kubectl apply -f -
 
 echo "Deploying echo applications (v1 and v2)..."
 kubectl apply -f "$MANIFESTS_DIR/03-echo-apps.yaml"
 
-echo "Deploying advanced routing examples..."
-kubectl apply -f "$MANIFESTS_DIR/04-advanced-traffic-splitting.yaml"
-kubectl apply -f "$MANIFESTS_DIR/05-header-based-routing.yaml"
-kubectl apply -f "$MANIFESTS_DIR/06-path-based-routing.yaml"
+echo "Deploying advanced routing examples with domain: $DOMAIN_NAME..."
+sed "s/__DOMAIN_NAME__/$DOMAIN_NAME/g" "$MANIFESTS_DIR/04-advanced-traffic-splitting.yaml" | kubectl apply -f -
+sed "s/__DOMAIN_NAME__/$DOMAIN_NAME/g" "$MANIFESTS_DIR/05-header-based-routing.yaml" | kubectl apply -f -
+sed "s/__DOMAIN_NAME__/$DOMAIN_NAME/g" "$MANIFESTS_DIR/06-path-based-routing.yaml" | kubectl apply -f -
 
 echo ""
 echo -e "${GREEN}✓ Sample applications deployed${NC}"
@@ -218,7 +446,83 @@ echo ""
 # Get Gateway IP addresses
 echo -e "${YELLOW}Retrieving Gateway IP addresses...${NC}"
 HTTPBIN_IP=$(kubectl get gateway httpbin-gateway -o jsonpath='{.status.addresses[0].value}')
-ECHO_IP=$(kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}')
+ECHO_IP=$(kubectl get gateway echo-gateway -o jsonpath='{.status.addresses[0].value}')HOST_BIN_IP="$HTTPBIN_IP"
+# ─────────────────────────────────────────────
+# DNS Configuration
+# ─────────────────────────────────────────────
+echo ""
+echo -e "${YELLOW}Configuring DNS records...${NC}"
+
+DNS_ZONE_FOUND=false
+
+# Auto-detect DNS zone resource group if not specified
+if [ -z "$DNS_ZONE_RG" ]; then
+    DETECTED_DNS_RG=$(az network dns zone list \
+        --query "[?name=='$DNS_ZONE_NAME'].resourceGroup" \
+        -o tsv 2>/dev/null | head -1)
+    if [ -n "$DETECTED_DNS_RG" ]; then
+        DNS_ZONE_RG="$DETECTED_DNS_RG"
+        DNS_ZONE_FOUND=true
+        echo -e "${GREEN}✓ Auto-detected Azure DNS zone '$DNS_ZONE_NAME' in resource group '$DNS_ZONE_RG'${NC}"
+    fi
+else
+    # Verify the zone exists in the specified resource group
+    if az network dns zone show \
+            --resource-group "$DNS_ZONE_RG" \
+            --name "$DNS_ZONE_NAME" &>/dev/null; then
+        DNS_ZONE_FOUND=true
+        echo -e "${GREEN}✓ Found Azure DNS zone '$DNS_ZONE_NAME' in resource group '$DNS_ZONE_RG'${NC}"
+    else
+        echo -e "${RED}✗ DNS zone '$DNS_ZONE_NAME' not found in resource group '$DNS_ZONE_RG'${NC}"
+    fi
+fi
+
+if [ "$DNS_ZONE_FOUND" = "true" ]; then
+    echo -e "${YELLOW}Creating/updating DNS A records in zone '$DNS_ZONE_NAME'...${NC}"
+
+    # httpbin subdomain → httpbin-gateway IP
+    az network dns record-set a add-record \
+        --resource-group "$DNS_ZONE_RG" \
+        --zone-name "$DNS_ZONE_NAME" \
+        --record-set-name "httpbin" \
+        --ipv4-address "$HTTPBIN_IP" \
+        --ttl 300 \
+        --output none
+    echo -e "${GREEN}  ✓ httpbin.$DNS_ZONE_NAME  →  $HTTPBIN_IP${NC}"
+
+    # echo, echo-headers, app subdomains → echo-gateway IP
+    for SUBDOMAIN in "echo" "echo-headers" "app"; do
+        az network dns record-set a add-record \
+            --resource-group "$DNS_ZONE_RG" \
+            --zone-name "$DNS_ZONE_NAME" \
+            --record-set-name "$SUBDOMAIN" \
+            --ipv4-address "$ECHO_IP" \
+            --ttl 300 \
+            --output none
+        echo -e "${GREEN}  ✓ $SUBDOMAIN.$DNS_ZONE_NAME  →  $ECHO_IP${NC}"
+    done
+
+    echo -e "${GREEN}✓ All DNS records created successfully${NC}"
+else
+    echo -e "${YELLOW}No Azure DNS zone found for '$DNS_ZONE_NAME'.${NC}"
+    echo -e "${YELLOW}Add the following A records manually with your DNS provider:${NC}"
+    echo ""
+    echo -e "  ${BLUE}Hostname                              Type   Value${NC}"
+    echo    "  ────────────────────────────────────────────────────────────────"
+    printf  "  %-38s A      %s\n" "httpbin.$DOMAIN_NAME"       "$HTTPBIN_IP"
+    printf  "  %-38s A      %s\n" "echo.$DOMAIN_NAME"          "$ECHO_IP"
+    printf  "  %-38s A      %s\n" "echo-headers.$DOMAIN_NAME" "$ECHO_IP"
+    printf  "  %-38s A      %s\n" "app.$DOMAIN_NAME"           "$ECHO_IP"
+    echo ""
+    echo    "  Or a single wildcard record (if your provider supports it):"
+    printf  "  %-38s A      %s\n" "*.$DOMAIN_NAME" "$ECHO_IP"
+    echo -e "  ${YELLOW}Note: A wildcard won't cover httpbin.$DOMAIN_NAME if it resolves to a different IP.${NC}"
+    echo ""
+    echo    "  To let this script manage DNS automatically, set:"
+    echo    "    export DNS_ZONE_NAME='$DOMAIN_NAME'"
+    echo    "    export DNS_ZONE_RG='<resource-group-containing-your-dns-zone>'"
+    echo    "  Then re-run ./deploy.sh"
+fi
 
 echo ""
 echo -e "${GREEN}========================================${NC}"
@@ -236,21 +540,24 @@ echo "  echo-gateway IP: $ECHO_IP"
 echo ""
 echo -e "${YELLOW}Test Commands:${NC}"
 echo ""
+echo "Set your domain for testing (if not already set in your shell):"
+echo "   export DOMAIN_NAME='$DOMAIN_NAME'"
+echo ""
 echo "1. Test httpbin service:"
-echo "   curl -s -H 'Host: httpbin.example.com' http://$HTTPBIN_IP/get | jq"
+echo "   curl -k -s -H 'Host: httpbin.$DOMAIN_NAME' https://$HTTPBIN_IP/get | jq"
 echo ""
 echo "2. Test echo service (canary deployment - 90% v1, 10% v2):"
-echo "   for i in {1..10}; do curl -s -H 'Host: echo.example.com' http://$ECHO_IP/ | grep -o 'Echo v[12]'; done"
+echo "   for i in {1..10}; do curl -k -s -H 'Host: echo.$DOMAIN_NAME' https://$ECHO_IP/ | grep -o 'Echo v[12]'; done"
 echo ""
 echo "3. Test header-based routing:"
 echo "   # Routes to v1 (default)"
-echo "   curl -s -H 'Host: echo-headers.example.com' http://$ECHO_IP/ | grep -o 'Echo v[12]'"
+echo "   curl -k -s -H 'Host: echo-headers.$DOMAIN_NAME' https://$ECHO_IP/ | grep -o 'Echo v[12]'"
 echo "   # Routes to v2 (with header)"
-echo "   curl -s -H 'Host: echo-headers.example.com' -H 'version: v2' http://$ECHO_IP/ | grep -o 'Echo v[12]'"
+echo "   curl -k -s -H 'Host: echo-headers.$DOMAIN_NAME' -H 'version: v2' https://$ECHO_IP/ | grep -o 'Echo v[12]'"
 echo ""
 echo "4. Test path-based routing:"
-echo "   curl -s -H 'Host: app.example.com' http://$ECHO_IP/v1/ | grep -o 'Echo v[12]'"
-echo "   curl -s -H 'Host: app.example.com' http://$ECHO_IP/v2/ | grep -o 'Echo v[12]'"
+echo "   curl -k -s -H 'Host: app.$DOMAIN_NAME' https://$ECHO_IP/v1/ | grep -o 'Echo v[12]'"
+echo "   curl -k -s -H 'Host: app.$DOMAIN_NAME' https://$ECHO_IP/v2/ | grep -o 'Echo v[12]'"
 echo ""
 echo -e "${YELLOW}Explore the cluster:${NC}"
 echo "  kubectl get pods -n aks-istio-system"

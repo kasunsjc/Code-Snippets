@@ -9,8 +9,9 @@ metadata:
 spec:
   parentRefs:
   - name: echo-gateway
+    sectionName: https  # Use HTTPS listener
   hostnames:
-  - "echo-headers.example.com"
+  - "echo-headers.__DOMAIN_NAME__"  # Domain will be substituted during deployment
   rules:
   # Route to v2 if header "version: v2" is present
   - matches:

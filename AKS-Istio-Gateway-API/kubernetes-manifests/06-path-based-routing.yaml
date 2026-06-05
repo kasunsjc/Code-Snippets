@@ -8,8 +8,9 @@ metadata:
 spec:
   parentRefs:
   - name: echo-gateway
+    sectionName: https  # Use HTTPS listener
   hostnames:
-  - "app.example.com"
+  - "app.__DOMAIN_NAME__"  # Domain will be substituted during deployment
   rules:
   # Route /v1/* to echo-v1
   - matches:
