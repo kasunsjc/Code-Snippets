@@ -446,6 +446,12 @@ echo -e "${YELLOW}Deploying sample applications...${NC}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFESTS_DIR="$SCRIPT_DIR/kubernetes-manifests"
 
+echo "Deploying TLS secret sync pod..."
+kubectl apply -f "$MANIFESTS_DIR/00-tls-secret-sync.yaml"
+
+echo "Waiting for gateway TLS secret to be created..."
+kubectl wait --for=create secret/gateway-tls-secret --timeout=120s
+
 echo "Deploying httpbin application..."
 kubectl apply -f "$MANIFESTS_DIR/01-httpbin-app.yaml"
 
