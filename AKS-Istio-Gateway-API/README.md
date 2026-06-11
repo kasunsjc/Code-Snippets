@@ -475,7 +475,10 @@ SUBNET_ID=$(az network vnet subnet show \
   --resource-group rg-aks-istio-gateway-demo \
   --vnet-name vnet-aks-istio-demo --name snet-aks --query id -o tsv)
 
-# 4. Create AKS — the three key flags are highlighted
+# 4. Create AKS — three key flags:
+#   --enable-gateway-api              enables Gateway API CRDs
+#   --enable-app-routing-istio        registers approuting-istio GatewayClass
+#   --enable-addons azure-keyvault-secrets-provider   CSI driver for KV sync
 az aks create \
   --resource-group rg-aks-istio-gateway-demo \
   --name aks-istio-gateway-demo \
@@ -485,9 +488,9 @@ az aks create \
   --network-plugin azure --vnet-subnet-id "$SUBNET_ID" \
   --service-cidr 10.1.0.0/16 --dns-service-ip 10.1.0.10 \
   --enable-managed-identity \
-  --enable-gateway-api \                        # ← enables Gateway API CRDs
-  --enable-app-routing-istio \                  # ← registers approuting-istio GatewayClass
-  --enable-addons azure-keyvault-secrets-provider \  # ← CSI driver for KV sync
+  --enable-gateway-api \
+  --enable-app-routing-istio \
+  --enable-addons azure-keyvault-secrets-provider \
   --enable-secret-rotation --rotation-poll-interval 2m \
   --tier standard \
   --enable-cluster-autoscaler --min-count 1 --max-count 3

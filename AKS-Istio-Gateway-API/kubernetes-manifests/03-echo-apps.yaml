@@ -36,7 +36,7 @@ spec:
     spec:
       containers:
       - name: echo
-        image: ealen/echo-server:latest
+        image: ealen/echo-server:0.6.0
         ports:
         - containerPort: 8080
         env:
@@ -89,7 +89,7 @@ spec:
     spec:
       containers:
       - name: echo
-        image: ealen/echo-server:latest
+        image: ealen/echo-server:0.6.0
         ports:
         - containerPort: 8080
         env:

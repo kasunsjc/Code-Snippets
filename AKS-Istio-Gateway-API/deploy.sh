@@ -240,7 +240,7 @@ OU=IT
 CN=$DOMAIN_NAME
 
 [v3_req]
-keyUsage = keyEncipherment, dataEncipherment
+keyUsage = digitalSignature, keyEncipherment, dataEncipherment
 extendedKeyUsage = serverAuth
 subjectAltName = @alt_names
 
@@ -274,7 +274,18 @@ fi
 echo ""
 
 # Get current user's object ID for Key Vault RBAC
-USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+# Supports both interactive user logins and service principal (CI) environments
+if USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null) && [ -n "$USER_OBJECT_ID" ]; then
+    : # interactive user login succeeded
+else
+    # Fallback: resolve the signed-in service principal's object ID
+    CLIENT_ID=$(az account show --query user.name -o tsv 2>/dev/null)
+    USER_OBJECT_ID=$(az ad sp show --id "$CLIENT_ID" --query id -o tsv 2>/dev/null)
+    if [ -z "$USER_OBJECT_ID" ]; then
+        echo -e "${RED}✗ Error: Could not determine the current principal's object ID. Ensure you are logged in via 'az login'.${NC}"
+        exit 1
+    fi
+fi
 
 # Assign Key Vault Secrets Officer role to current user (to import certificate)
 echo -e "${YELLOW}Assigning Key Vault permissions...${NC}"
@@ -356,6 +367,12 @@ SECRETS_PROVIDER_IDENTITY=$(az aks show \
     --resource-group "$RESOURCE_GROUP" \
     --name "$CLUSTER_NAME" \
     --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv)
+
+if [ -z "$SECRETS_PROVIDER_IDENTITY" ] || [ "$SECRETS_PROVIDER_IDENTITY" = "null" ]; then
+    echo -e "${RED}✗ Error: Could not retrieve the Key Vault CSI secrets provider identity from cluster '$CLUSTER_NAME'.${NC}"
+    echo -e "${RED}  Ensure the cluster was created with '--enable-addons azure-keyvault-secrets-provider' and the identity is provisioned.${NC}"
+    exit 1
+fi
 
 # Get the managed identity object ID
 SECRETS_PROVIDER_OBJECT_ID=$(az ad sp show \
