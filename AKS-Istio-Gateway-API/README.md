@@ -161,6 +161,65 @@ One of the interesting parts of this setup is how certificates travel from Azure
 
 This is a clean, production-grade approach: no secrets in YAML, full audit trail in Key Vault, automatic rotation.
 
+### Certificate Rotation Best Practices
+
+The CSI Secrets Store Driver polls Key Vault every 2 minutes (configured via `--rotation-poll-interval 2m` during cluster creation). Here's how to rotate certificates with zero downtime:
+
+**Option 1: Update certificate in Key Vault**
+
+```bash
+# Export your new certificate as PFX
+openssl pkcs12 -export \
+  -in new-certificate.crt \
+  -inkey new-private.key \
+  -out new-certificate.pfx \
+  -password pass:YourPassword
+
+# Import to Key Vault (overwrites existing cert version)
+az keyvault certificate import \
+  --vault-name kv-aks-istio-demo \
+  --name gateway-tls-cert \
+  --file new-certificate.pfx \
+  --password "YourPassword"
+
+# Within 2 minutes: Kubernetes Secret is updated automatically
+kubectl get secret gateway-tls-secret -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d | openssl x509 -noout -dates
+```
+
+**Option 2: Re-run deploy.sh with new certificate**
+
+```bash
+export SSL_PFX_PATH="/path/to/new-certificate.pfx"
+export SSL_PFX_PASSWORD="NewPassword"
+./deploy.sh
+# Script imports new cert, CSI driver syncs within 2 minutes
+```
+
+**What happens during rotation:**
+
+1. CSI driver detects new cert version in Key Vault
+2. Updates the `gateway-tls-secret` Kubernetes Secret atomically
+3. Envoy receives secret update event via Kubernetes watch API
+4. Envoy loads new cert for **new connections** — existing connections continue with old cert until they close
+5. Zero downtime, zero dropped requests
+
+**Monitor rotation:**
+
+```bash
+# Watch secret updates
+kubectl get secret gateway-tls-secret -w
+
+# Verify cert expiration dates
+kubectl get secret gateway-tls-secret \
+  -o jsonpath='{.data.tls\.crt}' \
+  | base64 -d \
+  | openssl x509 -noout -dates
+
+# Check CSI driver logs for sync events
+kubectl logs -n kube-system -l app.kubernetes.io/name=secrets-store-csi-driver --tail=20
+```
+
 ---
 
 ## 🚦 Routing Patterns Explained
@@ -280,12 +339,26 @@ Here's every Azure resource `deploy.sh` creates, and why it exists:
 | **Virtual Network** (10.0.0.0/16) | Isolated network for the AKS cluster |
 | **AKS Subnet** (10.0.0.0/22) | Provides ~1000 IPs for nodes and pods |
 | **AKS Cluster** | The Kubernetes cluster itself |
-| **Node Resource Group** (`rg-...-nodes`) | Custom-named RG for node VMs, NICs, disks — uses readable name instead of default `MC_*` format |
+| **Node Resource Group** (`rg-...-nodes`) | Custom-named RG for node VMs, NICs, disks — uses readable name instead of default `MC_*` format. **Follows repo convention** from [copilot-instructions.md](../.github/copilot-instructions.md): always specify a readable, custom node resource group name rather than relying on AKS's auto-generated `MC_<rg>_<cluster>_<region>` pattern. |
 | **System-assigned Managed Identity** | AKS's identity for Azure API calls, used to access Key Vault |
 | **Azure Key Vault** | Stores the TLS certificate — the source of truth for cert rotation |
 | **Key Vault Secrets Provider add-on** | Syncs KV secrets into K8s Secrets via CSI driver |
 | **Azure Load Balancer** | Auto-created by AKS per `Gateway` object — each Gateway gets its own public IP |
-| **DNS A Records** | Created in your Azure DNS zone (if configured) — maps hostnames to gateway IPs |
+| **DNS A Records** (optional) | Created in your Azure DNS zone if `DNS_ZONE_NAME` matches a zone in your subscription — maps hostnames (httpbin, echo, echo-headers, app) to gateway IPs. The script **auto-detects** the zone by name and upserts records (delete + recreate). If no zone is found, a manual DNS table is printed instead. |
+
+### DNS Automation Behavior
+
+The `deploy.sh` script automatically manages Azure DNS A records if you have an Azure DNS zone:
+
+- **Auto-detection:** If you set `DOMAIN_NAME="yourdomain.com"`, the script queries all DNS zones in your subscription and finds the matching one.
+- **Upsert logic:** Existing records are deleted and recreated (not updated) to ensure clean configuration.
+- **Records created:** Four A records pointing to the appropriate gateway IPs:
+  - `httpbin.yourdomain.com` → httpbin-gateway IP
+  - `echo.yourdomain.com` → echo-gateway IP
+  - `echo-headers.yourdomain.com` → echo-gateway IP
+  - `app.yourdomain.com` → echo-gateway IP
+
+If you don't have an Azure DNS zone, the script prints a table showing which IP addresses to use for manual DNS configuration in your external DNS provider (Cloudflare, Route53, etc.).
 
 ---
 
@@ -298,6 +371,7 @@ Here's every Azure resource `deploy.sh` creates, and why it exists:
 - **OpenSSL** — Pre-installed on macOS and most Linux distros
 - **jq** (optional, makes JSON output readable) — [Install guide](https://jqlang.github.io/jq/download/)
 - An Azure subscription with Contributor access
+- **(Optional)** An Azure DNS zone — if you want automatic DNS record management. Without this, the script will print manual DNS instructions.
 
 ### Enable the Preview Features
 
@@ -319,6 +393,8 @@ az feature show --namespace "Microsoft.ContainerService" --name "AppRoutingIstio
 # Refresh the provider after both are registered
 az provider register --namespace Microsoft.ContainerService
 ```
+
+> ⏱️ **First-time registration timing:** The first time you register these features on a subscription, it can take **10-15 minutes** for both to reach `Registered` state. The deploy script polls every 30 seconds and waits automatically. Subsequent deployments (on the same subscription) skip this step entirely.
 
 You'll also need the `aks-preview` CLI extension — the `--enable-gateway-api` and `--enable-app-routing-istio` flags don't exist without it:
 
@@ -450,6 +526,19 @@ export NODE_COUNT="3"
 export NODE_SIZE="Standard_D8s_v5"
 ./deploy.sh
 ```
+
+### Re-running the Script
+
+The script is **fully idempotent** — you can run it multiple times safely:
+
+- **Same configuration:** Skips existing resources, reapplies Kubernetes manifests (useful for testing routing changes)
+- **Different domain:** Creates new DNS records, re-applies manifests with new hostname substitution
+- **New certificate:** Imports new cert to Key Vault, CSI driver syncs it automatically within 2 minutes (no pod restarts needed)
+- **Different resource group:** Creates entirely separate deployment (doesn't affect existing clusters)
+
+**To update routing logic:** Edit manifests in `kubernetes-manifests/`, then re-run `./deploy.sh` — it re-applies all YAML with latest changes.
+
+**To rotate certificates:** Update the cert in Key Vault directly or re-run with new `SSL_PFX_PATH` — the CSI driver automatically syncs the new cert within 2 minutes.
 
 ### Manual Step-by-Step (if you prefer)
 
@@ -715,17 +804,229 @@ The cleanup script removes everything in the right order:
 ./cleanup.sh
 ```
 
-It will:
-1. Delete all Kubernetes manifests from the cluster
-2. Remove the `kubectl` context for this cluster from your kubeconfig
-3. Find and delete the four DNS A records from your Azure DNS zone (auto-detected or use `DNS_ZONE_RG`)
-4. Delete the Azure resource group and all resources inside it (runs async)
+### What cleanup.sh Does
 
-Monitor deletion progress with:
+1. Deletes all Kubernetes manifests from the cluster
+2. Removes the `kubectl` context for this cluster from your kubeconfig
+3. **Auto-detects and removes DNS A records** from your Azure DNS zone (4 records: httpbin, echo, echo-headers, app)
+4. Deletes the Azure resource group and all resources inside it (runs async in background)
+
+### DNS Record Cleanup
+
+The cleanup script automatically detects your Azure DNS zone and removes the A records it created. It uses the same auto-detection logic as `deploy.sh`:
+
+```bash
+# Auto-detect DNS zone (matches DOMAIN_NAME against all zones in subscription)
+./cleanup.sh
+
+# Or specify explicitly if you have multiple zones
+export DNS_ZONE_RG="rg-dns"
+export DOMAIN_NAME="yourdomain.com"
+./cleanup.sh
+```
+
+If you customized the resource group or domain during deployment, set the same values before cleanup:
+
+```bash
+export RESOURCE_GROUP="my-custom-rg"
+export NODE_RESOURCE_GROUP="my-custom-nodes"
+export DOMAIN_NAME="mycompany.com"
+export DNS_ZONE_RG="rg-dns"
+./cleanup.sh
+```
+
+### Monitor Deletion Progress
 
 ```bash
 az group show --name rg-aks-istio-gateway-demo \
   --query properties.provisioningState -o tsv
+# Returns: Deleting → (null when complete)
+```
+
+---
+
+## 🔧 Troubleshooting
+
+### Gateway shows "InvalidCertificateRef" or HTTPS listener stuck "Programmed: False"
+
+**Symptom:** Gateway is created but the HTTPS listener shows `Programmed: False` with message `invalid certificate reference` or `secret not found`.
+
+**Cause:** The `gateway-tls-secret` Kubernetes Secret was never materialized from Key Vault.
+
+**Fix:**
+
+```bash
+# Check if the TLS secret exists
+kubectl get secret gateway-tls-secret
+# If missing, check the sync pod status
+kubectl get pod tls-secret-sync
+kubectl describe pod tls-secret-sync
+
+# Common issues:
+# 1. Sync pod not running → apply 00-tls-secret-sync.yaml
+kubectl apply -f kubernetes-manifests/00-tls-secret-sync.yaml
+
+# 2. SecretProviderClass misconfigured → check objectType values
+kubectl describe secretproviderclass gateway-tls-cert-spc
+# Must have TWO objects:
+#   - objectName: <cert-name>, objectType: secret  (private key)
+#   - objectName: <cert-name>, objectType: cert    (public certificate)
+
+# 3. RBAC missing → verify Secrets Provider identity has Key Vault access
+SECRETS_PROVIDER_IDENTITY=$(az aks show \
+  --resource-group rg-aks-istio-gateway-demo \
+  --name aks-istio-gateway-demo \
+  --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv)
+echo "Secrets Provider Identity: $SECRETS_PROVIDER_IDENTITY"
+
+# Check role assignments on Key Vault
+az role assignment list --scope "<keyvault-resource-id>" \
+  --query "[?principalId=='$SECRETS_PROVIDER_IDENTITY'].{Role:roleDefinitionName}" -o table
+# Should show: Key Vault Secrets User, Key Vault Certificate User
+```
+
+After fixing, wait 2-3 minutes for the CSI driver to sync, then check:
+
+```bash
+kubectl get secret gateway-tls-secret
+kubectl get gateway -o wide  # Should show Programmed: True
+```
+
+### HTTP requests hang or timeout (no response)
+
+**Symptom:** `curl http://httpbin.yourdomain.com/` hangs or times out. HTTPS works fine.
+
+**Cause:** The Gateway has an HTTP listener (port 80) but no HTTPRoute is attached to it.
+
+**Fix:** Ensure each Gateway has an HTTP→HTTPS redirect route. Check the manifest includes:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-http-redirect
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+    sectionName: http        # ← Must reference the HTTP listener
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301
+```
+
+Apply it and test:
+
+```bash
+curl -sI --max-time 5 http://httpbin.yourdomain.com/
+# Should return: HTTP/1.1 301 Moved Permanently
+#                location: https://httpbin.yourdomain.com/
+```
+
+### Browser shows 404 on https://httpbin.yourdomain.com/ but /get works
+
+**Symptom:** `curl https://httpbin.yourdomain.com/get` returns 200, but hitting `/` in a browser returns 404.
+
+**Cause:** The HTTPRoute has path-specific `matches` blocks that don't include `/`.
+
+**Fix:** Use a catch-all route (no `matches` block) or add a match for `/`:
+
+```yaml
+# Catch-all — forwards ALL paths
+rules:
+- backendRefs:
+  - name: httpbin
+    port: 8000
+
+# OR explicit root path match
+rules:
+- matches:
+  - path:
+      type: PathPrefix
+      value: /
+  backendRefs:
+  - name: httpbin
+    port: 8000
+```
+
+### DNS records not auto-created during deploy
+
+**Symptom:** Deploy completes but shows "No Azure DNS zone found — configure DNS manually" with a table of IPs.
+
+**Cause:** `deploy.sh` couldn't find an Azure DNS zone matching your `DOMAIN_NAME` in the current subscription.
+
+**Options:**
+
+1. **Create an Azure DNS zone first:**
+
+```bash
+az network dns zone create \
+  --resource-group rg-dns \
+  --name yourdomain.com
+```
+
+Then re-run `deploy.sh` — it will auto-detect the zone and create records.
+
+2. **Specify the zone resource group explicitly:**
+
+```bash
+export DNS_ZONE_RG="rg-dns"
+export DOMAIN_NAME="yourdomain.com"
+./deploy.sh
+```
+
+3. **Configure DNS manually** — use the table printed by the script and create A records in your DNS provider (Cloudflare, Route53, GoDaddy, etc.)
+
+### Feature registration takes forever
+
+**Symptom:** Deploy script shows "Waiting for feature registration..." and hangs for 10+ minutes.
+
+**Expected behavior:** The first time you register `ManagedGatewayAPIPreview` and `AppRoutingIstioGatewayAPIPreview` on a subscription, it can take **10-15 minutes**. The script polls every 30 seconds until both show `Registered`.
+
+**Fix:** Be patient on the first run. Subsequent deployments skip this step if already registered.
+
+Check status manually:
+
+```bash
+az feature show --namespace "Microsoft.ContainerService" \
+  --name "ManagedGatewayAPIPreview" --query properties.state -o tsv
+
+az feature show --namespace "Microsoft.ContainerService" \
+  --name "AppRoutingIstioGatewayAPIPreview" --query properties.state -o tsv
+```
+
+Once both return `Registered`, run:
+
+```bash
+az provider register --namespace Microsoft.ContainerService
+```
+
+### Gateway stuck in Pending or no public IP
+
+**Symptom:** `kubectl get gateway` shows `ADDRESS: <empty>` or `Programmed: Unknown`.
+
+**Cause:** Azure Load Balancer provisioning is slow or failed.
+
+**Check:**
+
+```bash
+# Look for the LoadBalancer service
+kubectl get svc -l gateway.networking.k8s.io/gateway-name=httpbin-gateway
+
+# Check service events
+kubectl describe svc <service-name>
+
+# Check gateway status
+kubectl describe gateway httpbin-gateway
+```
+
+If the LoadBalancer is stuck in `<Pending>` for more than 5 minutes, check Azure quota:
+
+```bash
+az vm list-usage --location eastus \
+  --query "[?localName=='Public IP Addresses - Basic'].{Name:localName, Current:currentValue, Limit:limit}" -o table
 ```
 
 ---
