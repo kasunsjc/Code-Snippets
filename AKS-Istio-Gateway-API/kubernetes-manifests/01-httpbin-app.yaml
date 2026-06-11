@@ -1,0 +1,58 @@
+---
+# httpbin sample application - commonly used for testing HTTP routing
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: httpbin
+  namespace: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpbin
+  namespace: default
+  labels:
+    app: httpbin
+    service: httpbin
+spec:
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8080
+  selector:
+    app: httpbin
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: httpbin
+        version: v1
+    spec:
+      serviceAccountName: httpbin
+      containers:
+      - image: mccutchen/go-httpbin:v2.14.0
+        imagePullPolicy: IfNotPresent
+        name: httpbin
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
