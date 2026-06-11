@@ -220,7 +220,7 @@ else
     # Generate self-signed SSL certificate
     echo -e "${YELLOW}Generating self-signed SSL certificate for domain: $DOMAIN_NAME${NC}"
     CERT_DIR=$(mktemp -d)
-    trap "rm -rf $CERT_DIR" EXIT
+    trap 'rm -rf "$CERT_DIR"' EXIT
 
     # Create OpenSSL config for SAN (Subject Alternative Names)
     cat > "$CERT_DIR/openssl.cnf" <<EOF
