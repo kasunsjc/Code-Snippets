@@ -95,7 +95,7 @@ Cilium is purpose-built around **eBPF** (extended Berkeley Packet Filter), a Lin
 
 2. **No IP address waste** — Azure CNI gives every pod a VNet IP, which rapidly exhausts RFC-1918 space. With BYO CNI + Cilium's `cluster-pool` IPAM, pods use a separate `/16` CIDR (`10.244.0.0/16`) managed entirely by Cilium, independent of the VNet.
 
-3. **kube-proxy replacement** — `kubeProxyReplacement=true` removes the kube-proxy DaemonSet entirely. Service routing happens in the kernel via eBPF, which is 2–3× faster than iptables for high-connection-rate workloads.
+3. **kube-proxy replacement** — `kubeProxyReplacement=true` removes the kube-proxy DaemonSet entirely. Service routing happens in the kernel via eBPF, with significantly lower per-connection overhead compared to iptables-based kube-proxy (see [Cilium kube-proxy replacement benchmarks](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#performance-considerations)).
 
 4. **Gateway API support** — Cilium acts as a native Gateway API controller (`gatewayAPI.enabled=true`), eliminating the need for a separate ingress controller.
 
@@ -158,7 +158,7 @@ main.bicep
   │
   ├─► modules/vnet.bicep            (no dependencies)
   │     └── Virtual Network  10.0.0.0/16
-  │           └── aks-subnet  10.0.0.0/16
+  │           └── aks-subnet  10.0.0.0/16  ← subnet spans the full VNet space
   │
   └─► modules/aks.bicep             (depends on vnet + log-analytics outputs)
         └── ManagedCluster
@@ -192,7 +192,7 @@ helm upgrade cilium cilium/cilium \
   --set hubble.relay.enabled=true \
   --set hubble.ui.enabled=true \
   --set hubble.metrics.enableOpenMetrics=true \
-  --set hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,httpV2:...}" \
+  --set hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,httpV2:exemplars=true;labelsContext=source_ip\,source_namespace\,source_workload\,destination_ip\,destination_namespace\,destination_workload\,traffic_direction}" \
   --set ipam.operator.clusterPoolIPv4PodCIDRList="{10.244.0.0/16}" \
   --set kubeProxyReplacement=true \
   --set l2announcements.enabled=true \
