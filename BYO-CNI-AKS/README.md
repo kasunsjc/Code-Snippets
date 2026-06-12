@@ -95,7 +95,7 @@ Cilium is purpose-built around **eBPF** (extended Berkeley Packet Filter), a Lin
 
 2. **No IP address waste** — Azure CNI gives every pod a VNet IP, which rapidly exhausts RFC-1918 space. With BYO CNI + Cilium's `cluster-pool` IPAM, pods use a separate `/16` CIDR (`10.244.0.0/16`) managed entirely by Cilium, independent of the VNet.
 
-3. **kube-proxy replacement** — `kubeProxyReplacement=true` removes the kube-proxy DaemonSet entirely. Service routing happens in the kernel via eBPF, with significantly lower per-connection overhead compared to iptables-based kube-proxy (see [Cilium kube-proxy replacement benchmarks](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#performance-considerations)).
+3. **kube-proxy replacement** — `kubeProxyReplacement=true` configures Cilium to handle all service routing (ClusterIP, NodePort, LoadBalancer) via eBPF, taking over the role of kube-proxy. Service routing happens in the kernel via eBPF, with significantly lower per-connection overhead compared to iptables-based kube-proxy (see [Cilium kube-proxy replacement benchmarks](https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/#performance-considerations)).
 
 4. **Gateway API support** — Cilium acts as a native Gateway API controller (`gatewayAPI.enabled=true`), eliminating the need for a separate ingress controller.
 
@@ -206,7 +206,7 @@ helm upgrade cilium cilium/cilium \
 |-----------|--------------|
 | `aksbyocni.enabled=true` | Activates AKS-specific node bootstrap: configures routes on Azure VMs, sets up CNI config directory expected by AKS kubelet, and handles cloud-provider metadata. Without this flag, Cilium agents will fail to start on Azure nodes. |
 | `nodeinit.enabled=true` | Deploys the `cilium-node-init` DaemonSet which runs before Cilium agents and prepares each node (e.g., mounts BPF filesystem, clears stale CNI state). |
-| `kubeProxyReplacement=true` | Replaces kube-proxy with Cilium's eBPF-based service proxy. All `ClusterIP`, `NodePort`, `LoadBalancer`, and `ExternalIPs` routing is handled in the kernel. kube-proxy DaemonSet is not deployed. |
+| `kubeProxyReplacement=true` | Replaces kube-proxy with Cilium's eBPF-based service proxy. All `ClusterIP`, `NodePort`, `LoadBalancer`, and `ExternalIPs` routing is handled in the kernel by Cilium's eBPF implementation, taking over the role of kube-proxy. |
 | `ipam.mode=cluster-pool` | Cilium operator assigns pod IP blocks from a central pool (`10.244.0.0/16`) to each node, rather than delegating to Azure IPAM. Keeps pod IPs inside a known CIDR and avoids VNet IP exhaustion. |
 | `ipam.operator.clusterPoolIPv4PodCIDRList` | Defines the overall pod CIDR pool. Must match `networkProfile.podCidr` set in the Bicep AKS module. |
 | `devices="{eth0}"` | Tells Cilium which network interface to attach eBPF programs to. Azure VMs use `eth0` as the primary NIC. |
@@ -231,7 +231,7 @@ helm upgrade cilium cilium/cilium \
 
 ### Phase 3 — Gateway API CRDs
 
-`deploy.sh` installs the upstream Gateway API CRDs (v1.2.1) from `kubernetes-sigs/gateway-api`. These CRDs must be installed **before** enabling the Gateway API in Cilium (or Cilium will not register as a controller). After the CRDs are applied, the script restarts the Cilium DaemonSet and Operator so they detect the new CRDs.
+`deploy.sh` installs Cilium with `gatewayAPI.enabled=true` first, then installs the upstream Gateway API CRDs (v1.2.1) from `kubernetes-sigs/gateway-api`. After the CRDs are applied, the script restarts the Cilium DaemonSet and Operator so they detect the new CRDs and register as a Gateway API controller.
 
 ### Phase 4 — Verification
 
@@ -357,7 +357,7 @@ Allows only the `frontend` pods to access `backend-api` on port 80. All other in
 Allows only `backend-api` pods to access the `database` on port 80. Frontend cannot directly access the database, enforcing a clean 3-tier separation.
 
 ### L7 HTTP Policy (`04-cilium-l7-policy.yaml`)
-HTTP-aware policy that restricts `backend-api` access to specific HTTP methods and URL paths. This policy is enforced inside the kernel — Cilium parses HTTP headers without running a sidecar proxy:
+HTTP-aware policy that restricts `backend-api` access to specific HTTP methods and URL paths. For L7 policy enforcement, Cilium transparently redirects traffic to an Envoy proxy (via eBPF), which performs HTTP header parsing and filtering — no sidecar proxy is required in each pod:
 - `GET /api/*` — allowed
 - `POST /api/*` — allowed
 - `GET /health` — allowed
@@ -433,7 +433,7 @@ chmod +x cleanup.sh
 
 4. **`cilium-operator` manages IPAM** — The operator assigns a `/24` pod CIDR block from `10.244.0.0/16` to each node. Pods receive IPs within their node's block without consuming any Azure VNet IPs.
 
-5. **kube-proxy is not installed** — All service routing (ClusterIP, NodePort, LoadBalancer) is handled by eBPF programs in the kernel, programmed by Cilium. This is faster and requires no iptables rules.
+5. **Cilium handles all service routing** — All service routing (ClusterIP, NodePort, LoadBalancer) is handled by eBPF programs in the kernel, programmed by Cilium. This is faster and requires no iptables rules.
 
 6. **Hubble provides deep observability** — Hubble hooks into Cilium's eBPF datapath and records every network flow with Kubernetes metadata (namespace, pod name, labels). Flows are aggregated by Hubble Relay and viewable via the UI or CLI.
 
