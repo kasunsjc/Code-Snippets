@@ -206,7 +206,7 @@ helm upgrade cilium cilium/cilium \
 |-----------|--------------|
 | `aksbyocni.enabled=true` | Activates AKS-specific node bootstrap: configures routes on Azure VMs, sets up CNI config directory expected by AKS kubelet, and handles cloud-provider metadata. Without this flag, Cilium agents will fail to start on Azure nodes. |
 | `nodeinit.enabled=true` | Deploys the `cilium-node-init` DaemonSet which runs before Cilium agents and prepares each node (e.g., mounts BPF filesystem, clears stale CNI state). |
-| `kubeProxyReplacement=true` | Replaces kube-proxy with Cilium's eBPF-based service proxy. All `ClusterIP`, `NodePort`, `LoadBalancer`, and `ExternalIPs` routing is handled in the kernel by Cilium's eBPF implementation, taking over the role of kube-proxy. |
+| `kubeProxyReplacement=true` | Replaces kube-proxy with Cilium's eBPF-based service proxy. All `ClusterIP`, `NodePort`, `LoadBalancer`, and `ExternalIPs` routing is handled in the kernel via eBPF. |
 | `ipam.mode=cluster-pool` | Cilium operator assigns pod IP blocks from a central pool (`10.244.0.0/16`) to each node, rather than delegating to Azure IPAM. Keeps pod IPs inside a known CIDR and avoids VNet IP exhaustion. |
 | `ipam.operator.clusterPoolIPv4PodCIDRList` | Defines the overall pod CIDR pool. Must match `networkProfile.podCidr` set in the Bicep AKS module. |
 | `devices="{eth0}"` | Tells Cilium which network interface to attach eBPF programs to. Azure VMs use `eth0` as the primary NIC. |
