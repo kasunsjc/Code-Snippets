@@ -1,0 +1,43 @@
+# =======================================================
+# AKS KEDA Demo — Sample Apps
+#
+# Runs both consumer apps locally for testing.
+# 1. Copy .env.example to .env and fill in your values.
+# 2. docker compose up --build
+# =======================================================
+
+services:
+  # ─────────────────────────────────────────────────────
+  # Scenario 01 — Azure Storage Queue consumer
+  # ─────────────────────────────────────────────────────
+  storage-queue-consumer:
+    build:
+      context: ./storage-queue-consumer
+      dockerfile: Dockerfile
+    container_name: storage-queue-consumer
+    restart: unless-stopped
+    environment:
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      QUEUE_NAME: ${QUEUE_NAME:-keda-demo-queue}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-5}
+      MAX_MESSAGES_PER_POLL: ${MAX_MESSAGES_PER_POLL:-32}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+  # ─────────────────────────────────────────────────────
+  # Scenario 05 — Azure Event Hub consumer
+  # ─────────────────────────────────────────────────────
+  eventhub-consumer:
+    build:
+      context: ./eventhub-consumer
+      dockerfile: Dockerfile
+    container_name: eventhub-consumer
+    restart: unless-stopped
+    environment:
+      AZURE_EVENTHUB_CONNECTION_STRING: ${AZURE_EVENTHUB_CONNECTION_STRING}
+      EVENTHUB_NAME: ${EVENTHUB_NAME:-keda-demo-hub}
+      CONSUMER_GROUP: ${CONSUMER_GROUP:-$$Default}
+      STARTING_POSITION: ${STARTING_POSITION:-@latest}
+      # Uncomment to enable blob checkpointing (required for KEDA lag tracking)
+      # AZURE_STORAGE_CHECKPOINT_CONNECTION_STRING: ${AZURE_STORAGE_CHECKPOINT_CONNECTION_STRING}
+      # CHECKPOINT_CONTAINER_NAME: ${CHECKPOINT_CONTAINER_NAME:-eventhub-checkpoints}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}

@@ -1,0 +1,20 @@
+# TriggerAuthentication for the KEDA azure-event-hubs scaler.
+#
+# The scaler needs TWO connection strings:
+#   connection        — Event Hub namespace connection string (to read events)
+#   storageConnection — Azure Storage connection string (to read checkpoints and
+#                       measure per-consumer-group unprocessed event lag)
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: azure-eventhub-auth
+  namespace: keda-demo
+spec:
+  secretTargetRef:
+    - parameter: connection           # Event Hub connection string
+      name: azure-eventhub-secret
+      key: eventhub-connection-string
+    - parameter: storageConnection    # Storage connection string (for checkpoints)
+      name: azure-eventhub-secret
+      key: storage-connection-string

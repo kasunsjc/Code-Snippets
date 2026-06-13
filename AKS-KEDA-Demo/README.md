@@ -3,6 +3,26 @@
 A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on
 **Azure Kubernetes Service** using the managed KEDA add-on.
 
+Infrastructure in this folder is provisioned with **Terraform modules**.
+
+## Terraform Module Layout
+
+```text
+terraform/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── versions.tf
+├── terraform.tfvars.example
+└── modules/
+  ├── acr/
+  ├── aks/
+  ├── log_analytics/
+  ├── monitoring/
+  ├── eventhub/
+  └── storage/
+```
+
 ## What is KEDA?
 
 KEDA extends Kubernetes with **event-driven scaling**. While the built-in Horizontal
@@ -19,7 +39,7 @@ KEDA works by:
 External Trigger Source           KEDA                    Kubernetes
 ┌────────────────────┐    ┌─────────────────┐    ┌───────────────────────┐
 │  Azure Queue       │    │  ScaledObject   │    │  HPA (auto-created)   │
-│  Service Bus       │───▶│  ScalerFactory  │───▶│  Deployment replica   │
+│  Event Hub         │───▶│  ScalerFactory  │───▶│  Deployment replica   │
 │  Prometheus        │    │  Metrics API    │    │  count adjustment     │
 │  Cron schedule     │    └─────────────────┘    └───────────────────────┘
 └────────────────────┘
@@ -38,7 +58,7 @@ Azure
 │       ├── Scenarios 01-05 workloads
 │       └── K8s Secrets (connection strings)
 ├── Azure Storage Account + Queue      ← Scenario 01 trigger source
-└── Azure Service Bus Namespace + Queue ← Scenario 02 trigger source
+└── Azure Event Hub Namespace + Hub    ← Scenario 05 trigger source
 ```
 
 ## Scenarios
@@ -46,10 +66,10 @@ Azure
 | # | Scenario | Trigger | Use Case |
 |---|---|---|---|
 | 01 | [Azure Storage Queue](scenarios/01-storage-queue/) | `azure-queue` | Background job workers, async processing |
-| 02 | [Azure Service Bus](scenarios/02-service-bus/) | `azure-servicebus` | Enterprise messaging, ordered processing |
-| 03 | [Cron (time-based)](scenarios/03-cron/) | `cron` | Business hours scaling, batch windows |
-| 04 | [Prometheus](scenarios/04-prometheus/) | `prometheus` | HTTP RPS, custom app metrics, SLO-based scaling |
-| 05 | [CPU / Memory](scenarios/05-cpu-memory/) | `cpu` + `memory` | Traditional resource-based scaling with KEDA features |
+| 02 | [Cron (time-based)](scenarios/02-cron/) | `cron` | Business hours scaling, batch windows |
+| 03 | [Prometheus](scenarios/03-prometheus/) | `prometheus` | HTTP RPS, custom app metrics, SLO-based scaling |
+| 04 | [CPU / Memory](scenarios/04-cpu-memory/) | `cpu` + `memory` | Traditional resource-based scaling with KEDA features |
+| 05 | [Azure Event Hub](scenarios/05-eventhub/) | `azure-event-hubs` | Stream processing, IoT telemetry, high-throughput events |
 
 ## Prerequisites
 
@@ -57,7 +77,7 @@ Azure
 |---|---|
 | [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) | Deploy infrastructure |
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | Manage Kubernetes resources |
-| [Helm](https://helm.sh/docs/intro/install/) | Install Prometheus (Scenario 04 only) |
+| [Docker](https://docs.docker.com/get-docker/) | Build and run sample apps locally (optional) |
 
 ## Quick Start
 
@@ -71,10 +91,13 @@ chmod +x deploy.sh cleanup.sh
 # 3. Login to Azure
 az login
 
-# 4. Deploy the AKS cluster + supporting resources (~10 minutes)
+# 4. (Optional) Customize Terraform inputs
+cp terraform/terraform.tfvars.example terraform/terraform.tfvars
+
+# 5. Deploy the AKS cluster + supporting resources (~10 minutes)
 ./deploy.sh
 
-# 5. Verify KEDA is running
+# 6. Verify KEDA is running
 kubectl get pods -n kube-system | grep keda
 
 # Expected output:
@@ -82,6 +105,24 @@ kubectl get pods -n kube-system | grep keda
 # keda-operator-metrics-apiserver 1/1   Running
 # keda-admission-xxxxx            1/1   Running
 ```
+
+## ACR Provisioning and AKS Connection
+
+This demo now provisions Azure Container Registry (ACR) through Terraform and
+connects AKS by granting the cluster kubelet identity the `AcrPull` role on that ACR.
+
+Configure this in [terraform/terraform.tfvars](terraform/terraform.tfvars):
+
+```hcl
+acr_name = "acrkedademoneu001"
+acr_sku  = "Basic"
+```
+
+After deployment, `deploy.sh` prints:
+- ACR name
+- ACR login server
+
+Use that login server to push and reference your demo images.
 
 ## Running a Scenario
 
@@ -154,11 +195,66 @@ spec:
 Like ScaledObject but for `Job`-based workloads — creates new Job instances
 instead of scaling a Deployment. Useful for parallel batch processing.
 
+## Sample Apps
+
+The `sample-apps/` directory contains production-quality Python consumer applications
+for local testing with Docker Compose before deploying to AKS.
+
+```
+sample-apps/
+├── storage-queue-consumer/   Python app for Scenario 01 (Azure Storage Queue)
+│   ├── app.py                Polls queue, dequeues and deletes messages
+│   ├── requirements.txt
+│   └── Dockerfile            Multi-stage build, non-root user
+├── eventhub-consumer/        Python app for Scenario 05 (Azure Event Hub)
+│   ├── app.py                Event Processor with optional Blob checkpoint store
+│   ├── requirements.txt
+│   └── Dockerfile
+├── docker-compose.yml        Runs both consumers together
+└── .env.example              Environment variable template — copy to .env
+```
+
+### Run locally
+
+```bash
+cd sample-apps
+cp .env.example .env
+# Edit .env with your Azure connection strings
+
+# Build and start both consumers
+docker compose up --build
+
+# Or start only one
+docker compose up --build storage-queue-consumer
+docker compose up --build eventhub-consumer
+```
+
+### Build and push to ACR (for Kubernetes deployment)
+
+```bash
+ACR=<your-acr-name>
+az acr login --name $ACR
+
+# Storage Queue Consumer
+docker build -t $ACR.azurecr.io/storage-queue-consumer:latest \
+  sample-apps/storage-queue-consumer/
+docker push $ACR.azurecr.io/storage-queue-consumer:latest
+
+# Event Hub Consumer
+docker build -t $ACR.azurecr.io/eventhub-consumer:latest \
+  sample-apps/eventhub-consumer/
+docker push $ACR.azurecr.io/eventhub-consumer:latest
+```
+
+Then update the `image:` field in
+`scenarios/01-storage-queue/01-deployment.yaml` and
+`scenarios/05-eventhub/01-deployment.yaml` with your ACR image paths.
+
 ## KEDA Add-on vs Self-Managed KEDA
 
 | | AKS KEDA Add-on | Helm-installed KEDA |
 |---|---|---|
-| Installation | Enabled via Bicep/CLI | `helm install kedacore/keda` |
+| Installation | Enabled via Terraform/CLI | `helm install kedacore/keda` |
 | Upgrades | Managed by AKS | Manual |
 | Integration | Azure Monitor logs | Configurable |
 | Support | Microsoft support | Community |

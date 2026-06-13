@@ -1,0 +1,79 @@
+# Producer Job — sends 100 events to the Azure Event Hub.
+# Run this to trigger KEDA scale-out on the eventhub-consumer Deployment.
+#
+# Apply:  kubectl apply -f 04-producer-job.yaml -n keda-demo
+# Logs:   kubectl logs job/eventhub-producer -n keda-demo
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: eventhub-producer
+  namespace: keda-demo
+  labels:
+    app: eventhub-producer
+    scenario: eventhub
+spec:
+  template:
+    metadata:
+      labels:
+        app: eventhub-producer
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: producer
+          image: python:3.12-slim
+          command:
+            - /bin/bash
+            - -c
+            - |
+              pip install azure-eventhub --quiet
+              python3 - <<'PYEOF'
+              import os, time
+              from azure.eventhub import EventHubProducerClient, EventData
+
+              connection_string = os.environ["AZURE_EVENTHUB_CONNECTION_STRING"]
+              eventhub_name     = os.environ.get("EVENTHUB_NAME", "keda-demo-hub")
+              message_count     = int(os.environ.get("MESSAGE_COUNT", "100"))
+
+              print(f"=== Event Hub Producer ===")
+              print(f"Sending {message_count} events to '{eventhub_name}'...")
+
+              with EventHubProducerClient.from_connection_string(
+                  connection_string, eventhub_name=eventhub_name
+              ) as producer:
+                  # Send in batches of 10 for efficiency
+                  batch_size = 10
+                  sent = 0
+                  while sent < message_count:
+                      batch = producer.create_batch()
+                      for i in range(batch_size):
+                          if sent >= message_count:
+                              break
+                          sent += 1
+                          body = f"Task-{sent}: process item at {time.strftime('%H:%M:%S')}"
+                          batch.add(EventData(body))
+                      producer.send_batch(batch)
+                      print(f"  Sent {sent}/{message_count}")
+
+              print(f"\nDone! {message_count} events sent to Event Hub.")
+              print("KEDA should begin scaling the consumer within one polling interval.")
+              PYEOF
+          env:
+            - name: AZURE_EVENTHUB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-eventhub-secret
+                  key: eventhub-connection-string
+            - name: EVENTHUB_NAME
+              value: "keda-demo-hub"
+            - name: MESSAGE_COUNT
+              value: "100"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 300

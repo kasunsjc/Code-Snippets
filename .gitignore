@@ -6,3 +6,15 @@
 .DS_Store
 /.idea/
 /.vscode/
+
+# Terraform artifacts
+**/.terraform/
+**/.terraform.lock.hcl
+**/*.tfstate
+**/*.tfstate.*
+**/terraform.tfvars
+**/crash.log
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
