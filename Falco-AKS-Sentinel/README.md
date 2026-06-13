@@ -70,26 +70,14 @@ This demo showcases:
 
 Before you begin, ensure you have the following installed:
 
-**For Bash deployment:**
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (version 2.30+)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
 - [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
 - [jq](https://stedolan.github.io/jq/) (for Sentinel rules import)
-
-**For PowerShell deployment:**
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (version 2.30+) - for Bicep deployment
-- [Azure PowerShell modules](https://docs.microsoft.com/en-us/powershell/azure/install-az-ps):
-  - Az.Accounts
-  - Az.Resources
-  - Az.OperationalInsights
-  - Az.Aks
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) (version 1.25+)
-- [Helm](https://helm.sh/docs/intro/install/) (version 3.0+)
-- [PowerShell 7+](https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell) (recommended)
-
-**Common requirements:**
-- An active Azure subscription
-- Appropriate permissions to create resources in Azure
+- `openssl` (used for deployment name suffix generation)
+- `uuidgen` (used by deployment script prerequisites)
+- Either `sha1sum` (GNU coreutils) or `shasum` (Perl) for deterministic Sentinel rule IDs
+- An active Azure subscription with appropriate permissions to create resources
 
 ### Installation
 
@@ -114,18 +102,22 @@ Before you begin, ensure you have the following installed:
    - `tags`
 
 4. **Deploy the infrastructure**:
-   
-   **Option A - Using Bash:**
    ```bash
    ./scripts/deploy.sh
    ```
-   
-   **Option B - Using PowerShell:**
-   ```powershell
-   ./scripts/Deploy-FalcoDemo.ps1
-   ```
 
-   Both scripts will:
+   | Flag | Description |
+   |---|---|
+   | *(none)* | Full deploy: infra → Falco → wait for logs → Sentinel rules |
+   | `--enable-rules` | Re-import Sentinel rules only (no infra/Falco changes) |
+   | `--skip-rules` | Deploy infra + Falco only; skip Sentinel rules |
+   | `--no-wait` | Skip the `FalcoLogs_CL` population gate |
+   | `--wait-timeout <min>` | Override the wait timeout (default: 20 minutes) |
+
+   > **Resource naming**: The script automatically appends a random 6-character hex suffix
+   > to all resource names (e.g. `rg-falco-demo-a3f9c1`, `aks-falco-demo-a3f9c1`,
+   > `law-falco-demo-a3f9c1`) so each deployment is isolated and re-deployable without
+   > name conflicts. The suffix is printed at the start of every run.
    - Create a resource group in East US
    - Deploy AKS cluster (v1.33, 3 nodes, Azure RBAC enabled)
    - Create Log Analytics workspace with Sentinel enabled
@@ -147,12 +139,30 @@ Before you begin, ensure you have the following installed:
    kubectl logs -n falco -l app.kubernetes.io/name=falcosidekick --tail=50
    ```
 
+6. **Simulate attacks** (optional — generates real Falco detections for the demo):
+   ```bash
+   # Run all 7 attack scenarios
+   ./scripts/simulate-attacks.sh
+
+   # Run a specific scenario
+   ./scripts/simulate-attacks.sh --scenario sensitive-file
+   ./scripts/simulate-attacks.sh --scenario crypto-miner
+   ./scripts/simulate-attacks.sh --scenario reverse-shell
+
+   # Clean up attack namespaces
+   ./scripts/simulate-attacks.sh --cleanup
+   ```
+
+   Available scenarios: `sensitive-file`, `package-mgmt`, `crypto-miner`, `reverse-shell`, `k8s-secrets`, `privileged-container`, `lateral-movement`
+
 ## 📁 Repository Structure
 
 ```
 .
-├── main.bicep                          # Main Bicep template
-├── main.bicepparam                     # Parameters file
+├── main-subscription.bicep             # Subscription-scoped Bicep template (entry point)
+├── main-subscription.bicepparam        # Parameters for subscription-scoped deployment
+├── main.bicep                          # Resource-group-scoped Bicep template
+├── main.bicepparam                     # Parameters for resource-group-scoped deployment
 ├── modules/
 │   ├── aks-cluster.bicep              # AKS cluster with RBAC
 │   ├── log-analytics.bicep            # Log Analytics & Sentinel
@@ -162,11 +172,12 @@ Before you begin, ensure you have the following installed:
 │   ├── falco-values.yaml              # Falco Helm values
 │   ├── falcosidekick-config.yaml      # Falcosidekick configuration
 │   └── sentinel-analytics-rules.json  # Sentinel analytics rules
+├── workbooks/
+│   └── falco-security-dashboard.json  # Falco Security Dashboard workbook
 ├── scripts/
-│   ├── deploy.sh                      # Bash deployment script
-│   ├── cleanup.sh                     # Bash cleanup script
-│   ├── Deploy-FalcoDemo.ps1          # PowerShell deployment script
-│   └── Remove-FalcoDemo.ps1          # PowerShell cleanup script
+│   ├── deploy.sh                      # Deployment script
+│   ├── cleanup.sh                     # Cleanup script
+│   └── simulate-attacks.sh            # Rogue actor attack simulation (7 scenarios)
 └── README.md                          # This file
 ```
 
@@ -175,7 +186,7 @@ Before you begin, ensure you have the following installed:
 ### AKS Cluster Configuration
 
 - **Kubernetes Version**: 1.33
-- **Node Size**: Standard_DS2_v2
+- **Node Size**: Standard_D2s_v3
 - **Node Count**: 3 nodes (system pool)
 - **Network Plugin**: Azure CNI
 - **Features Enabled**:
@@ -255,16 +266,18 @@ FalcoLogs_CL
 
 ### 3. Check Sentinel Incidents
 
-1. Go to Azure Portal → Search "Microsoft Sentinel"
-2. Select your Log Analytics workspace (e.g., `law-falco-demo-1`)
+> **Portal change:** Microsoft Sentinel has moved to the **Microsoft Defender portal**. Navigate to [security.microsoft.com](https://security.microsoft.com) — the legacy Azure Portal blade still exists but redirects there.
+
+1. Go to the [**Microsoft Defender portal**](https://security.microsoft.com)
+2. Left nav → **Microsoft Sentinel** → select your Log Analytics workspace (e.g., `law-falco-demo-a3f9c1`)
 3. Left menu → **Configuration** → **Analytics** → **Active rules** tab
 4. Filter by "Falco" to see the 5 imported rules
-5. Navigate to **Threat management** → **Incidents** to see triggered alerts
+5. Navigate to **Investigation & response** → **Incidents & alerts** → **Incidents** to see triggered alerts
 6. Wait 5-10 minutes after first logs for rules to evaluate
 
-**Direct Portal Link Format:**
+**Direct Defender portal link:**
 ```
-https://portal.azure.com/#view/Microsoft_Azure_Security_Insights/MainMenuBlade/~/Analytics
+https://security.microsoft.com/
 ```
 
 ## 📊 Sentinel Analytics Rules
@@ -331,19 +344,8 @@ FalcoLogs_CL
 
 To remove all resources created by this demo:
 
-**Using Bash:**
 ```bash
 ./scripts/cleanup.sh
-```
-
-**Using PowerShell:**
-```powershell
-./scripts/Remove-FalcoDemo.ps1
-```
-
-**PowerShell with force option (skip confirmation):**
-```powershell
-./scripts/Remove-FalcoDemo.ps1 -Force
 ```
 
 **Warning**: This will permanently delete the resource group and all contained resources.
@@ -390,7 +392,7 @@ This project is provided as-is for demonstration purposes.
 ### Sentinel Rules
 - First-time rule evaluation can take up to 10 minutes
 - Rules are automatically imported during deployment (requires `jq` installed)
-- Verify rules: Azure Portal → Sentinel → Analytics → Active rules (filter by "Falco")
+- Verify rules: [Microsoft Defender portal](https://security.microsoft.com) → **Microsoft Sentinel** → **Configuration** → **Analytics** → **Active rules** (filter by "Falco")
 - Rule queries use flattened column names (e.g., `output_fields_k8s_pod_name_s`)
 
 ### False Positives

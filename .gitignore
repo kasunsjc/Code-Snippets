@@ -4,7 +4,5 @@
 *.key
 *.pfx
 .DS_Store
-
-# Ignore IDE directories
-.idea/
-.vscode/
+/.idea/
+/.vscode/

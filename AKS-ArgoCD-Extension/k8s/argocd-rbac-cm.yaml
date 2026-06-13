@@ -1,0 +1,24 @@
+# Argo CD RBAC ConfigMap - maps Microsoft Entra ID security groups (delivered
+# as `groups` claim object IDs in the Entra ID token) to Argo CD roles.
+#
+# This file is applied as a patch on top of the argocd-rbac-cm created by the
+# AKS Argo CD extension. The same policy can also be set through the
+# extension's `rbac.policy.csv` configurationSetting; this manifest is provided
+# for cases where you want to manage RBAC out-of-band with GitOps.
+#
+# The argocd-admins group is created automatically by Terraform (entra module).
+# Replace <ARGOCD_ADMIN_GROUP_OBJECT_ID> with the output value of
+# argocd_admin_group_object_id from `terraform output`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-rbac-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-rbac-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  policy.default: role:readonly
+  scopes: "[groups]"
+  policy.csv: |
+    g, <ARGOCD_ADMIN_GROUP_OBJECT_ID>, role:admin

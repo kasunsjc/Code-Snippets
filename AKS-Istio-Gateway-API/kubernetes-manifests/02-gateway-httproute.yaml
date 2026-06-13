@@ -1,0 +1,68 @@
+---
+# Gateway resource using the approuting-istio GatewayClass
+# This provisions an Envoy-based gateway with LoadBalancer service, HPA, and PDB
+# Configured with both HTTP and HTTPS listeners for SSL termination
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: httpbin-gateway
+  namespace: default
+spec:
+  # Use the AKS app routing Istio GatewayClass
+  gatewayClassName: approuting-istio
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: Same  # Only routes in the same namespace can attach
+  - name: https
+    port: 443
+    protocol: HTTPS
+    allowedRoutes:
+      namespaces:
+        from: Same
+    tls:
+      mode: Terminate  # SSL termination at the gateway
+      certificateRefs:
+      - name: gateway-tls-secret  # Reference to the Kubernetes TLS secret from Key Vault
+        kind: Secret
+---
+# HTTPRoute resource that defines routing rules
+# This route attaches to the Gateway and defines traffic rules
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin
+  namespace: default
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+    sectionName: https  # Attach to the HTTPS listener
+  hostnames:
+  - "httpbin.__DOMAIN_NAME__"  # Domain will be substituted during deployment
+  rules:
+  # Catch-all: forward all traffic to httpbin (browser root / also works)
+  - backendRefs:
+    - name: httpbin
+      port: 8000
+---
+# HTTP → HTTPS redirect for httpbin-gateway
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: httpbin-http-redirect
+  namespace: default
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+    sectionName: http  # Attach to the HTTP listener
+  hostnames:
+  - "httpbin.__DOMAIN_NAME__"
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301

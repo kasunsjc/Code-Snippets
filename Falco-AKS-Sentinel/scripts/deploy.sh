@@ -14,6 +14,8 @@
 # ============================================================
 
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RECOMMENDED_CMD="./scripts/deploy.sh"
 
 # ---------------------------------------------------------------------------
 # Colours / logging
@@ -29,11 +31,6 @@ print_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 LOCATION="eastus"
 SUBSCRIPTION_ID=""
 DEPLOYMENT_NAME="main-subscription"
-
-# Random 6-character alphanumeric suffix to ensure unique resource names.
-# Generated once per script run so all resources share the same suffix.
-# Uses openssl to avoid SIGPIPE issues from /dev/urandom pipelines under pipefail.
-RANDOM_SUFFIX=$(openssl rand -hex 3)
 
 # Defaults for --enable-rules-only mode (overridden from deployment outputs)
 RESOURCE_GROUP=""
@@ -70,12 +67,21 @@ check_prerequisites() {
     print_info "Checking prerequisites..."
 
     local missing=()
-    for cmd in az kubectl helm jq uuidgen; do
+    for cmd in az kubectl helm jq uuidgen openssl; do
         command -v "$cmd" >/dev/null 2>&1 || missing+=("$cmd")
     done
+    local missing_hash_tool=false
+    if ! command -v sha1sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+        missing_hash_tool=true
+    fi
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        print_error "Missing required tools: ${missing[*]}"
+    if [[ ${#missing[@]} -gt 0 || "$missing_hash_tool" == true ]]; then
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            print_error "Missing required tools: ${missing[*]}"
+        fi
+        if [[ "$missing_hash_tool" == true ]]; then
+            print_error "Missing required hash tool: install either sha1sum or shasum"
+        fi
         print_error "Install them and re-run. Hints:"
         print_error "  az      → https://docs.microsoft.com/cli/azure/install-azure-cli"
         print_error "  kubectl → https://kubernetes.io/docs/tasks/tools/"
@@ -101,8 +107,10 @@ login_azure() {
 # Infrastructure
 # ---------------------------------------------------------------------------
 deploy_infrastructure() {
+    local random_suffix
+    random_suffix=$(openssl rand -hex 3)
     print_info "Deploying Azure infrastructure with Bicep (subscription scope)..."
-    print_info "Resource name suffix: ${RANDOM_SUFFIX}"
+    print_info "Resource name suffix: ${random_suffix}"
 
     print_info "Resolving current user object ID for AKS RBAC assignment..."
     local user_id
@@ -111,12 +119,12 @@ deploy_infrastructure() {
     az deployment sub create \
         --location "$LOCATION" \
         --name "$DEPLOYMENT_NAME" \
-        --template-file ../main-subscription.bicep \
-        --parameters ../main-subscription.bicepparam \
+        --template-file "$SCRIPT_DIR/../main-subscription.bicep" \
+        --parameters "$SCRIPT_DIR/../main-subscription.bicepparam" \
         --parameters aksAdminPrincipalId="$user_id" \
-        --parameters resourceGroupName="rg-falco-demo-${RANDOM_SUFFIX}" \
-        --parameters aksClusterName="aks-falco-demo-${RANDOM_SUFFIX}" \
-        --parameters logAnalyticsWorkspaceName="law-falco-demo-${RANDOM_SUFFIX}" \
+        --parameters resourceGroupName="rg-falco-demo-${random_suffix}" \
+        --parameters aksClusterName="aks-falco-demo-${random_suffix}" \
+        --parameters logAnalyticsWorkspaceName="law-falco-demo-${random_suffix}" \
         --output table
 
     print_info "Infrastructure deployed successfully!"
@@ -175,13 +183,13 @@ install_falco() {
     helm repo add falcosecurity https://falcosecurity.github.io/charts >/dev/null
     helm repo update >/dev/null
 
-    kubectl apply -f ../k8s/falco-namespace.yaml
+    kubectl apply -f "$SCRIPT_DIR/../k8s/falco-namespace.yaml"
 
     # The webhook URL is passed via --set (single arg, not echoed by helm in
     # default verbosity). Avoid `--set-string` printing in CI-debug mode.
     helm upgrade --install falco falcosecurity/falco \
         --namespace falco \
-        --values ../k8s/falco-values.yaml \
+        --values "$SCRIPT_DIR/../k8s/falco-values.yaml" \
         --set "falcosidekick.config.webhook.address=${WEBHOOK_URL}" \
         --wait
 
@@ -241,7 +249,7 @@ wait_for_falco_logs() {
 
     print_warning "Timed out after ${WAIT_TIMEOUT_MIN}m waiting for FalcoLogs_CL."
     print_warning "The first Sentinel rule creation may fail with 'table does not exist'."
-    print_warning "Re-run: ./deploy.sh --enable-rules   once data starts flowing."
+    print_warning "Re-run: ${RECOMMENDED_CMD} --enable-rules   once data starts flowing."
     return 1
 }
 
@@ -256,8 +264,13 @@ deterministic_rule_id() {
     local workspace_resource_id="$1"
     local display_name="$2"
     local hex
-    hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
-        | sha1sum | awk '{print $1}' | cut -c1-32)
+    if command -v sha1sum >/dev/null 2>&1; then
+        hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
+            | sha1sum | awk '{print $1}' | cut -c1-32)
+    else
+        hex=$(printf '%s' "${workspace_resource_id}::${display_name}" \
+            | shasum -a 1 | awk '{print $1}' | cut -c1-32)
+    fi
     printf '%s-%s-%s-%s-%s\n' \
         "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
 }
@@ -265,7 +278,7 @@ deterministic_rule_id() {
 import_sentinel_rules() {
     print_info "Importing Sentinel analytics rules..."
 
-    local rules_file="../k8s/sentinel-analytics-rules.json"
+    local rules_file="$SCRIPT_DIR/../k8s/sentinel-analytics-rules.json"
     if [[ ! -f "$rules_file" ]]; then
         print_warning "Analytics rules file not found at $rules_file"
         return
@@ -293,7 +306,7 @@ import_sentinel_rules() {
             --output none 2>/dev/null; then
             print_info "    ✓ created/updated"
         else
-            print_warning "    ✗ failed (rerun ./deploy.sh --enable-rules later)"
+            print_warning "    ✗ failed (rerun ${RECOMMENDED_CMD} --enable-rules later)"
         fi
         rm -f "$tmp"
     done
@@ -306,7 +319,7 @@ import_sentinel_rules() {
 deploy_workbook() {
     print_info "Deploying Falco Security Dashboard workbook..."
 
-    local workbook_file="../workbooks/falco-security-dashboard.json"
+    local workbook_file="$SCRIPT_DIR/../workbooks/falco-security-dashboard.json"
     if [[ ! -f "$workbook_file" ]]; then
         print_warning "Workbook file not found at $workbook_file"
         return
@@ -390,7 +403,7 @@ EOF
 load_existing_outputs_or_die() {
     if ! az deployment sub show --name "$DEPLOYMENT_NAME" >/dev/null 2>&1; then
         print_error "No prior deployment named '$DEPLOYMENT_NAME' found."
-        print_error "Run ./deploy.sh (without --enable-rules) first."
+        print_error "Run ${RECOMMENDED_CMD} (without --enable-rules) first."
         exit 1
     fi
     get_deployment_outputs
