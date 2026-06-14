@@ -1,107 +1,229 @@
 # Scenario 03 — Prometheus Scaler (Azure Managed Prometheus)
 
-## Concept
+## Overview
 
-The **Prometheus** scaler lets KEDA query any Prometheus-compatible endpoint and
-scale based on the result of a PromQL expression. This enables scaling on **any
-application or infrastructure metric** — HTTP request rate, error rate, queue depth
-from a custom exporter, business KPIs, and more.
+Scale a Kubernetes Deployment based on **any Prometheus metric** using KEDA's `prometheus` trigger backed by **Azure Managed Prometheus** and **Azure AD Workload Identity** (no expiring bearer tokens).
 
 ```
-HTTP load  ──▶  sample-app  ──▶  exposes /metrics  ──▶  Azure Managed Prometheus scrapes
-                                                              │
-                                                         KEDA queries Azure Monitor workspace
-                                                         (http_requests_total rate)
-                                                              │
-                                                    ScaledObject adjusts replicas
+                                     Azure Managed Prometheus
+                                    ┌──────────────────────┐
+ Load Generator ──▶ sample-app ──▶  │  scrapes /metrics    │
+  (Deployment)       (Deployment)   │  via ServiceMonitor  │
+                                    └──────────┬───────────┘
+                                               │
+                                   KEDA queries PromQL every 15s
+                                   (Workload Identity → Azure AD token)
+                                               │
+                                    ┌──────────▼───────────┐
+                                    │     ScaledObject      │
+                                    │  threshold: 10 req/s  │
+                                    │  per replica          │
+                                    └──────────┬───────────┘
+                                               │
+                                         HPA adjusts
+                                    sample-app replicas (1–10)
 ```
 
-## Architecture
+## How It Works
 
-This scenario uses:
-- **`sample-app`** — a simple Go HTTP server that counts requests and exposes Prometheus metrics
-  at `/metrics`
-- **Azure Managed Prometheus** — deployed via Bicep, collects metrics from the cluster through
-  the Azure Monitor agent (no Helm required)
-- **KEDA Prometheus scaler** — queries `sum(rate(http_requests_total[2m]))` against the Azure
-  Monitor workspace query endpoint and scales when RPS exceeds the threshold
+1. **sample-app** exposes `http_requests_total` as a Prometheus counter on `/metrics`.
+2. **Azure Monitor Agent (AMA)** scrapes the metric via a `ServiceMonitor` CRD (`azmonitoring.coreos.com/v1`) deployed alongside the service.
+3. **KEDA** periodically queries Azure Managed Prometheus using the PromQL expression:
+   ```promql
+   sum(rate(http_requests_total{namespace="keda-demo"}[2m]))
+   ```
+4. KEDA calculates desired replicas as `ceil(queryResult / threshold)`:
+   - 45 req/s → `ceil(45/10)` = **5 replicas**
+   - 100 req/s → `ceil(100/10)` = **10 replicas** (max)
+   - 0 req/s → **1 replica** (min)
+5. Authentication to Azure Managed Prometheus uses **Workload Identity**:
+   - Terraform provisions a **User-Assigned Managed Identity** with `Monitoring Data Reader` on the Prometheus workspace.
+   - A **Federated Identity Credential** trusts `system:serviceaccount:kube-system:keda-operator` (the KEDA add-on's operator SA).
+   - KEDA exchanges the operator's projected SA token for a short-lived Azure AD access token — no secrets or manual token refresh needed.
 
 ## Files
 
-| File | Description |
-|---|---|
-| `00-trigger-auth.yaml` | Secret + TriggerAuthentication for Azure Managed Prometheus auth |
-| `01-sample-app.yaml` | HTTP app that exposes Prometheus metrics |
-| `02-service.yaml` | ClusterIP Service for the app + a PodMonitor |
-| `03-scaled-object.yaml` | ScaledObject querying Azure Managed Prometheus |
-| `04-load-generator-job.yaml` | Job that fires 5000 HTTP requests to trigger scaling |
+| File | Kind | Description |
+|------|------|-------------|
+| `00-trigger-auth.yaml` | `TriggerAuthentication` | Configures KEDA to use `podIdentity: azure-workload` with the managed identity client ID |
+| `01-sample-app.yaml` | `ConfigMap` + `Deployment` | Python HTTP server exposing `http_requests_total` at `/metrics` |
+| `02-service.yaml` | `Service` + `ServiceMonitor` | ClusterIP Service + AMA scrape target (`azmonitoring.coreos.com/v1`) |
+| `03-scaled-object.yaml` | `ScaledObject` | KEDA trigger — queries Prometheus, threshold 10 req/s per replica |
+| `04-load-generator-job.yaml` | `Deployment` | Continuous HTTP load generator — scale replicas to control traffic |
 
-## Prerequisites
+## Terraform-Provisioned Resources
 
-The Bicep deployment already provisions Azure Managed Prometheus and wires it to the AKS
-cluster via a Data Collection Rule. You only need to:
+All Azure infrastructure is managed by Terraform (no manual setup):
 
-1. **Get the Prometheus query endpoint** from the Bicep output:
+| Resource | Module | Purpose |
+|----------|--------|---------|
+| Azure Monitor Workspace (Prometheus) | `modules/monitoring` | Stores scraped metrics |
+| Data Collection Rule + Association | `modules/monitoring` + root | Wires AMA → Prometheus workspace |
+| Azure Managed Grafana | `modules/monitoring` | Optional visualization |
+| User-Assigned Managed Identity | `modules/workload_identity` | KEDA's identity for Prometheus access |
+| Federated Identity Credential | `modules/workload_identity` | Trusts `kube-system:keda-operator` SA |
+| Role Assignment (Monitoring Data Reader) | `modules/workload_identity` | Grants identity read access to Prometheus workspace |
+
+## Deployment
+
+### Recommended: Using deploy.sh
 
 ```bash
-PROMETHEUS_ENDPOINT=$(az deployment group show \
-  --resource-group rg-aks-keda-demo \
-  --name aks-keda-deployment \
-  --query "properties.outputs.prometheusQueryEndpoint.value" \
-  --output tsv)
-
-echo "Prometheus endpoint: $PROMETHEUS_ENDPOINT"
+./deploy.sh --demo prometheus
 ```
 
-2. **Update `03-scaled-object.yaml`** — replace `<PROMETHEUS_QUERY_ENDPOINT>` with the value above.
+This runs Terraform (creates all Azure resources), fetches outputs, and applies all manifests with the correct values substituted:
+- `{{ PROMETHEUS_QUERY_ENDPOINT }}` → Azure Managed Prometheus query URL
+- `{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}` → Managed Identity client ID
 
-3. **Populate the bearer token** for KEDA to authenticate against Azure Managed Prometheus:
+No images need to be built — the sample app uses `python:3.12-slim` directly.
+
+### Manual Deployment
+
+If you prefer to apply manifests individually (infrastructure must already exist):
 
 ```bash
-TOKEN=$(az account get-access-token \
-  --resource https://prometheus.monitor.azure.com \
-  --query accessToken -o tsv)
+# 1. Get Terraform outputs
+cd terraform
+PROMETHEUS_ENDPOINT=$(terraform output -raw prometheus_query_endpoint)
+WI_CLIENT_ID=$(terraform output -raw prometheus_workload_identity_client_id)
 
-kubectl create secret generic azure-managed-prometheus-secret \
-  --namespace keda-demo \
-  --from-literal=bearerToken="$TOKEN" \
-  --dry-run=client -o yaml | kubectl apply -f -
+# 2. Apply manifests with sed substitution
+cd ../scenarios/03-prometheus
+
+for f in 00-trigger-auth.yaml 01-sample-app.yaml 02-service.yaml 03-scaled-object.yaml 04-load-generator-job.yaml; do
+  sed -e "s|{{ PROMETHEUS_QUERY_ENDPOINT }}|$PROMETHEUS_ENDPOINT|g" \
+      -e "s|{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}|$WI_CLIENT_ID|g" \
+      "$f" | kubectl apply -n keda-demo -f -
+done
 ```
 
-> **Note:** Access tokens expire in ~1 hour. For long-running demos, re-run the command above
-> to refresh the token.
+## Testing Scale-Out and Scale-In
 
-## Steps
+The load generator Deployment starts at 1 replica. Each replica sends ~30 concurrent requests per second in a tight loop.
+
+### Generate Load (Scale Out)
 
 ```bash
-# 1. Populate the bearer token (see Prerequisites above)
+# Scale load generator up — drives ~150 req/s (5 × 30)
+kubectl scale deployment load-generator -n keda-demo --replicas=5
 
-# 2. Apply TriggerAuthentication
-kubectl apply -f scenarios/03-prometheus/00-trigger-auth.yaml
+# Watch HPA react (updates every 15s)
+kubectl get hpa -n keda-demo -w
+```
 
-# 3. Update 03-scaled-object.yaml with the Prometheus endpoint, then deploy
-kubectl apply -f scenarios/03-prometheus/01-sample-app.yaml
-kubectl apply -f scenarios/03-prometheus/02-service.yaml
-kubectl apply -f scenarios/03-prometheus/03-scaled-object.yaml
+Expected: `sample-app` scales up to 10 replicas (max) within ~30–60 seconds.
 
-# 4. Check initial replica count (1 — minReplicaCount)
-kubectl get deployment sample-app -n keda-demo
+### Stop Load (Scale In)
 
-# 5. Watch pods in a second terminal
-kubectl get pods -n keda-demo -w
+```bash
+# Scale load generator to zero
+kubectl scale deployment load-generator -n keda-demo --replicas=0
 
-# 6. Run the load generator to drive requests
-kubectl apply -f scenarios/03-prometheus/04-load-generator-job.yaml
+# Watch scale-down (takes ~3-4 minutes)
+kubectl get hpa -n keda-demo -w
+```
 
-# 7. Watch KEDA scale out as RPS climbs
+Expected: After the 2-minute PromQL rate window drains + 90s cooldown, `sample-app` scales back to 1 replica.
+
+### Verify Metrics are Flowing
+
+```bash
+# Check that KEDA can read the metric
+kubectl get scaledobject prometheus-scaler -n keda-demo
+
+# READY=True, ACTIVE=True means it's working
+# READY=False → check KEDA operator logs (see Troubleshooting)
+
+# Query the metric directly (requires a valid token)
+PROMETHEUS_ENDPOINT=$(terraform -chdir=terraform output -raw prometheus_query_endpoint)
+TOKEN=$(az account get-access-token --resource https://prometheus.monitor.azure.com --query accessToken -o tsv)
+
+curl -s -H "Authorization: Bearer $TOKEN" \
+  "$PROMETHEUS_ENDPOINT/api/v1/query?query=sum(rate(http_requests_total{namespace=\"keda-demo\"}[2m]))" | python3 -m json.tool
+```
+
+## Configuration
+
+### Tuning Parameters
+
+| Parameter | Location | Default | Description |
+|-----------|----------|---------|-------------|
+| `threshold` | `03-scaled-object.yaml` | `10` | Target req/s per replica. Lower = more aggressive scaling |
+| `pollingInterval` | `03-scaled-object.yaml` | `15` | How often (seconds) KEDA queries Prometheus |
+| `cooldownPeriod` | `03-scaled-object.yaml` | `90` | Seconds to wait before scaling down after metrics drop |
+| `minReplicaCount` | `03-scaled-object.yaml` | `1` | Minimum replicas (set to 0 for scale-to-zero) |
+| `maxReplicaCount` | `03-scaled-object.yaml` | `10` | Maximum replicas |
+| `[2m]` in query | `03-scaled-object.yaml` | `2m` | PromQL rate window — longer = smoother but slower reaction |
+| `interval` | `02-service.yaml` | `15s` | How often AMA scrapes the app |
+| `CONCURRENT` | `04-load-generator-job.yaml` | `30` | Requests per loop iteration per load-generator pod |
+
+### Scaling Formula
+
+```
+desiredReplicas = ceil( sum(rate(http_requests_total{namespace="keda-demo"}[2m])) / threshold )
+```
+
+Clamped to `[minReplicaCount, maxReplicaCount]`.
+
+## Troubleshooting
+
+### KEDA ScaledObject shows READY=False
+
+```bash
+# Check ScaledObject conditions
 kubectl describe scaledobject prometheus-scaler -n keda-demo
 
-# 8. After load stops, watch replicas scale back down
-kubectl get deployment sample-app -n keda-demo -w
+# Check KEDA operator logs
+kubectl logs -n kube-system -l app=keda-operator --tail=50 | grep -i "error\|failed"
+```
 
-# 9. View scaling in Azure Managed Grafana
-# Open the Grafana URL (printed by deploy.sh) and use the
-# "Kubernetes / Workload" dashboard to observe replica count changes
+**Common causes:**
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `missing required parameter "serverAddress"` | `{{ PROMETHEUS_QUERY_ENDPOINT }}` not substituted | Re-run `./deploy.sh --demo prometheus` or check `terraform output -raw prometheus_query_endpoint` is non-empty |
+| `AADSTS700213: No matching federated identity record` | Federated credential subject mismatch | Ensure Terraform created the credential with subject `system:serviceaccount:kube-system:keda-operator` |
+| `Client.Timeout exceeded` | Transient network issue | Usually self-resolves; check KEDA again after 30s |
+| `401 Unauthorized` without AADSTS700213 | Missing role assignment | Ensure the managed identity has `Monitoring Data Reader` on the Prometheus workspace |
+
+### Metrics return 0 / no data
+
+```bash
+# Check ServiceMonitor is deployed
+kubectl get servicemonitor -n keda-demo
+
+# Verify the app is actually receiving traffic
+kubectl logs -l app=sample-app -n keda-demo --tail=5
+
+# Check AMA is scraping (look for keda-demo targets)
+kubectl port-forward -n kube-system ds/ama-metrics-node 9090:9090
+# Then visit http://localhost:9090/targets
+```
+
+### HPA shows `<unknown>/10`
+
+This means the external metric hasn't been reported yet. Common during the first 1–2 polling intervals after creation. If it persists:
+
+```bash
+# Verify KEDA metrics server is running
+kubectl get pods -n kube-system | grep keda-metrics
+
+# Check if the metric is registered
+kubectl get --raw "/apis/external.metrics.k8s.io/v1beta1/namespaces/keda-demo/s0-prometheus" | python3 -m json.tool
+```
+
+## Cleanup
+
+```bash
+kubectl delete -f scenarios/03-prometheus/ -n keda-demo
+```
+
+Or to remove all demos and infrastructure:
+
+```bash
+./cleanup.sh
+```
 
 # 10. Cleanup
 kubectl delete -f scenarios/03-prometheus/ -n keda-demo
