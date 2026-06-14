@@ -69,7 +69,7 @@ Azure
 | 02 | [Cron (time-based)](scenarios/02-cron/) | `cron` | Business hours scaling, batch windows |
 | 03 | [Prometheus](scenarios/03-prometheus/) | `prometheus` | HTTP RPS, custom app metrics, SLO-based scaling |
 | 04 | [CPU / Memory](scenarios/04-cpu-memory/) | `cpu` + `memory` | Traditional resource-based scaling with KEDA features |
-| 05 | [Azure Event Hub](scenarios/05-eventhub/) | `azure-event-hubs` | Stream processing, IoT telemetry, high-throughput events |
+| 05 | [Azure Event Hub](scenarios/05-eventhub/) | `azure-eventhub` | Stream processing, IoT telemetry, high-throughput events |
 
 ## Prerequisites
 
@@ -124,30 +124,30 @@ After deployment, `deploy.sh` prints:
 
 Use that login server to push and reference your demo images.
 
-## Running a Scenario
+## Running Scenarios with deploy.sh (Recommended)
 
-Each scenario has its own `README.md` with detailed steps.
-The general pattern is the same for all scenarios:
+Use `deploy.sh` so image build/push and manifest substitution are handled automatically.
 
 ```bash
-NAMESPACE="keda-demo"
+# Infrastructure only (no demo workloads)
+./deploy.sh
 
-# Deploy the workload and ScaledObject
-kubectl apply -f scenarios/<number>-<name>/ -n $NAMESPACE
+# Event Hub demo only
+./deploy.sh --demo eventhub --image-tag latest
 
-# Watch pods
-kubectl get pods -n $NAMESPACE -w
+# Storage Queue demo only
+./deploy.sh --demo storage-queue --image-tag latest
 
-# Check ScaledObject status
-kubectl get scaledobject -n $NAMESPACE
-
-# Trigger scaling (queue-based scenarios)
-kubectl apply -f scenarios/<number>-<name>/04-producer-job.yaml -n $NAMESPACE
-
-# Inspect the underlying HPA that KEDA manages
-kubectl get hpa -n $NAMESPACE
-kubectl describe hpa keda-hpa-<scaledobject-name> -n $NAMESPACE
+# Both demos
+./deploy.sh --demo all --image-tag latest
 ```
+
+What `deploy.sh` does for demo deployments:
+1. Builds and pushes demo images with `docker buildx` for `linux/amd64`.
+2. Substitutes `{{ ACR_LOGIN_SERVER }}` and `{{ IMAGE_TAG }}` in scenario manifests.
+3. Applies secret templates with runtime connection strings.
+
+This avoids direct raw `kubectl apply` against templated manifest files.
 
 ## Key KEDA Resources
 
@@ -229,7 +229,7 @@ docker compose up --build storage-queue-consumer
 docker compose up --build eventhub-consumer
 ```
 
-### Build and push to ACR (for Kubernetes deployment)
+### Build and push to ACR (manual alternative)
 
 ```bash
 ACR=<your-acr-name>
@@ -246,9 +246,24 @@ docker build -t $ACR.azurecr.io/eventhub-consumer:latest \
 docker push $ACR.azurecr.io/eventhub-consumer:latest
 ```
 
-Then update the `image:` field in
-`scenarios/01-storage-queue/01-deployment.yaml` and
-`scenarios/05-eventhub/01-deployment.yaml` with your ACR image paths.
+If you deploy manually (without `deploy.sh`), render the templates first:
+
+```bash
+ACR_LOGIN_SERVER=<your-acr>.azurecr.io
+IMAGE_TAG=latest
+
+sed -e "s|{{ ACR_LOGIN_SERVER }}|$ACR_LOGIN_SERVER|g" \
+  -e "s|{{ IMAGE_TAG }}|$IMAGE_TAG|g" \
+  scenarios/05-eventhub/01-deployment.yaml | kubectl apply -n keda-demo -f -
+```
+
+Use the same substitution pattern for other templated manifests.
+
+## Event Hub Scale-Down Note
+
+For Scenario 05 (`azure-eventhub`), lag-based scale-down requires Blob checkpoints.
+The consumer and KEDA must use the same storage account/container and consumer group.
+Without checkpoint persistence, lag will not drain correctly and replicas may not scale down.
 
 ## KEDA Add-on vs Self-Managed KEDA
 

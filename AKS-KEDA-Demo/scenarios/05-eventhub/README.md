@@ -26,7 +26,7 @@ The difference (lag) across all partitions is divided by `unprocessedEventThresh
 to determine the desired replica count.
 
 This is why the consumer app **must** write Blob Storage checkpoints and both KEDA and
-the consumer must point at the **same** storage container.
+the consumer must point at the **same** storage container and consumer group (`$Default` in this demo).
 
 ## Files
 
@@ -38,7 +38,21 @@ the consumer must point at the **same** storage container.
 | `03-scaled-object.yaml` | `ScaledObject` — scale when unprocessed events > 10/replica |
 | `05-producer-deployment.yaml` | Continuous producer Deployment to generate load |
 
-## Prerequisites
+## Recommended Deployment Path
+
+Use the repo-level deployment script so templated image references are substituted correctly.
+
+```bash
+./deploy.sh --demo eventhub --image-tag latest
+```
+
+This workflow:
+1. Builds amd64 images for producer and consumer.
+2. Pushes images to ACR.
+3. Substitutes `{{ ACR_LOGIN_SERVER }}` and `{{ IMAGE_TAG }}`.
+4. Applies Event Hub manifests and secrets.
+
+## Prerequisites (Manual Path)
 
 ### 1. Create the Event Hub namespace and hub
 
@@ -71,19 +85,35 @@ az storage container create \
   --auth-mode login
 ```
 
-### 3. Build and push the consumer image
+### 3. Build and push consumer and producer images
 
 ```bash
-# Build
+# Build consumer
 docker build -t <YOUR_ACR>.azurecr.io/eventhub-consumer:latest \
   sample-apps/eventhub-consumer/
+
+# Build producer
+docker build -t <YOUR_ACR>.azurecr.io/eventhub-producer:latest \
+  sample-apps/eventhub-producer/
 
 # Push
 az acr login --name <YOUR_ACR>
 docker push <YOUR_ACR>.azurecr.io/eventhub-consumer:latest
+docker push <YOUR_ACR>.azurecr.io/eventhub-producer:latest
 ```
 
-Then update the `image:` field in `01-deployment.yaml`.
+Do not apply templated manifests directly. Render them with substitution:
+
+```bash
+ACR_LOGIN_SERVER=<YOUR_ACR>.azurecr.io
+IMAGE_TAG=latest
+
+for f in 01-deployment.yaml 02-trigger-auth.yaml 03-scaled-object.yaml 05-producer-deployment.yaml; do
+  sed -e "s|{{ ACR_LOGIN_SERVER }}|$ACR_LOGIN_SERVER|g" \
+      -e "s|{{ IMAGE_TAG }}|$IMAGE_TAG|g" \
+      "scenarios/05-eventhub/$f" | kubectl apply -n keda-demo -f -
+done
+```
 
 ### 4. Create the Kubernetes Secret
 
@@ -106,13 +136,11 @@ kubectl create secret generic azure-eventhub-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-## Steps
+## Validation Steps
 
 ```bash
-# 1. Apply the consumer Deployment, TriggerAuthentication and ScaledObject
-kubectl apply -f scenarios/05-eventhub/01-deployment.yaml -n keda-demo
-kubectl apply -f scenarios/05-eventhub/02-trigger-auth.yaml -n keda-demo
-kubectl apply -f scenarios/05-eventhub/03-scaled-object.yaml -n keda-demo
+# 1. Ensure resources are deployed (recommended via deploy.sh)
+./deploy.sh --demo eventhub --image-tag latest
 
 # 2. Verify 0 replicas (no lag — scaled to zero)
 kubectl get deployment eventhub-consumer -n keda-demo
@@ -123,8 +151,8 @@ kubectl get scaledobject eventhub-scaler -n keda-demo
 # 4. Watch pods in a second terminal
 kubectl get pods -n keda-demo -w
 
-# 5. Start producer — generates events continuously and triggers scale-out
-kubectl apply -f scenarios/05-eventhub/05-producer-deployment.yaml -n keda-demo
+# 5. Producer runs continuously and drives scale-out
+kubectl get deployment eventhub-producer -n keda-demo
 
 # 6. Watch KEDA scale the consumer out (up to 10 replicas)
 kubectl describe scaledobject eventhub-scaler -n keda-demo
@@ -134,7 +162,7 @@ kubectl get hpa -n keda-demo
 kubectl get deployment eventhub-consumer -n keda-demo -w
 
 # Optional: stop producer to let consumers fully drain backlog
-kubectl delete deployment eventhub-producer -n keda-demo
+kubectl scale deployment eventhub-producer -n keda-demo --replicas=0
 
 # 8. Cleanup
 kubectl delete -f scenarios/05-eventhub/ -n keda-demo
@@ -164,3 +192,25 @@ In a separate terminal, send test events using the Azure CLI or SDK.
 | 91–100 | 10 (capped) |
 
 Threshold is configured via `unprocessedEventThreshold: "10"` in `03-scaled-object.yaml`.
+
+## Troubleshooting
+
+If replicas do not scale down after stopping producer:
+1. Confirm scaler metric value reaches 0:
+
+```bash
+kubectl get --raw '/apis/external.metrics.k8s.io/v1beta1/namespaces/keda-demo/s0-azure-eventhub-$Default?labelSelector=scaledobject.keda.sh%2Fname%3Deventhub-scaler'
+```
+
+2. Confirm consumer is not in in-memory checkpoint mode:
+
+```bash
+kubectl logs deployment/eventhub-consumer -n keda-demo --tail=200 | grep -Ei 'checkpoint|in-memory'
+```
+
+3. Confirm checkpoint import in the running pod:
+
+```bash
+POD=$(kubectl get pods -n keda-demo -l app=eventhub-consumer -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n keda-demo "$POD" -- python -c "from azure.eventhub.extensions.checkpointstoreblob import BlobCheckpointStore; print('checkpoint-import-ok')"
+```
