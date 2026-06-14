@@ -36,6 +36,8 @@ spec:
         unprocessedEventThreshold: "10"
         # Blob container where the consumer app writes its checkpoints
         blobContainer: eventhub-checkpoints
+        # Python azure-eventhub v5 stores checkpoints in blob metadata.
+        checkpointStrategy: blobMetadata
         cloud: AzurePublicCloud
       authenticationRef:
         name: azure-eventhub-auth
