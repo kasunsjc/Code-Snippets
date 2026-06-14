@@ -54,36 +54,23 @@ This workflow:
 
 ## Prerequisites (Manual Path)
 
-### 1. Create the Event Hub namespace and hub
+### 1. Event Hub namespace/hub and checkpoint container are provisioned by Terraform
 
-The Terraform stack in this demo does not create an Event Hub namespace.
-Create one manually before running this scenario:
+When you run `./deploy.sh` (or `terraform apply`), this demo now provisions:
+1. Event Hub namespace
+2. Event Hub `keda-demo-hub`
+3. Storage checkpoint container (default: `eventhub-checkpoints`)
 
-```bash
-# Create Event Hub namespace
-az eventhubs namespace create \
-  --resource-group rg-aks-keda-demo \
-  --name <namespace-name> \
-  --location northeurope \
-  --sku Standard
-
-# Create the Event Hub (topic) with 4 partitions
-az eventhubs eventhub create \
-  --resource-group rg-aks-keda-demo \
-  --namespace-name <namespace-name> \
-  --name keda-demo-hub \
-  --partition-count 4 \
-  --message-retention 1
-```
-
-### 2. Create the checkpoint container
+You can verify the resolved names from Terraform outputs:
 
 ```bash
-az storage container create \
-  --name eventhub-checkpoints \
-  --account-name <storage-account-name> \
-  --auth-mode login
+terraform -chdir=terraform output eventhub_namespace_name
+terraform -chdir=terraform output eventhub_name
+terraform -chdir=terraform output storage_account_name
+terraform -chdir=terraform output checkpoint_container_name
 ```
+
+Only create these manually if you are intentionally bypassing Terraform and using existing Azure resources.
 
 ### 3. Build and push consumer and producer images
 
@@ -115,7 +102,7 @@ for f in 01-deployment.yaml 02-trigger-auth.yaml 03-scaled-object.yaml 05-produc
 done
 ```
 
-### 4. Create the Kubernetes Secret
+### 3. Create the Kubernetes Secret
 
 ```bash
 EH_CS=$(az eventhubs namespace authorization-rule keys list \
