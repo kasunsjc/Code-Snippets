@@ -95,6 +95,19 @@ module "acr" {
   tags                = var.tags
 }
 
+# Workload identity for the KEDA Prometheus scaler.
+# Allows KEDA to query Azure Managed Prometheus without a static bearer token.
+module "prometheus_workload_identity" {
+  source = "./modules/workload_identity"
+
+  name                    = "${var.cluster_name}-keda-prometheus"
+  resource_group_name     = azurerm_resource_group.this.name
+  location                = var.location
+  oidc_issuer_url         = module.aks.oidc_issuer_url
+  prometheus_workspace_id = module.monitoring.prometheus_workspace_id
+  tags                    = var.tags
+}
+
 resource "azurerm_role_assignment" "acr_pull" {
   scope                = module.acr.id
   role_definition_name = "AcrPull"

@@ -36,7 +36,7 @@ data:
                 body = (
                     "# HELP http_requests_total Total HTTP requests received\n"
                     "# TYPE http_requests_total counter\n"
-                    f'http_requests_total{{pod="{__import__("os").environ.get("HOSTNAME","unknown")}",namespace="keda-demo"}} {count}\n'
+                    f'http_requests_total {count}\n'
                     "# HELP uptime_seconds Application uptime in seconds\n"
                     "# TYPE uptime_seconds gauge\n"
                     f"uptime_seconds {uptime:.2f}\n"
@@ -82,11 +82,6 @@ spec:
       labels:
         app: sample-app
         scenario: prometheus
-      annotations:
-        # Prometheus scrape annotations (for basic Prometheus setups without ServiceMonitor CRD)
-        prometheus.io/scrape: "true"
-        prometheus.io/port:   "8080"
-        prometheus.io/path:   "/metrics"
     spec:
       containers:
         - name: sample-app

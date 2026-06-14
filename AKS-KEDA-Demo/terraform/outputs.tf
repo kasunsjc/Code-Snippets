@@ -62,6 +62,11 @@ output "prometheus_query_endpoint" {
   value = module.monitoring.prometheus_query_endpoint
 }
 
+output "prometheus_workload_identity_client_id" {
+  description = "Client ID of the managed identity used by the KEDA Prometheus scaler."
+  value       = module.prometheus_workload_identity.client_id
+}
+
 output "grafana_url" {
   value = module.monitoring.grafana_url
 }

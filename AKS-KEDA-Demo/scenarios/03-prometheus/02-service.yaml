@@ -18,18 +18,22 @@ spec:
       targetPort: 8080
   type: ClusterIP
 ---
-# ServiceMonitor — used by kube-prometheus-stack (Prometheus Operator) to auto-discover scrape targets.
-# Requires the Prometheus Operator CRD to be installed (see README).
-apiVersion: monitoring.coreos.com/v1
+# ServiceMonitor — scrape target for the Azure Monitor Agent (AMA).
+# Azure Managed Prometheus uses apiVersion: azmonitoring.coreos.com/v1
+# (NOT monitoring.coreos.com/v1 and NOT azuremonitor.microsoft.com/v1).
+# The CRD is installed automatically when the AKS monitoring add-on is enabled.
+apiVersion: azmonitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: sample-app-monitor
   namespace: keda-demo
   labels:
     app: sample-app
-    # This label must match the Prometheus Operator's serviceMonitorSelector
-    release: kube-prometheus
 spec:
+  # labelLimit fields are required by AMA — metrics exceeding these limits are dropped.
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
   selector:
     matchLabels:
       app: sample-app

@@ -1,37 +1,22 @@
 # ============================================================
 # Scenario 03 — Azure Managed Prometheus Authentication
 #
-# KEDA uses a bearer token to authenticate against the
-# Azure Managed Prometheus query endpoint.
+# Uses Azure AD Workload Identity — no static bearer tokens.
 #
-# Steps to populate the bearer token:
+# How it works (AKS managed KEDA add-on):
+#   The KEDA operator runs in kube-system as service account 'keda-operator'.
+#   Terraform provisions a federated identity credential that trusts
+#   system:serviceaccount:kube-system:keda-operator against the managed identity.
+#   KEDA exchanges that SA's projected token for a short-lived Azure AD token
+#   scoped to the managed identity, which has Monitoring Data Reader on the
+#   Azure Managed Prometheus workspace.
 #
-#   TOKEN=$(az account get-access-token \
-#     --resource https://prometheus.monitor.azure.com \
-#     --query accessToken -o tsv)
-#
-#   kubectl create secret generic azure-managed-prometheus-secret \
-#     --namespace keda-demo \
-#     --from-literal=bearerToken="$TOKEN" \
-#     --dry-run=client -o yaml | kubectl apply -f -
-#
-# Note: Access tokens expire after ~1 hour. For production use,
-# replace this with a solution that auto-refreshes tokens, such as
-# azure/azure-workload-identity sidecar or oauth2-proxy.
+# Prerequisites:
+#   Terraform has provisioned:
+#     - The managed identity (module.prometheus_workload_identity)
+#     - The federated credential (subject: kube-system:keda-operator)
+#     - Monitoring Data Reader role assignment on the Prometheus workspace
 # ============================================================
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: azure-managed-prometheus-secret
-  namespace: keda-demo
-  annotations:
-    # Placeholder — replace with a real token before applying.
-    # See the instructions in this file header.
-    demo/populate-with: "az account get-access-token --resource https://prometheus.monitor.azure.com"
-type: Opaque
-stringData:
-  bearerToken: "<REPLACE_WITH_TOKEN>"
 ---
 apiVersion: keda.sh/v1alpha1
 kind: TriggerAuthentication
@@ -39,7 +24,6 @@ metadata:
   name: azure-managed-prometheus-trigger-auth
   namespace: keda-demo
 spec:
-  secretTargetRef:
-    - parameter: bearerToken
-      name: azure-managed-prometheus-secret
-      key: bearerToken
+  podIdentity:
+    provider: azure-workload
+    identityId: "{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}"

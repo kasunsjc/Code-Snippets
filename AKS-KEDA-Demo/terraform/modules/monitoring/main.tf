@@ -5,6 +5,8 @@ resource "azapi_resource" "prometheus_workspace" {
   location  = var.location
   tags      = var.tags
   body      = jsonencode({})
+
+  response_export_values = ["properties.metrics.prometheusQueryEndpoint"]
 }
 
 locals {

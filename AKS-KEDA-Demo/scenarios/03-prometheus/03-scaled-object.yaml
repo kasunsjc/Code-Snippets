@@ -11,11 +11,10 @@
 #   queryResult =  0 req/s  →  scales to minReplicaCount (1)
 #
 # Prerequisites:
-#   - Apply 01-workload-identity.yaml (creates Service Account + Federated Credential)
-#   - Apply 02-trigger-auth.yaml (TriggerAuthentication using workload identity)
-#   - Replace <PROMETHEUS_QUERY_ENDPOINT> with the value from Bicep output:
-#       az deployment group show -g rg-aks-keda-demo -n aks-keda-deployment \
-#         --query properties.outputs.prometheusQueryEndpoint.value -o tsv
+#   - Apply 00-workload-identity.yaml (creates the annotated Service Account)
+#   - Apply 00-trigger-auth.yaml (TriggerAuthentication using workload identity)
+#   - The {{ PROMETHEUS_QUERY_ENDPOINT }} placeholder is substituted by deploy.sh
+#     from the Terraform output: prometheus_query_endpoint
 #
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -35,9 +34,8 @@ spec:
   triggers:
     - type: prometheus
       metadata:
-        # Azure Managed Prometheus query endpoint.
-        # Replace with: az deployment group show ... --query ...prometheusQueryEndpoint...
-        serverAddress: <PROMETHEUS_QUERY_ENDPOINT>
+        # Azure Managed Prometheus query endpoint — substituted by deploy.sh.
+        serverAddress: "{{ PROMETHEUS_QUERY_ENDPOINT }}"
 
         # PromQL query — sum RPS across all pods in the keda-demo namespace.
         query: 'sum(rate(http_requests_total{namespace="keda-demo"}[2m]))'
@@ -47,8 +45,5 @@ spec:
 
         # Target metric value per replica.
         threshold: "10"
-
-        # Azure AD authentication for Azure Managed Prometheus
-        authModes: "bearer"
       authenticationRef:
         name: azure-managed-prometheus-trigger-auth

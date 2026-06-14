@@ -1,11 +1,18 @@
-# Load Generator Job — sends 5000 HTTP requests to the sample-app Service.
-# This drives up the http_requests_total counter which Prometheus will scrape,
-# and KEDA will use to trigger scale-out.
+# Load Generator Deployment — continuously sends HTTP requests to sample-app.
 #
-# Apply:  kubectl apply -f 04-load-generator-job.yaml -n keda-demo
-# Logs:   kubectl logs job/load-generator -n keda-demo
-apiVersion: batch/v1
-kind: Job
+# Scale up to generate load and trigger KEDA scale-out:
+#   kubectl scale deployment load-generator -n keda-demo --replicas=5
+#
+# Scale down to zero to stop load and watch KEDA scale back in:
+#   kubectl scale deployment load-generator -n keda-demo --replicas=0
+#
+# Each replica sends ~20 concurrent requests in a tight loop.
+# At 5 replicas → ~100 req/s  →  ceil(100/10) = 10 replicas of sample-app
+# At 0 replicas → 0 req/s     →  scales back to minReplicaCount (1)
+#
+# Logs: kubectl logs -l app=load-generator -n keda-demo --prefix
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: load-generator
   namespace: keda-demo
@@ -13,12 +20,16 @@ metadata:
     app: load-generator
     scenario: prometheus
 spec:
+  replicas: 1    # Start at 1 — scale up manually to generate load
+  selector:
+    matchLabels:
+      app: load-generator
   template:
     metadata:
       labels:
         app: load-generator
+        scenario: prometheus
     spec:
-      restartPolicy: Never
       containers:
         - name: load-generator
           image: alpine:3.19
@@ -26,32 +37,23 @@ spec:
             - /bin/sh
             - -c
             - |
-              echo "=== Load Generator ==="
-              echo "Installing curl..."
+              echo "=== Load Generator starting ==="
               apk add --no-cache curl --quiet
 
               TARGET="http://sample-app-svc.keda-demo.svc.cluster.local"
-              TOTAL=5000
-              CONCURRENT=20
+              CONCURRENT=30
 
-              echo "Sending ${TOTAL} requests to ${TARGET} (${CONCURRENT} at a time)..."
-              sent=0
-              while [ $sent -lt $TOTAL ]; do
-                # Fire CONCURRENT requests in parallel
+              echo "Sending ${CONCURRENT} concurrent requests to ${TARGET} in a loop..."
+              while true; do
                 for i in $(seq 1 $CONCURRENT); do
                   curl -s "$TARGET" -o /dev/null &
                 done
                 wait
-                sent=$((sent + CONCURRENT))
-                echo "  Progress: ${sent}/${TOTAL} requests sent"
               done
-              echo "Load generation complete. Watching KEDA scale down in ~90s..."
           resources:
             requests:
-              cpu: "200m"
-              memory: "64Mi"
+              cpu: "100m"
+              memory: "32Mi"
             limits:
-              cpu: "500m"
-              memory: "128Mi"
-  backoffLimit: 2
-  ttlSecondsAfterFinished: 300
+              cpu: "300m"
+              memory: "64Mi"
