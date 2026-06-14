@@ -11,8 +11,8 @@ metadata:
   name: eventhub-producer-config
   namespace: keda-demo
 data:
-  EVENT_INTERVAL_SECONDS: "2"
-  BATCH_SIZE: "1"
+  EVENT_INTERVAL_SECONDS: "0.2"
+  BATCH_SIZE: "10"
   LOG_LEVEL: "INFO"
 
 ---
