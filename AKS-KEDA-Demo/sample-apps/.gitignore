@@ -1,0 +1,4 @@
+# Ignore other environment patterns if needed
+.env.local
+.env.*.local
+.env

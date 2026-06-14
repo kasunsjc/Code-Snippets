@@ -34,6 +34,24 @@ variable "node_vm_size" {
   default     = "Standard_D2s_v4"
 }
 
+variable "enable_node_autoscaling" {
+  description = "Enable AKS cluster autoscaler for the system node pool."
+  type        = bool
+  default     = true
+}
+
+variable "node_min_count" {
+  description = "Minimum node count for AKS system node pool when autoscaling is enabled."
+  type        = number
+  default     = 1
+}
+
+variable "node_max_count" {
+  description = "Maximum node count for AKS system node pool when autoscaling is enabled."
+  type        = number
+  default     = 5
+}
+
 variable "user_object_id" {
   description = "Optional Entra ID object ID for Grafana Admin and AKS RBAC Cluster Admin role assignments."
   type        = string

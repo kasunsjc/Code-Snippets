@@ -22,6 +22,21 @@ variable "node_vm_size" {
   type = string
 }
 
+variable "enable_node_autoscaling" {
+  type    = bool
+  default = true
+}
+
+variable "node_min_count" {
+  type    = number
+  default = 1
+}
+
+variable "node_max_count" {
+  type    = number
+  default = 5
+}
+
 variable "node_resource_group_name" {
   type = string
 }

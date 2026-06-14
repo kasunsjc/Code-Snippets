@@ -1,19 +1,41 @@
 # =======================================================
 # AKS KEDA Demo — Sample Apps
 #
-# Runs both consumer apps locally for testing.
+# Runs producer and consumer apps locally for testing.
 # 1. Copy .env.example to .env and fill in your values.
 # 2. docker compose up --build
+#
+# Producers simulate load, consumers process messages.
 # =======================================================
 
 services:
   # ─────────────────────────────────────────────────────
-  # Scenario 01 — Azure Storage Queue consumer
+  # Scenario 01 — Storage Queue Producer
+  # ─────────────────────────────────────────────────────
+  storage-queue-producer:
+    build:
+      context: ./storage-queue-producer
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: storage-queue-producer
+    restart: unless-stopped
+    environment:
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      QUEUE_NAME: ${QUEUE_NAME:-keda-demo-queue}
+      MESSAGE_INTERVAL_SECONDS: ${MESSAGE_INTERVAL_SECONDS:-2}
+      BATCH_SIZE: ${BATCH_SIZE:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - storage-queue-consumer
+
+  # ─────────────────────────────────────────────────────
+  # Scenario 01 — Storage Queue Consumer
   # ─────────────────────────────────────────────────────
   storage-queue-consumer:
     build:
       context: ./storage-queue-consumer
       dockerfile: Dockerfile
+    platform: linux/amd64
     container_name: storage-queue-consumer
     restart: unless-stopped
     environment:
@@ -24,12 +46,32 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
   # ─────────────────────────────────────────────────────
-  # Scenario 05 — Azure Event Hub consumer
+  # Scenario 05 — Event Hub Producer
+  # ─────────────────────────────────────────────────────
+  eventhub-producer:
+    build:
+      context: ./eventhub-producer
+      dockerfile: Dockerfile
+    platform: linux/amd64
+    container_name: eventhub-producer
+    restart: unless-stopped
+    environment:
+      AZURE_EVENTHUB_CONNECTION_STRING: ${AZURE_EVENTHUB_CONNECTION_STRING}
+      EVENTHUB_NAME: ${EVENTHUB_NAME:-keda-demo-hub}
+      EVENT_INTERVAL_SECONDS: ${EVENT_INTERVAL_SECONDS:-2}
+      BATCH_SIZE: ${BATCH_SIZE:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - eventhub-consumer
+
+  # ─────────────────────────────────────────────────────
+  # Scenario 05 — Event Hub Consumer
   # ─────────────────────────────────────────────────────
   eventhub-consumer:
     build:
       context: ./eventhub-consumer
       dockerfile: Dockerfile
+    platform: linux/amd64
     container_name: eventhub-consumer
     restart: unless-stopped
     environment:

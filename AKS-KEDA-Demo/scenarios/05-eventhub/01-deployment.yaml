@@ -23,7 +23,7 @@ spec:
           #   docker build -t <YOUR_ACR>.azurecr.io/eventhub-consumer:latest \
           #     sample-apps/eventhub-consumer/
           #   docker push <YOUR_ACR>.azurecr.io/eventhub-consumer:latest
-          image: <YOUR_ACR>.azurecr.io/eventhub-consumer:latest
+          image: "{{ ACR_LOGIN_SERVER }}/eventhub-consumer:{{ IMAGE_TAG }}"
           imagePullPolicy: Always
           env:
             - name: AZURE_EVENTHUB_CONNECTION_STRING

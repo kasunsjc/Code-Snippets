@@ -55,6 +55,9 @@ module "aks" {
   resource_group_name        = azurerm_resource_group.this.name
   kubernetes_version         = var.kubernetes_version
   node_count                 = var.node_count
+  enable_node_autoscaling    = var.enable_node_autoscaling
+  node_min_count             = var.node_min_count
+  node_max_count             = var.node_max_count
   node_vm_size               = var.node_vm_size
   node_resource_group_name   = local.node_resource_group_name
   log_analytics_workspace_id = module.log_analytics.workspace_id

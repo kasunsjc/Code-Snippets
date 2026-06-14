@@ -8,8 +8,8 @@ KEDA scales the consumer `Deployment` out. When the consumer catches up, KEDA sc
 back in — including to **zero** when there is no lag.
 
 ```
-Producer Job  ──▶  Azure Event Hub  ──▶  KEDA reads checkpoint lag
-(100 events)       (partitioned log)           │
+Producer Deployment  ──▶  Azure Event Hub  ──▶  KEDA reads checkpoint lag
+(continuous load)       (partitioned log)           │
                                      ScaledObject adjusts replicas
                                                │
                                      eventhub-consumer Deployment
@@ -36,7 +36,7 @@ the consumer must point at the **same** storage container.
 | `01-deployment.yaml` | Consumer Deployment (starts at 0 replicas) |
 | `02-trigger-auth.yaml` | `TriggerAuthentication` — Event Hub + Storage connection strings |
 | `03-scaled-object.yaml` | `ScaledObject` — scale when unprocessed events > 10/replica |
-| `04-producer-job.yaml` | `Job` that sends 100 events to trigger scale-out |
+| `05-producer-deployment.yaml` | Continuous producer Deployment to generate load |
 
 ## Prerequisites
 
@@ -123,8 +123,8 @@ kubectl get scaledobject eventhub-scaler -n keda-demo
 # 4. Watch pods in a second terminal
 kubectl get pods -n keda-demo -w
 
-# 5. Send 100 events — triggers scale-out
-kubectl apply -f scenarios/05-eventhub/04-producer-job.yaml -n keda-demo
+# 5. Start producer — generates events continuously and triggers scale-out
+kubectl apply -f scenarios/05-eventhub/05-producer-deployment.yaml -n keda-demo
 
 # 6. Watch KEDA scale the consumer out (up to 10 replicas)
 kubectl describe scaledobject eventhub-scaler -n keda-demo
@@ -132,6 +132,9 @@ kubectl get hpa -n keda-demo
 
 # 7. After events are processed, watch replicas scale back to zero
 kubectl get deployment eventhub-consumer -n keda-demo -w
+
+# Optional: stop producer to let consumers fully drain backlog
+kubectl delete deployment eventhub-producer -n keda-demo
 
 # 8. Cleanup
 kubectl delete -f scenarios/05-eventhub/ -n keda-demo

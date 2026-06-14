@@ -17,6 +17,10 @@ resource "azapi_resource" "grafana" {
   parent_id = var.resource_group_id
   location  = var.location
   tags      = var.tags
+  response_export_values = [
+    "identity.principalId",
+    "properties.endpoint"
+  ]
 
   identity {
     type = "SystemAssigned"
@@ -96,15 +100,19 @@ resource "azapi_resource" "dcr" {
 }
 
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {
-  scope                = azapi_resource.prometheus_workspace.id
-  role_definition_name = "Monitoring Reader"
-  principal_id         = local.grafana_principal_id
+  depends_on                       = [azapi_resource.grafana]
+  scope                            = azapi_resource.prometheus_workspace.id
+  role_definition_name             = "Monitoring Reader"
+  principal_id                     = local.grafana_principal_id
+  skip_service_principal_aad_check = true
 }
 
 resource "azurerm_role_assignment" "grafana_monitoring_data_reader" {
-  scope                = azapi_resource.prometheus_workspace.id
-  role_definition_name = "Monitoring Data Reader"
-  principal_id         = local.grafana_principal_id
+  depends_on                       = [azapi_resource.grafana]
+  scope                            = azapi_resource.prometheus_workspace.id
+  role_definition_name             = "Monitoring Data Reader"
+  principal_id                     = local.grafana_principal_id
+  skip_service_principal_aad_check = true
 }
 
 resource "azurerm_role_assignment" "grafana_admin_user" {

@@ -26,7 +26,7 @@ spec:
   pollingInterval: 15                 # Seconds between trigger polls
 
   triggers:
-    - type: azure-event-hubs
+    - type: azure-eventhub
       metadata:
         # Name of the Event Hub (topic) to monitor
         eventHubName: keda-demo-hub

@@ -1,0 +1,73 @@
+# Continuous producer — sends events to the Azure Event Hub at a steady rate.
+# This keeps a constant load on the hub so you can observe KEDA scaling the consumer.
+#
+# Adjust EVENT_INTERVAL_SECONDS in the ConfigMap to change the rate:
+#   kubectl set env deployment/eventhub-producer EVENT_INTERVAL_SECONDS=1 -n keda-demo
+#
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eventhub-producer-config
+  namespace: keda-demo
+data:
+  EVENT_INTERVAL_SECONDS: "2"
+  BATCH_SIZE: "1"
+  LOG_LEVEL: "INFO"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventhub-producer
+  namespace: keda-demo
+  labels:
+    app: eventhub-producer
+    scenario: eventhub
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: eventhub-producer
+  template:
+    metadata:
+      labels:
+        app: eventhub-producer
+        scenario: eventhub
+    spec:
+      containers:
+      - name: producer
+        image: "{{ ACR_LOGIN_SERVER }}/eventhub-producer:{{ IMAGE_TAG }}"
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: eventhub-producer-config
+        env:
+        - name: AZURE_EVENTHUB_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: azure-eventhub-secret
+              key: eventhub-connection-string
+        - name: EVENTHUB_NAME
+          value: "keda-demo-hub"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - "cat /proc/1/cmdline | grep -q producer.py"
+          initialDelaySeconds: 30
+          periodSeconds: 60
+      restartPolicy: Always
