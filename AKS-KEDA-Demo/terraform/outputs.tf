@@ -22,6 +22,10 @@ output "storage_queue_name" {
   value = module.storage.storage_queue_name
 }
 
+output "checkpoint_container_name" {
+  value = module.storage.checkpoint_container_name
+}
+
 output "storage_connection_string" {
   description = "WARNING: Demo-only output. Exposes storage account connection string in plaintext. Not recommended for production."
   value       = nonsensitive(module.storage.primary_connection_string)
@@ -50,7 +54,7 @@ output "sample_apps_env" {
     CONSUMER_GROUP                             = "$Default"
     STARTING_POSITION                          = "@latest"
     AZURE_STORAGE_CHECKPOINT_CONNECTION_STRING = nonsensitive(module.storage.primary_connection_string)
-    CHECKPOINT_CONTAINER_NAME                  = "eventhub-checkpoints"
+    CHECKPOINT_CONTAINER_NAME                  = module.storage.checkpoint_container_name
   }
 }
 

@@ -46,7 +46,7 @@ spec:
                   name: azure-eventhub-secret
                   key: storage-connection-string
             - name: CHECKPOINT_CONTAINER_NAME
-              value: "eventhub-checkpoints"
+              value: "{{ CHECKPOINT_CONTAINER_NAME }}"
             - name: LOG_LEVEL
               value: "INFO"
           resources:

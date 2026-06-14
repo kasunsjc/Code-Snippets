@@ -15,6 +15,11 @@ variable "queue_name" {
   default = "keda-demo-queue"
 }
 
+variable "checkpoint_container_name" {
+  type    = string
+  default = "eventhub-checkpoints"
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

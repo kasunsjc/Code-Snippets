@@ -35,7 +35,7 @@ spec:
         # Scale 1 replica for every N unprocessed events (across all partitions)
         unprocessedEventThreshold: "10"
         # Blob container where the consumer app writes its checkpoints
-        blobContainer: eventhub-checkpoints
+        blobContainer: "{{ CHECKPOINT_CONTAINER_NAME }}"
         # Python azure-eventhub v5 stores checkpoints in blob metadata.
         checkpointStrategy: blobMetadata
         cloud: AzurePublicCloud

@@ -132,6 +132,7 @@ OIDC_ISSUER=$(tf_out oidc_issuer_url)
 GRAFANA_URL=$(tf_out grafana_url)
 PROMETHEUS_ENDPOINT=$(tf_out prometheus_query_endpoint)
 ACR_LOGIN_SERVER=$(tf_out acr_login_server)
+CHECKPOINT_CONTAINER_NAME=$(tf_out checkpoint_container_name)
 
 echo "  AKS cluster          : $AKS_NAME"
 echo "  Storage account      : $STORAGE_ACCOUNT"
@@ -141,6 +142,7 @@ echo "  OIDC issuer          : $OIDC_ISSUER"
 echo "  Grafana URL          : $GRAFANA_URL"
 echo "  Prometheus endpoint  : $PROMETHEUS_ENDPOINT"
 echo "  ACR login server     : $ACR_LOGIN_SERVER"
+echo "  Checkpoint container : $CHECKPOINT_CONTAINER_NAME"
 
 echo ""
 echo "[4/6] Fetching AKS credentials..."
@@ -232,6 +234,7 @@ if [[ "$DEMO" != "none" ]]; then
     local file_path="$1"
     sed \
       -e "s|{{ ACR_LOGIN_SERVER }}|$ACR_LOGIN_SERVER|g" \
+      -e "s|{{ CHECKPOINT_CONTAINER_NAME }}|$CHECKPOINT_CONTAINER_NAME|g" \
       -e "s|{{ IMAGE_TAG }}|$IMAGE_TAG|g" \
       "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -
   }

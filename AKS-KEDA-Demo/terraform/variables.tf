@@ -75,6 +75,12 @@ variable "acr_sku" {
   }
 }
 
+variable "checkpoint_container_name" {
+  description = "Blob container name used by Event Hub consumer checkpoints."
+  type        = string
+  default     = "eventhub-checkpoints"
+}
+
 variable "tags" {
   description = "Tags applied to all resources."
   type        = map(string)

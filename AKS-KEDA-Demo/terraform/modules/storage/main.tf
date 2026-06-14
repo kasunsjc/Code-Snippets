@@ -23,3 +23,10 @@ resource "azurerm_storage_queue" "this" {
   storage_account_name = azurerm_storage_account.this.name
   depends_on           = [time_sleep.wait_for_storage_dns]
 }
+
+resource "azurerm_storage_container" "checkpoint" {
+  name                  = var.checkpoint_container_name
+  storage_account_name  = azurerm_storage_account.this.name
+  container_access_type = "private"
+  depends_on            = [time_sleep.wait_for_storage_dns]
+}
