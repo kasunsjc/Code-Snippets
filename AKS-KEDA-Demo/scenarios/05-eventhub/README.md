@@ -52,7 +52,9 @@ This workflow:
 3. Substitutes `{{ ACR_LOGIN_SERVER }}` and `{{ IMAGE_TAG }}`.
 4. Applies Event Hub manifests and secrets.
 
-## Prerequisites (Manual Path)
+## Optional Manual Deployment Path
+
+Use this section only when you are not using `./deploy.sh --demo eventhub --image-tag <tag>`.
 
 ### 1. Event Hub namespace/hub and checkpoint container are provisioned by Terraform
 
@@ -72,7 +74,7 @@ terraform -chdir=terraform output checkpoint_container_name
 
 Only create these manually if you are intentionally bypassing Terraform and using existing Azure resources.
 
-### 3. Build and push consumer and producer images
+### 2. Build and push consumer and producer images
 
 ```bash
 # Build consumer
@@ -94,9 +96,11 @@ Do not apply templated manifests directly. Render them with substitution:
 ```bash
 ACR_LOGIN_SERVER=<YOUR_ACR>.azurecr.io
 IMAGE_TAG=latest
+CHECKPOINT_CONTAINER_NAME=$(terraform -chdir=terraform output -raw checkpoint_container_name)
 
 for f in 01-deployment.yaml 02-trigger-auth.yaml 03-scaled-object.yaml 05-producer-deployment.yaml; do
   sed -e "s|{{ ACR_LOGIN_SERVER }}|$ACR_LOGIN_SERVER|g" \
+      -e "s|{{ CHECKPOINT_CONTAINER_NAME }}|$CHECKPOINT_CONTAINER_NAME|g" \
       -e "s|{{ IMAGE_TAG }}|$IMAGE_TAG|g" \
       "scenarios/05-eventhub/$f" | kubectl apply -n keda-demo -f -
 done
@@ -104,15 +108,22 @@ done
 
 ### 3. Create the Kubernetes Secret
 
+Use names from Terraform outputs to avoid mismatches:
+
+```bash
+EH_NAMESPACE=$(terraform -chdir=terraform output -raw eventhub_namespace_name)
+STORAGE_ACCOUNT=$(terraform -chdir=terraform output -raw storage_account_name)
+```
+
 ```bash
 EH_CS=$(az eventhubs namespace authorization-rule keys list \
   --resource-group rg-aks-keda-demo \
-  --namespace-name <namespace-name> \
+  --namespace-name "$EH_NAMESPACE" \
   --name RootManageSharedAccessKey \
   --query primaryConnectionString -o tsv)
 
 ST_CS=$(az storage account show-connection-string \
-  --name <storage-account-name> \
+  --name "$STORAGE_ACCOUNT" \
   --resource-group rg-aks-keda-demo \
   --query connectionString -o tsv)
 
