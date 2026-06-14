@@ -3,6 +3,66 @@
 *.pem
 *.key
 *.pfx
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
 /.idea/
 /.vscode/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+
+# Bicep / ARM
+*.compiled.bicep
+
+# Kubernetes secrets
+*-secret.yaml
+*-secrets.yaml
+
+# Logs
+*.log
+logs/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Azure CLI
+.azure/
+azuredeploy.parameters.local.json
+
+# SSH keys
+*.pub
+id_rsa
+id_ed25519
