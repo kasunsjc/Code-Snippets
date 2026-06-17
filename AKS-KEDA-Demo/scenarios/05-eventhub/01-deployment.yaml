@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eventhub-consumer
+  namespace: keda-demo
+  labels:
+    app: eventhub-consumer
+    scenario: eventhub
+spec:
+  replicas: 0    # KEDA owns replica count — starts at zero
+  selector:
+    matchLabels:
+      app: eventhub-consumer
+  template:
+    metadata:
+      labels:
+        app: eventhub-consumer
+        scenario: eventhub
+    spec:
+      containers:
+        - name: eventhub-consumer
+          # Build from sample-apps/eventhub-consumer/ and push to your registry:
+          #   docker build -t <YOUR_ACR>.azurecr.io/eventhub-consumer:latest \
+          #     sample-apps/eventhub-consumer/
+          #   docker push <YOUR_ACR>.azurecr.io/eventhub-consumer:latest
+          image: "{{ ACR_LOGIN_SERVER }}/eventhub-consumer:{{ IMAGE_TAG }}"
+          imagePullPolicy: Always
+          env:
+            - name: AZURE_EVENTHUB_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-eventhub-secret
+                  key: eventhub-connection-string
+            - name: EVENTHUB_NAME
+              value: "keda-demo-hub"
+            - name: CONSUMER_GROUP
+              value: "$Default"
+            # Start from @latest so the consumer only reads new events.
+            # Change to "-1" to replay from the beginning of the retention window.
+            - name: STARTING_POSITION
+              value: "@latest"
+            # Blob Storage checkpoint store — required for KEDA lag measurement
+            - name: AZURE_STORAGE_CHECKPOINT_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-eventhub-secret
+                  key: storage-connection-string
+            - name: CHECKPOINT_CONTAINER_NAME
+              value: "{{ CHECKPOINT_CONTAINER_NAME }}"
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

@@ -1,0 +1,50 @@
+# ScaledObject with CPU + Memory triggers.
+#
+# Both triggers run simultaneously — KEDA picks the HIGHEST desired replica count.
+#
+# metricType options:
+#   Utilization  — percentage of the container's CPU/memory *request* (like HPA)
+#   AverageValue — absolute average per pod (e.g. "150m" CPU)
+#   Value        — total across all pods
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: cpu-memory-scaler
+  namespace: keda-demo
+spec:
+  scaleTargetRef:
+    name: cpu-app
+
+  # Note: cpu/memory scalers require minReplicaCount >= 1
+  # because the Kubernetes metrics-server cannot report metrics for 0 pods.
+  minReplicaCount: 1
+  maxReplicaCount: 8
+
+  cooldownPeriod: 60
+  pollingInterval: 15
+
+  advanced:
+    # Stabilization windows prevent rapid scale-down flapping.
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+          policies:
+            - type: Percent
+              value: 50          # Scale down max 50% of pods at a time
+              periodSeconds: 30
+
+  triggers:
+    # ----- CPU trigger -----
+    - type: cpu
+      # Utilization: target average CPU usage (as % of requests) across all pods
+      metricType: Utilization
+      metadata:
+        value: "50"              # Scale out when average CPU > 50% of request (50m)
+
+    # ----- Memory trigger -----
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "70"              # Scale out when average memory > 70% of request (44Mi)

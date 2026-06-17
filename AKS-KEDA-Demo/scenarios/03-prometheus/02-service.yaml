@@ -1,0 +1,46 @@
+---
+# ClusterIP Service — used by KEDA and the load generator to reach the app
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-svc
+  namespace: keda-demo
+  labels:
+    app: sample-app
+    scenario: prometheus
+spec:
+  selector:
+    app: sample-app
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP
+---
+# ServiceMonitor — scrape target for the Azure Monitor Agent (AMA).
+# Azure Managed Prometheus uses apiVersion: azmonitoring.coreos.com/v1
+# (NOT monitoring.coreos.com/v1 and NOT azuremonitor.microsoft.com/v1).
+# The CRD is installed automatically when the AKS monitoring add-on is enabled.
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: sample-app-monitor
+  namespace: keda-demo
+  labels:
+    app: sample-app
+spec:
+  # labelLimit fields are required by AMA — metrics exceeding these limits are dropped.
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  selector:
+    matchLabels:
+      app: sample-app
+  namespaceSelector:
+    matchNames:
+      - keda-demo
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

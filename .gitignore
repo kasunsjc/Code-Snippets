@@ -33,6 +33,7 @@ terraform.rc
 .terraform.lock.hcl
 terraform.tfvars
 *.auto.tfvars
+**/crash.log
 
 # Bicep / ARM
 *.compiled.bicep

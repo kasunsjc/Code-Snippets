@@ -1,0 +1,45 @@
+# ScaledObject is the core KEDA resource.
+# It watches the Azure Storage Queue and adjusts the replica count
+# of the 'queue-consumer' Deployment accordingly.
+#
+#  Queue length  |  Replicas
+#  ─────────────────────────
+#       0        |     0   (scale-to-zero — no cost!)
+#     1–5        |     1
+#     6–10       |     2
+#    46–50       |    10   (capped at maxReplicaCount)
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: storage-queue-scaler
+  namespace: keda-demo
+spec:
+  # ------ Target ------
+  scaleTargetRef:
+    name: queue-consumer          # Deployment to scale
+
+  # ------ Replica bounds ------
+  minReplicaCount: 0              # Allow scale-to-zero
+  maxReplicaCount: 10
+
+  # ------ Cooldown ------
+  # Wait 60s before scaling down to avoid flapping
+  cooldownPeriod: 60
+  # How often KEDA polls the trigger (seconds)
+  pollingInterval: 15
+
+  # ------ Triggers ------
+  triggers:
+    - type: azure-queue
+      metadata:
+        # Name of the Azure Storage Queue to watch
+        queueName: keda-demo-queue
+        # Scale 1 replica per this many messages in the queue
+        queueLength: "5"
+        # Storage account name (KEDA resolves endpoint from the connection string)
+        accountName: ""           # Not required when using connection string auth
+        cloud: AzurePublicCloud
+      # Reference the TriggerAuthentication that holds the connection string
+      authenticationRef:
+        name: azure-queue-auth

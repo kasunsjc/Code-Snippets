@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: queue-consumer
+  namespace: keda-demo
+  labels:
+    app: queue-consumer
+    scenario: storage-queue
+spec:
+  # KEDA manages replica count via the ScaledObject.
+  # Setting replicas: 0 here means it starts scaled-to-zero.
+  replicas: 0
+  selector:
+    matchLabels:
+      app: queue-consumer
+  template:
+    metadata:
+      labels:
+        app: queue-consumer
+        scenario: storage-queue
+    spec:
+      containers:
+        - name: queue-consumer
+          image: "{{ ACR_LOGIN_SERVER }}/storage-queue-consumer:{{ IMAGE_TAG }}"
+          imagePullPolicy: Always
+          env:
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: azure-storage-secret
+                  key: connection-string
+            - name: QUEUE_NAME
+              value: "keda-demo-queue"
+            - name: POLL_INTERVAL_SECONDS
+              value: "5"
+            - name: MAX_MESSAGES_PER_POLL
+              value: "32"
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - "cat /proc/1/cmdline | grep -q app.py"
+            initialDelaySeconds: 30
+            periodSeconds: 60

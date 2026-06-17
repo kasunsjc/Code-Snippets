@@ -1,0 +1,19 @@
+resource_group_name = "rg-aks-keda-demo"
+location            = "northeurope"
+cluster_name        = "aks-keda-demo"
+kubernetes_version  = "1.35"
+node_count          = 2
+node_vm_size        = "Standard_D2s_v4"
+
+# Optional: set your user object id for role assignments.
+# user_object_id = "00000000-0000-0000-0000-000000000000"
+
+# Optional: if empty, Terraform generates a globally unique ACR name.
+acr_name = ""
+acr_sku  = "Basic"
+
+tags = {
+  Environment = "Demo"
+  Project     = "AKS-KEDA"
+  ManagedBy   = "Terraform"
+}

@@ -1,0 +1,13 @@
+# TriggerAuthentication tells KEDA how to authenticate with Azure Storage.
+# It references a K8s Secret and maps the 'connection' parameter
+# used by the azure-queue trigger.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: azure-queue-auth
+  namespace: keda-demo
+spec:
+  secretTargetRef:
+    - parameter: connection        # KEDA azure-queue trigger parameter name
+      name: azure-storage-secret   # K8s Secret name
+      key: connection-string       # Key inside the Secret

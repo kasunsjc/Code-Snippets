@@ -1,0 +1,29 @@
+# ============================================================
+# Scenario 03 — Azure Managed Prometheus Authentication
+#
+# Uses Azure AD Workload Identity — no static bearer tokens.
+#
+# How it works (AKS managed KEDA add-on):
+#   The KEDA operator runs in kube-system as service account 'keda-operator'.
+#   Terraform provisions a federated identity credential that trusts
+#   system:serviceaccount:kube-system:keda-operator against the managed identity.
+#   KEDA exchanges that SA's projected token for a short-lived Azure AD token
+#   scoped to the managed identity, which has Monitoring Data Reader on the
+#   Azure Managed Prometheus workspace.
+#
+# Prerequisites:
+#   Terraform has provisioned:
+#     - The managed identity (module.prometheus_workload_identity)
+#     - The federated credential (subject: kube-system:keda-operator)
+#     - Monitoring Data Reader role assignment on the Prometheus workspace
+# ============================================================
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: azure-managed-prometheus-trigger-auth
+  namespace: keda-demo
+spec:
+  podIdentity:
+    provider: azure-workload
+    identityId: "{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}"

@@ -1,0 +1,59 @@
+# Load Generator Deployment — continuously sends HTTP requests to sample-app.
+#
+# Scale up to generate load and trigger KEDA scale-out:
+#   kubectl scale deployment load-generator -n keda-demo --replicas=5
+#
+# Scale down to zero to stop load and watch KEDA scale back in:
+#   kubectl scale deployment load-generator -n keda-demo --replicas=0
+#
+# Each replica sends ~20 concurrent requests in a tight loop.
+# At 5 replicas → ~100 req/s  →  ceil(100/10) = 10 replicas of sample-app
+# At 0 replicas → 0 req/s     →  scales back to minReplicaCount (1)
+#
+# Logs: kubectl logs -l app=load-generator -n keda-demo --prefix
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-generator
+  namespace: keda-demo
+  labels:
+    app: load-generator
+    scenario: prometheus
+spec:
+  replicas: 1    # Start at 1 — scale up manually to generate load
+  selector:
+    matchLabels:
+      app: load-generator
+  template:
+    metadata:
+      labels:
+        app: load-generator
+        scenario: prometheus
+    spec:
+      containers:
+        - name: load-generator
+          image: alpine:3.19
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "=== Load Generator starting ==="
+              apk add --no-cache curl --quiet
+
+              TARGET="http://sample-app-svc.keda-demo.svc.cluster.local"
+              CONCURRENT=30
+
+              echo "Sending ${CONCURRENT} concurrent requests to ${TARGET} in a loop..."
+              while true; do
+                for i in $(seq 1 $CONCURRENT); do
+                  curl -s "$TARGET" -o /dev/null &
+                done
+                wait
+              done
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "32Mi"
+            limits:
+              cpu: "300m"
+              memory: "64Mi"

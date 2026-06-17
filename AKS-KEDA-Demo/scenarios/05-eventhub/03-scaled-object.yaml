@@ -1,0 +1,43 @@
+# ScaledObject for Azure Event Hub.
+# KEDA reads the per-partition checkpoint offsets from the Blob Storage
+# container and compares them to the latest sequence numbers to calculate
+# unprocessed (lag) events per consumer group.
+#
+#  Unprocessed events  |  Replicas
+#  ────────────────────────────────
+#          0           |     0   (scale-to-zero)
+#         1–10         |     1
+#        11–20         |     2
+#        91–100        |    10   (capped)
+#
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: eventhub-scaler
+  namespace: keda-demo
+spec:
+  scaleTargetRef:
+    name: eventhub-consumer           # Deployment to scale
+
+  minReplicaCount: 0                  # Allow scale-to-zero
+  maxReplicaCount: 10
+
+  cooldownPeriod: 60                  # Seconds before scaling down
+  pollingInterval: 15                 # Seconds between trigger polls
+
+  triggers:
+    - type: azure-eventhub
+      metadata:
+        # Name of the Event Hub (topic) to monitor
+        eventHubName: keda-demo-hub
+        # Consumer group whose lag is measured
+        consumerGroup: $Default
+        # Scale 1 replica for every N unprocessed events (across all partitions)
+        unprocessedEventThreshold: "10"
+        # Blob container where the consumer app writes its checkpoints
+        blobContainer: "{{ CHECKPOINT_CONTAINER_NAME }}"
+        # Python azure-eventhub v5 stores checkpoints in blob metadata.
+        checkpointStrategy: blobMetadata
+        cloud: AzurePublicCloud
+      authenticationRef:
+        name: azure-eventhub-auth
