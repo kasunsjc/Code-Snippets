@@ -46,7 +46,7 @@ resource "azapi_resource" "grafana" {
 }
 
 locals {
-  grafana_principal_id = try(jsondecode(azapi_resource.grafana.output).identity.principalId, "")
+  grafana_principal_id = try(azapi_resource.grafana.output.identity.principalId, "")
 }
 
 resource "azapi_resource" "dce" {

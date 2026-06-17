@@ -119,12 +119,12 @@ resource "azapi_resource" "dcr_association" {
   name      = "MSProm-${var.cluster_name}"
   parent_id = module.aks.cluster_id
 
-  body = jsonencode({
+  body = {
     properties = {
       dataCollectionRuleId = module.monitoring.data_collection_rule_id
       description          = "Association of Data Collection Rule for Azure Managed Prometheus"
     }
-  })
+  }
 }
 
 resource "azapi_resource" "node_recording_rules" {
@@ -134,7 +134,7 @@ resource "azapi_resource" "node_recording_rules" {
   location                  = var.location
   schema_validation_enabled = false
 
-  body = jsonencode({
+  body = {
     properties = {
       description = "Prometheus recording rules for node metrics"
       scopes = [
@@ -158,7 +158,7 @@ resource "azapi_resource" "node_recording_rules" {
         { record = "instance:node_network_transmit_drop_excluding_lo:rate5m", expression = "sum without (device) (rate(node_network_transmit_drop_total{job=\"node\", device!=\"lo\"}[5m]))" }
       ]
     }
-  })
+  }
 }
 
 resource "azapi_resource" "kubernetes_recording_rules" {
@@ -168,7 +168,7 @@ resource "azapi_resource" "kubernetes_recording_rules" {
   location                  = var.location
   schema_validation_enabled = false
 
-  body = jsonencode({
+  body = {
     properties = {
       description = "Prometheus recording rules for Kubernetes resources"
       scopes = [
@@ -192,7 +192,7 @@ resource "azapi_resource" "kubernetes_recording_rules" {
         { record = "cluster:node_cpu:ratio_rate5m", expression = "sum(rate(node_cpu_seconds_total{job=\"node\",mode!=\"idle\",mode!=\"iowait\",mode!=\"steal\"}[5m])) by (cluster) / count(sum(node_cpu_seconds_total{job=\"node\"}) by (cluster, instance, cpu)) by (cluster)" }
       ]
     }
-  })
+  }
 }
 
 resource "azapi_resource" "ux_recording_rules" {
@@ -202,7 +202,7 @@ resource "azapi_resource" "ux_recording_rules" {
   location                  = var.location
   schema_validation_enabled = false
 
-  body = jsonencode({
+  body = {
     properties = {
       description = "UX recording rules for AKS monitoring dashboards"
       scopes = [
@@ -287,5 +287,5 @@ resource "azapi_resource" "ux_recording_rules" {
         }
       ]
     }
-  })
+  }
 }
