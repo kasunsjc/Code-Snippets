@@ -11,7 +11,7 @@ RUN ls -la /app
 
 # Install python dependencies
 RUN python3 --version \
- && pip3 install --upgrade pip \
+ && pip3 install --no-cache-dir --upgrade pip \
  && pip3 install --no-cache-dir -r /app/requirements.txt \
  && pip3 list --format=columns
 
