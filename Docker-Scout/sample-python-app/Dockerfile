@@ -10,10 +10,10 @@ COPY ./requirements.txt /app
 RUN ls -la /app
 
 # Install python dependencies
-RUN python3 --version
-RUN pip3 install --upgrade pip
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
-RUN pip3 list --format=columns
+RUN python3 --version \
+ && pip3 install --upgrade pip \
+ && pip3 install --no-cache-dir -r /app/requirements.txt \
+ && pip3 list --format=columns
 
 #USER 1001
 

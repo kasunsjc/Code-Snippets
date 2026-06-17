@@ -68,11 +68,11 @@ module "aks" {
 module "storage" {
   source = "./modules/storage"
 
-  storage_account_name     = local.storage_account_name
-  resource_group_name      = azurerm_resource_group.this.name
-  location                 = var.location
+  storage_account_name      = local.storage_account_name
+  resource_group_name       = azurerm_resource_group.this.name
+  location                  = var.location
   checkpoint_container_name = var.checkpoint_container_name
-  tags                     = var.tags
+  tags                      = var.tags
 }
 
 module "eventhub" {

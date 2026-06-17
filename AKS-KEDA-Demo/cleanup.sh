@@ -25,12 +25,10 @@ if [[ "$CONFIRM" != "yes" ]]; then
   exit 0
 fi
 
-for cmd in terraform; do
-  if ! command -v "$cmd" &>/dev/null; then
-    echo "ERROR: '$cmd' is not installed or not in PATH."
-    exit 1
-  fi
-done
+if ! command -v terraform &>/dev/null; then
+  echo "ERROR: 'terraform' is not installed or not in PATH."
+  exit 1
+fi
 
 echo ""
 echo "[1/2] Destroying Terraform-managed resources..."
