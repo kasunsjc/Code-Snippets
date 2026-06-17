@@ -32,7 +32,6 @@ import signal
 import logging
 
 from azure.eventhub import EventHubConsumerClient, PartitionContext
-from azure.eventhub._eventprocessor.partition_context import PartitionContext  # noqa: F811
 from azure.core.exceptions import AzureError
 
 # ── Logging ───────────────────────────────────────────────────────────────────

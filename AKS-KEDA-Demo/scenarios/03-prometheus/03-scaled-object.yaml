@@ -11,7 +11,6 @@
 #   queryResult =  0 req/s  →  scales to minReplicaCount (1)
 #
 # Prerequisites:
-#   - Apply 00-workload-identity.yaml (creates the annotated Service Account)
 #   - Apply 00-trigger-auth.yaml (TriggerAuthentication using workload identity)
 #   - The {{ PROMETHEUS_QUERY_ENDPOINT }} placeholder is substituted by deploy.sh
 #     from the Terraform output: prometheus_query_endpoint

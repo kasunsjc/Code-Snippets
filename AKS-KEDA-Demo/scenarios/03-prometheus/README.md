@@ -225,10 +225,6 @@ Or to remove all demos and infrastructure:
 ./cleanup.sh
 ```
 
-# 10. Cleanup
-kubectl delete -f scenarios/03-prometheus/ -n keda-demo
-```
-
 ## Scale Logic
 
 - PromQL: `sum(rate(http_requests_total{namespace="keda-demo"}[2m]))`
@@ -237,7 +233,7 @@ kubectl delete -f scenarios/03-prometheus/ -n keda-demo
 
 ## Viewing Metrics in Grafana
 
-The Bicep deployment deploys an Azure Managed Grafana instance linked to the Prometheus workspace.
+The Terraform deployment deploys an Azure Managed Grafana instance linked to the Prometheus workspace.
 
 1. Open the Grafana URL printed by `deploy.sh`
 2. Log in with your Azure AD credentials

@@ -92,7 +92,7 @@ def main() -> None:
                 for msg in messages:
                     try:
                         process_message(msg.content, msg.id)
-                        client.delete_message(msg)
+                        client.delete_message(msg.id, msg.pop_receipt)
                         processed_total += 1
                     except Exception as exc:  # noqa: BLE001
                         # Leave message in queue so another consumer can retry

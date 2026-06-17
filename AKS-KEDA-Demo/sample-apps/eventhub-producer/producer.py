@@ -76,8 +76,9 @@ class EventHubProducer:
         }
         
         try:
-            event_data = EventData(json.dumps(payload))
-            self.client.send_event(event_data)
+            event_batch = self.client.create_batch()
+            event_batch.add(EventData(json.dumps(payload)))
+            self.client.send_batch(event_batch)
             self.event_count += 1
             self.logger.info(
                 f"Sent event {self.event_count}: "
