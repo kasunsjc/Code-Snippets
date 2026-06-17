@@ -204,14 +204,35 @@ apply_secret_manifest_with_values "$SCENARIOS_DIR/05-eventhub/00-secret.yaml"
 if [[ "$DEMO" != "none" ]]; then
   apply_manifest_with_substitution() {
     local file_path="$1"
+    local escaped_acr_login_server
+    local escaped_checkpoint_container_name
+    local escaped_image_tag
+    local escaped_prometheus_endpoint
+    local escaped_prometheus_wi_client_id
+
+    escaped_acr_login_server=$(escape_sed_replacement "$ACR_LOGIN_SERVER")
+    escaped_checkpoint_container_name=$(escape_sed_replacement "$CHECKPOINT_CONTAINER_NAME")
+    escaped_image_tag=$(escape_sed_replacement "$IMAGE_TAG")
+    escaped_prometheus_endpoint=$(escape_sed_replacement "$PROMETHEUS_ENDPOINT")
+    escaped_prometheus_wi_client_id=$(escape_sed_replacement "$PROMETHEUS_WI_CLIENT_ID")
+
     sed \
-      -e "s|{{ ACR_LOGIN_SERVER }}|$ACR_LOGIN_SERVER|g" \
-      -e "s|{{ CHECKPOINT_CONTAINER_NAME }}|$CHECKPOINT_CONTAINER_NAME|g" \
-      -e "s|{{ IMAGE_TAG }}|$IMAGE_TAG|g" \
-      -e "s|{{ PROMETHEUS_QUERY_ENDPOINT }}|$PROMETHEUS_ENDPOINT|g" \
-      -e "s|{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}|$PROMETHEUS_WI_CLIENT_ID|g" \
+      -e "s|{{ ACR_LOGIN_SERVER }}|$escaped_acr_login_server|g" \
+      -e "s|{{ CHECKPOINT_CONTAINER_NAME }}|$escaped_checkpoint_container_name|g" \
+      -e "s|{{ IMAGE_TAG }}|$escaped_image_tag|g" \
+      -e "s|{{ PROMETHEUS_QUERY_ENDPOINT }}|$escaped_prometheus_endpoint|g" \
+      -e "s|{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}|$escaped_prometheus_wi_client_id|g" \
       "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -
   }
+
+  if [[ "$DEMO" == "prometheus" || "$DEMO" == "all" ]]; then
+    if [[ -z "$PROMETHEUS_ENDPOINT" ]]; then
+      echo "ERROR: Terraform output 'prometheus_query_endpoint' is empty."
+      echo "       Cannot deploy Prometheus scaler without trigger metadata 'serverAddress'."
+      echo "       Run: terraform -chdir=\"$TF_DIR\" output prometheus_query_endpoint"
+      exit 1
+    fi
+  fi
 
   # Only build and push images for demos that require custom container images.
   # The Prometheus demo uses python:3.12-slim directly — no image build needed.
