@@ -4,7 +4,7 @@ resource "azapi_resource" "prometheus_workspace" {
   parent_id = var.resource_group_id
   location  = var.location
   tags      = var.tags
-  body      = jsonencode({})
+  body      = {}
 
   response_export_values = ["properties.metrics.prometheusQueryEndpoint"]
 }
@@ -28,7 +28,7 @@ resource "azapi_resource" "grafana" {
     type = "SystemAssigned"
   }
 
-  body = jsonencode({
+  body = {
     sku = {
       name = "Standard"
     }
@@ -42,7 +42,7 @@ resource "azapi_resource" "grafana" {
         ]
       }
     }
-  })
+  }
 }
 
 locals {
@@ -55,14 +55,14 @@ resource "azapi_resource" "dce" {
   parent_id = var.resource_group_id
   location  = var.location
   tags      = var.tags
-  body = jsonencode({
+  body = {
     kind = "Linux"
     properties = {
       networkAcls = {
         publicNetworkAccess = "Enabled"
       }
     }
-  })
+  }
 }
 
 resource "azapi_resource" "dcr" {
@@ -71,7 +71,7 @@ resource "azapi_resource" "dcr" {
   parent_id = var.resource_group_id
   location  = var.location
   tags      = var.tags
-  body = jsonencode({
+  body = {
     properties = {
       dataCollectionEndpointId = azapi_resource.dce.id
       dataSources = {
@@ -98,7 +98,7 @@ resource "azapi_resource" "dcr" {
         }
       ]
     }
-  })
+  }
 }
 
 resource "azurerm_role_assignment" "grafana_monitoring_reader" {

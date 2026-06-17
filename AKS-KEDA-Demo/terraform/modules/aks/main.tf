@@ -12,14 +12,14 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   default_node_pool {
-    name                = "systempool"
-    vm_size             = var.node_vm_size
-    type                = "VirtualMachineScaleSets"
-    max_pods            = 110
-    enable_auto_scaling = var.enable_node_autoscaling
-    min_count           = var.enable_node_autoscaling ? var.node_min_count : null
-    max_count           = var.enable_node_autoscaling ? var.node_max_count : null
-    node_count          = var.enable_node_autoscaling ? null : var.node_count
+    name                 = "systempool"
+    vm_size              = var.node_vm_size
+    type                 = "VirtualMachineScaleSets"
+    max_pods             = 110
+    auto_scaling_enabled = var.enable_node_autoscaling
+    min_count            = var.enable_node_autoscaling ? var.node_min_count : null
+    max_count            = var.enable_node_autoscaling ? var.node_max_count : null
+    node_count           = var.enable_node_autoscaling ? null : var.node_count
 
     upgrade_settings {
       max_surge                     = "10%"
