@@ -232,17 +232,7 @@ if [[ "$DEMO" != "none" ]]; then
 
   apply_scaledobject_with_substitution() {
     local file_path="$1"
-    local scaledobject_name
-
-    scaledobject_name=$(awk '/^metadata:/ {in_meta=1; next} in_meta && /^  name:/ {print $2; exit}' "$file_path")
-
-    if ! render_manifest_with_substitution "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -; then
-      echo "  Warning: Initial ScaledObject apply failed. Retrying after clearing stale apply annotation..."
-      if [[ -n "$scaledobject_name" ]]; then
-        kubectl annotate scaledobject "$scaledobject_name" -n "$K8S_NAMESPACE" kubectl.kubernetes.io/last-applied-configuration- >/dev/null 2>&1 || true
-      fi
-      render_manifest_with_substitution "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -
-    fi
+    render_manifest_with_substitution "$file_path" | kubectl apply --server-side -n "$K8S_NAMESPACE" -f -
   }
 
   if [[ "$DEMO" == "prometheus" || "$DEMO" == "all" ]]; then
