@@ -202,7 +202,7 @@ apply_secret_manifest_with_values "$SCENARIOS_DIR/01-storage-queue/00-secret.yam
 apply_secret_manifest_with_values "$SCENARIOS_DIR/05-eventhub/00-secret.yaml"
 
 if [[ "$DEMO" != "none" ]]; then
-  apply_manifest_with_substitution() {
+  render_manifest_with_substitution() {
     local file_path="$1"
     local escaped_acr_login_server
     local escaped_checkpoint_container_name
@@ -222,7 +222,27 @@ if [[ "$DEMO" != "none" ]]; then
       -e "s|{{ IMAGE_TAG }}|$escaped_image_tag|g" \
       -e "s|{{ PROMETHEUS_QUERY_ENDPOINT }}|$escaped_prometheus_endpoint|g" \
       -e "s|{{ PROMETHEUS_WORKLOAD_IDENTITY_CLIENT_ID }}|$escaped_prometheus_wi_client_id|g" \
-      "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -
+      "$file_path"
+  }
+
+  apply_manifest_with_substitution() {
+    local file_path="$1"
+    render_manifest_with_substitution "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -
+  }
+
+  apply_scaledobject_with_substitution() {
+    local file_path="$1"
+    local scaledobject_name
+
+    scaledobject_name=$(awk '/^metadata:/ {in_meta=1; next} in_meta && /^  name:/ {print $2; exit}' "$file_path")
+
+    if ! render_manifest_with_substitution "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -; then
+      echo "  Warning: Initial ScaledObject apply failed. Retrying after clearing stale apply annotation..."
+      if [[ -n "$scaledobject_name" ]]; then
+        kubectl annotate scaledobject "$scaledobject_name" -n "$K8S_NAMESPACE" kubectl.kubernetes.io/last-applied-configuration- >/dev/null 2>&1 || true
+      fi
+      render_manifest_with_substitution "$file_path" | kubectl apply -n "$K8S_NAMESPACE" -f -
+    fi
   }
 
   if [[ "$DEMO" == "prometheus" || "$DEMO" == "all" ]]; then
@@ -276,7 +296,7 @@ if [[ "$DEMO" != "none" ]]; then
     echo "  Deploying Event Hub demo..."
     apply_manifest_with_substitution "$SCENARIOS_DIR/05-eventhub/01-deployment.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/05-eventhub/02-trigger-auth.yaml"
-    apply_manifest_with_substitution "$SCENARIOS_DIR/05-eventhub/03-scaled-object.yaml"
+    apply_scaledobject_with_substitution "$SCENARIOS_DIR/05-eventhub/03-scaled-object.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/05-eventhub/05-producer-deployment.yaml"
   fi
 
@@ -284,7 +304,7 @@ if [[ "$DEMO" != "none" ]]; then
     echo "  Deploying Storage Queue demo..."
     apply_manifest_with_substitution "$SCENARIOS_DIR/01-storage-queue/01-deployment.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/01-storage-queue/02-trigger-auth.yaml"
-    apply_manifest_with_substitution "$SCENARIOS_DIR/01-storage-queue/03-scaled-object.yaml"
+    apply_scaledobject_with_substitution "$SCENARIOS_DIR/01-storage-queue/03-scaled-object.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/01-storage-queue/05-producer-deployment.yaml"
   fi
 
@@ -293,7 +313,7 @@ if [[ "$DEMO" != "none" ]]; then
     apply_manifest_with_substitution "$SCENARIOS_DIR/03-prometheus/00-trigger-auth.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/03-prometheus/01-sample-app.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/03-prometheus/02-service.yaml"
-    apply_manifest_with_substitution "$SCENARIOS_DIR/03-prometheus/03-scaled-object.yaml"
+    apply_scaledobject_with_substitution "$SCENARIOS_DIR/03-prometheus/03-scaled-object.yaml"
     apply_manifest_with_substitution "$SCENARIOS_DIR/03-prometheus/04-load-generator-job.yaml"
   fi
 fi
