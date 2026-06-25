@@ -26,6 +26,7 @@ Kyverno-Policy-Demo/
 ├── deploy.sh                          # Full deployment script
 ├── cleanup.sh                         # Full teardown script
 ├── README.md                          # This file
+├── POLICY-GUIDE.md                    # Manual policy deployment and verification guide
 ├── terraform/
 │   ├── main.tf                        # Resource Group + modules wiring
 │   ├── variables.tf                   # All input variables
@@ -126,8 +127,20 @@ The deploy script will:
 1. Run `terraform init` and `terraform apply` to provision AKS + Log Analytics
 2. Configure `kubectl` with AKS credentials
 3. Install Kyverno via Helm (`kyverno/kyverno` chart)
-4. Apply all policies from the `policies/` directory
-5. Create the `demo` namespace
+4. Create the `demo` namespace
+
+### 4. Deploy policies manually
+
+Use the detailed policy guide in [POLICY-GUIDE.md](POLICY-GUIDE.md).
+
+Quick apply commands:
+
+```bash
+kubectl apply -f policies/01-validation/
+kubectl apply -f policies/02-mutation/
+kubectl apply -f policies/03-generation/
+kubectl apply -f policies/04-cleanup/
+```
 
 > **Tip:** You can override the Kyverno chart version:
 > ```bash

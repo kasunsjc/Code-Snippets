@@ -6,8 +6,7 @@
 #   1. Initialises and applies Terraform to provision AKS + Log Analytics
 #   2. Configures kubectl with AKS credentials
 #   3. Installs Kyverno via Helm
-#   4. Applies all Kyverno policies
-#   5. Creates the demo namespace
+#   4. Creates the demo namespace
 #
 # Prerequisites:
 #   - Azure CLI (az) — authenticated with 'az login'
@@ -28,7 +27,6 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
-POLICIES_DIR="$SCRIPT_DIR/policies"
 
 # Kyverno Helm chart settings
 KYVERNO_CHART_VERSION="${KYVERNO_CHART_VERSION:-3.2.6}"
@@ -137,33 +135,8 @@ kubectl rollout status deployment/kyverno-admission-controller \
 echo -e "  ${GREEN}✔${NC} Kyverno is running."
 kubectl get pods -n "$KYVERNO_NAMESPACE"
 
-# ── Step 4: Apply Policies ────────────────────────────────────────────────────
-print_header "Step 4: Applying Kyverno Policies"
-
-cd "$SCRIPT_DIR"
-
-print_step "Applying validation policies..."
-kubectl apply -f "$POLICIES_DIR/01-validation/"
-echo -e "  ${GREEN}✔${NC} Validation policies applied."
-
-print_step "Applying mutation policies..."
-kubectl apply -f "$POLICIES_DIR/02-mutation/"
-echo -e "  ${GREEN}✔${NC} Mutation policies applied."
-
-print_step "Applying generation policies..."
-kubectl apply -f "$POLICIES_DIR/03-generation/"
-echo -e "  ${GREEN}✔${NC} Generation policies applied."
-
-print_step "Applying cleanup policies..."
-kubectl apply -f "$POLICIES_DIR/04-cleanup/"
-echo -e "  ${GREEN}✔${NC} Cleanup policies applied."
-
-print_step "Listing all active ClusterPolicies..."
-kubectl get clusterpolicies
-kubectl get clustercleanuppolicies 2>/dev/null || true
-
-# ── Step 5: Create Demo Namespace ──────────────────────────────────────────────
-print_header "Step 5: Creating Demo Namespace"
+# ── Step 4: Create Demo Namespace ──────────────────────────────────────────────
+print_header "Step 4: Creating Demo Namespace"
 
 print_step "Creating 'demo' namespace..."
 kubectl get namespace demo &>/dev/null || kubectl create namespace demo
@@ -178,8 +151,8 @@ echo ""
 echo -e "  Cluster   : ${BOLD}$CLUSTER_NAME${NC}"
 echo -e "  Namespace : ${BOLD}$KYVERNO_NAMESPACE${NC}"
 echo ""
-echo -e "  ${CYAN}Next step — run the policy test script:${NC}"
-echo -e "  ${BOLD}./sample-apps/test-policies.sh${NC}"
+echo -e "  ${CYAN}Next step — deploy policies manually:${NC}"
+echo -e "  ${BOLD}See POLICY-GUIDE.md${NC}"
 echo ""
 echo -e "  ${CYAN}Useful commands:${NC}"
 echo -e "  kubectl get clusterpolicies"
