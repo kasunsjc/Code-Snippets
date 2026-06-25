@@ -4,8 +4,9 @@
 # =============================================================================
 # This script removes all resources created by deploy.sh:
 #   1. Removes demo namespace and test resources
-#   2. Uninstalls Kyverno via Helm
+#   2. Removes Kyverno policies (best-effort)
 #   3. Destroys all Azure resources with Terraform
+#   4. Cleans local kubeconfig entries
 #
 # WARNING: This is a destructive operation. All data will be lost.
 # =============================================================================
@@ -62,13 +63,7 @@ kubectl delete -f "$SCRIPT_DIR/policies/02-mutation/" --ignore-not-found || true
 kubectl delete -f "$SCRIPT_DIR/policies/01-validation/" --ignore-not-found || true
 echo -e "  ${GREEN}✔${NC} Kyverno policies removed."
 
-# ── Step 3: Uninstall Kyverno ─────────────────────────────────────────────────
-print_step "Uninstalling Kyverno Helm release..."
-helm uninstall kyverno --namespace kyverno --wait --timeout 5m || true
-kubectl delete namespace kyverno --ignore-not-found --timeout=60s || true
-echo -e "  ${GREEN}✔${NC} Kyverno uninstalled."
-
-# ── Step 4: Terraform destroy ─────────────────────────────────────────────────
+# ── Step 3: Terraform destroy ─────────────────────────────────────────────────
 print_step "Destroying Azure infrastructure with Terraform..."
 cd "$TF_DIR"
 
@@ -86,7 +81,7 @@ else
   echo -e "  ${GREEN}✔${NC} Azure resources destroyed."
 fi
 
-# ── Step 5: Clean up local kubeconfig context ─────────────────────────────────
+# ── Step 4: Clean up local kubeconfig context ─────────────────────────────────
 print_step "Removing local kubectl context entries..."
 
 CURRENT_CONTEXT=$(kubectl config current-context 2>/dev/null || true)
