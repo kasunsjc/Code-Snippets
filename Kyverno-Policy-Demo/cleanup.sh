@@ -23,6 +23,10 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 
+# Resolve expected AKS context name from Terraform output when available.
+DEFAULT_AKS_CONTEXT="aks-kyverno-demo"
+AKS_CONTEXT_NAME="$DEFAULT_AKS_CONTEXT"
+
 # ── Confirmation ──────────────────────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${RED}════════════════════════════════════════════════════════${NC}"
@@ -68,12 +72,34 @@ echo -e "  ${GREEN}✔${NC} Kyverno uninstalled."
 print_step "Destroying Azure infrastructure with Terraform..."
 cd "$TF_DIR"
 
+if [[ -f "terraform.tfstate" ]]; then
+  TF_CLUSTER_NAME=$(terraform output -raw aks_cluster_name 2>/dev/null || true)
+  if [[ -n "$TF_CLUSTER_NAME" ]]; then
+    AKS_CONTEXT_NAME="$TF_CLUSTER_NAME"
+  fi
+fi
+
 if [[ ! -f "terraform.tfstate" ]]; then
   echo -e "  ${YELLOW}⚠ No terraform.tfstate found — skipping terraform destroy.${NC}"
 else
   terraform destroy -auto-approve
   echo -e "  ${GREEN}✔${NC} Azure resources destroyed."
 fi
+
+# ── Step 5: Clean up local kubeconfig context ─────────────────────────────────
+print_step "Removing local kubectl context entries..."
+
+CURRENT_CONTEXT=$(kubectl config current-context 2>/dev/null || true)
+if [[ "$CURRENT_CONTEXT" == "$AKS_CONTEXT_NAME" ]]; then
+  kubectl config unset current-context >/dev/null 2>&1 || true
+fi
+
+kubectl config delete-context "$AKS_CONTEXT_NAME" >/dev/null 2>&1 || true
+kubectl config delete-cluster "$AKS_CONTEXT_NAME" >/dev/null 2>&1 || true
+kubectl config delete-user "clusterUser_rg-kyverno-demo_${AKS_CONTEXT_NAME}" >/dev/null 2>&1 || true
+kubectl config delete-user "clusterAdmin_rg-kyverno-demo_${AKS_CONTEXT_NAME}" >/dev/null 2>&1 || true
+
+echo -e "  ${GREEN}✔${NC} Local kubeconfig entries cleaned (if present)."
 
 # ── Complete ──────────────────────────────────────────────────────────────────
 echo ""
