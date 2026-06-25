@@ -1,0 +1,22 @@
+# Copy this file to terraform.tfvars and fill in your values.
+# terraform.tfvars is excluded from git by default (.gitignore).
+
+resource_group_name = "rg-kyverno-demo"
+location            = "northeurope"
+cluster_name        = "aks-kyverno-demo"
+kubernetes_version  = "1.32"
+
+node_vm_size            = "Standard_D2s_v4"
+enable_node_autoscaling = true
+node_min_count          = 2
+node_max_count          = 4
+
+# Optional: your Entra ID object ID for AKS RBAC Cluster Admin.
+# Run: az ad signed-in-user show --query id -o tsv
+user_object_id = ""
+
+tags = {
+  environment = "demo"
+  project     = "kyverno-policy-demo"
+  managed-by  = "terraform"
+}

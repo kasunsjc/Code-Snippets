@@ -1,0 +1,25 @@
+# NON-COMPLIANT Pod - Privileged Container
+# Expected result: BLOCKED by 'disallow-privileged-containers' policy
+# Error: Privileged mode is disallowed.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: non-compliant-privileged
+  namespace: demo
+  labels:
+    app: bad-app
+    version: "1.0.0"
+    owner: platform-team
+spec:
+  containers:
+    - name: privileged-container
+      image: nginx:1.27.0
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+      securityContext:
+        privileged: true    # <-- VIOLATION: privileged mode is not allowed

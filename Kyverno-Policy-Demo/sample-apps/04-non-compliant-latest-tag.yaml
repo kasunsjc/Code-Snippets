@@ -1,0 +1,23 @@
+# NON-COMPLIANT Pod - Latest Image Tag
+# Expected result: BLOCKED by 'disallow-latest-tag' policy
+# Error: Using the ':latest' image tag or an untagged image is not allowed.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: non-compliant-latest-tag
+  namespace: demo
+  labels:
+    app: latest-app
+    version: "1.0.0"
+    owner: platform-team
+spec:
+  containers:
+    - name: nginx
+      image: nginx:latest    # <-- VIOLATION: :latest tag is not allowed
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"

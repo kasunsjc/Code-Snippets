@@ -1,0 +1,40 @@
+# Cleanup Test - Completed Job
+# This Job runs a short task, then completes.
+# Expected result: Kyverno CleanupPolicy removes it after it completes
+#   (cleanup runs every 6 hours per the cron schedule).
+#
+# To force immediate cleanup for demo purposes, delete and re-create
+# the cleanup policy or trigger manually with kubectl.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: demo-completed-job
+  namespace: demo
+  labels:
+    app: cleanup-demo
+    version: "1.0.0"
+    owner: platform-team
+spec:
+  template:
+    metadata:
+      labels:
+        app: cleanup-demo
+        version: "1.0.0"
+        owner: platform-team
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: job-runner
+          image: busybox:1.36.1
+          command: ["sh", "-c", "echo 'Demo job completed'; sleep 5"]
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "32Mi"
+            limits:
+              cpu: "100m"
+              memory: "64Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000

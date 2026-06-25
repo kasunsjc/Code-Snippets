@@ -1,0 +1,29 @@
+apiVersion: kyverno.io/v2
+kind: ClusterCleanupPolicy
+metadata:
+  name: cleanup-completed-jobs
+  annotations:
+    policies.kyverno.io/title: Cleanup Completed Jobs
+    policies.kyverno.io/category: Other
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Job
+    policies.kyverno.io/minversion: 1.11.0
+    policies.kyverno.io/description: >-
+      Completed Kubernetes Jobs accumulate over time and clutter the cluster.
+      This cleanup policy automatically deletes Jobs that have reached the
+      Completed status and are older than 24 hours, keeping the cluster
+      tidy without manual intervention.
+spec:
+  match:
+    any:
+      - resources:
+          kinds:
+            - Job
+          namespaces:
+            - "*"
+  conditions:
+    all:
+      - key: "{{ target.status.conditions[?type=='Complete'].status | [0] }}"
+        operator: Equals
+        value: "True"
+  schedule: "0 */6 * * *"

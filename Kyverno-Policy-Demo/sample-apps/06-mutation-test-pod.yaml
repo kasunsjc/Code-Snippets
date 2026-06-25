@@ -1,0 +1,32 @@
+# Mutation Test Pod - No security context or labels set
+# Expected result: ALLOWED and MUTATED by mutation policies
+#
+# After applying, Kyverno will automatically add:
+#   - labels: managed-by=kyverno, environment=unknown
+#   - annotations: kyverno.io/mutated=true
+#   - securityContext.allowPrivilegeEscalation=false
+#   - securityContext.runAsNonRoot=true
+#
+# Verify mutations with:
+#   kubectl get pod mutation-test -n demo -o yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mutation-test
+  namespace: demo
+  labels:
+    app: mutation-test-app
+    version: "1.0.0"
+    owner: platform-team
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27.0
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+      # No securityContext defined — Kyverno mutation will inject defaults

@@ -1,0 +1,21 @@
+# NON-COMPLIANT Pod - Missing Required Labels
+# Expected result: BLOCKED by 'require-pod-labels' policy
+# Error: The labels 'app', 'version', and 'owner' are required on every Pod.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: non-compliant-missing-labels
+  namespace: demo
+  labels:
+    app: partial-labels-app  # <-- 'version' and 'owner' labels are missing
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27.0
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"

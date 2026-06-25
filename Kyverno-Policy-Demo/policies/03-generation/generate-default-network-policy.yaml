@@ -1,0 +1,85 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: generate-default-network-policy
+  annotations:
+    policies.kyverno.io/title: Generate Default NetworkPolicy
+    policies.kyverno.io/category: Multi-Tenancy
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Namespace, NetworkPolicy
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      Network segmentation is a critical control for multi-tenant clusters.
+      This generation policy automatically creates a default-deny-ingress
+      NetworkPolicy in every new namespace (except kube-system, kube-public,
+      kube-node-lease, and kyverno). This ensures that new namespaces are
+      isolated by default and workloads must explicitly opt in to traffic
+      by creating additional NetworkPolicy resources.
+spec:
+  background: false
+  rules:
+    - name: default-deny-ingress
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              names:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-ingress
+        namespace: "{{ request.object.metadata.name }}"
+        synchronize: true
+        data:
+          metadata:
+            labels:
+              managed-by: kyverno
+              policy: default-deny-ingress
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Ingress
+
+    - name: default-deny-egress
+      match:
+        any:
+          - resources:
+              kinds:
+                - Namespace
+      exclude:
+        any:
+          - resources:
+              names:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - kyverno
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: allow-dns-egress
+        namespace: "{{ request.object.metadata.name }}"
+        synchronize: true
+        data:
+          metadata:
+            labels:
+              managed-by: kyverno
+              policy: allow-dns-egress
+          spec:
+            podSelector: {}
+            policyTypes:
+              - Egress
+            egress:
+              - ports:
+                  - port: 53
+                    protocol: UDP
+                  - port: 53
+                    protocol: TCP

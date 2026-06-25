@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# =============================================================================
+# cleanup.sh - Kyverno Policy Demo - Full Teardown
+# =============================================================================
+# This script removes all resources created by deploy.sh:
+#   1. Removes demo namespace and test resources
+#   2. Uninstalls Kyverno via Helm
+#   3. Destroys all Azure resources with Terraform
+#
+# WARNING: This is a destructive operation. All data will be lost.
+# =============================================================================
+set -e
+
+# ── Colours ──────────────────────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TF_DIR="$SCRIPT_DIR/terraform"
+
+# ── Confirmation ──────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}${RED}════════════════════════════════════════════════════════${NC}"
+echo -e "${BOLD}${RED}  Kyverno Policy Demo — CLEANUP / TEARDOWN${NC}"
+echo -e "${BOLD}${RED}════════════════════════════════════════════════════════${NC}"
+echo ""
+echo -e "${YELLOW}  This will permanently delete:${NC}"
+echo -e "  • All Kyverno policies and generated resources"
+echo -e "  • The AKS cluster and all workloads"
+echo -e "  • The Azure Resource Group and all contained resources"
+echo ""
+read -r -p "  Are you sure you want to continue? (yes/no): " CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+  echo -e "\n  ${GREEN}Cleanup cancelled.${NC}"
+  exit 0
+fi
+
+print_step() {
+  echo -e "\n${CYAN}▶ $1${NC}"
+}
+
+# ── Step 1: Clean up Kubernetes resources ────────────────────────────────────
+print_step "Removing test namespaces and sample apps..."
+kubectl delete namespace demo --ignore-not-found --timeout=60s || true
+kubectl delete namespace kyverno-demo-ns --ignore-not-found --timeout=60s || true
+echo -e "  ${GREEN}✔${NC} Test namespaces removed."
+
+# ── Step 2: Remove Kyverno policies ──────────────────────────────────────────
+print_step "Removing Kyverno policies..."
+kubectl delete -f "$SCRIPT_DIR/policies/04-cleanup/" --ignore-not-found || true
+kubectl delete -f "$SCRIPT_DIR/policies/03-generation/" --ignore-not-found || true
+kubectl delete -f "$SCRIPT_DIR/policies/02-mutation/" --ignore-not-found || true
+kubectl delete -f "$SCRIPT_DIR/policies/01-validation/" --ignore-not-found || true
+echo -e "  ${GREEN}✔${NC} Kyverno policies removed."
+
+# ── Step 3: Uninstall Kyverno ─────────────────────────────────────────────────
+print_step "Uninstalling Kyverno Helm release..."
+helm uninstall kyverno --namespace kyverno --wait --timeout 5m || true
+kubectl delete namespace kyverno --ignore-not-found --timeout=60s || true
+echo -e "  ${GREEN}✔${NC} Kyverno uninstalled."
+
+# ── Step 4: Terraform destroy ─────────────────────────────────────────────────
+print_step "Destroying Azure infrastructure with Terraform..."
+cd "$TF_DIR"
+
+if [[ ! -f "terraform.tfstate" ]]; then
+  echo -e "  ${YELLOW}⚠ No terraform.tfstate found — skipping terraform destroy.${NC}"
+else
+  terraform destroy -auto-approve
+  echo -e "  ${GREEN}✔${NC} Azure resources destroyed."
+fi
+
+# ── Complete ──────────────────────────────────────────────────────────────────
+echo ""
+echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}${BOLD}  Cleanup complete. All demo resources have been removed.${NC}"
+echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}"
+echo ""

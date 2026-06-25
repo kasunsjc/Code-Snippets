@@ -1,0 +1,17 @@
+# NON-COMPLIANT Pod - Missing Resource Limits
+# Expected result: BLOCKED by 'require-resource-limits' policy
+# Error: CPU and memory requests and limits are required.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: non-compliant-no-limits
+  namespace: demo
+  labels:
+    app: no-limits-app
+    version: "1.0.0"
+    owner: platform-team
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27.0
+      # <-- VIOLATION: no resources block defined at all

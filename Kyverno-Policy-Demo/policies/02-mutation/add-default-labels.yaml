@@ -1,0 +1,43 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-default-labels
+  annotations:
+    policies.kyverno.io/title: Add Default Labels
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/severity: low
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      This mutation policy automatically adds default labels to every Pod
+      if they are not already present. The 'managed-by' label is set to
+      'kyverno' and the 'environment' label defaults to 'unknown'. These
+      labels help with workload identification and filtering in dashboards.
+spec:
+  background: false
+  rules:
+    - name: add-managed-by-label
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            labels:
+              +(managed-by): kyverno
+              +(environment): unknown
+
+    - name: add-default-annotations
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      mutate:
+        patchStrategicMerge:
+          metadata:
+            annotations:
+              +(kyverno.io/mutated): "true"
+              +(kyverno.io/mutated-at): "{{ time_now_utc() }}"

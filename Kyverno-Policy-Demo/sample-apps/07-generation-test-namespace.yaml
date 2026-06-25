@@ -1,0 +1,15 @@
+# Generation Test - Create a Namespace
+# Expected result: Kyverno automatically generates:
+#   - NetworkPolicy/default-deny-ingress in this namespace
+#   - NetworkPolicy/allow-dns-egress in this namespace
+#   - ResourceQuota/default-quota in this namespace
+#
+# Verify generated resources with:
+#   kubectl get networkpolicy -n kyverno-demo-ns
+#   kubectl get resourcequota -n kyverno-demo-ns
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kyverno-demo-ns
+  labels:
+    purpose: generation-test

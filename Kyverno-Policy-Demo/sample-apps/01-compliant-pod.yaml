@@ -1,0 +1,33 @@
+# Compliant Pod - passes ALL validation policies
+# This pod has:
+#   - No privileged mode
+#   - Resource requests and limits defined
+#   - Required labels (app, version, owner)
+#   - A pinned image tag (no :latest)
+#   - No host namespace sharing
+apiVersion: v1
+kind: Pod
+metadata:
+  name: compliant-pod
+  namespace: demo
+  labels:
+    app: demo-app
+    version: "1.0.0"
+    owner: platform-team
+spec:
+  containers:
+    - name: nginx
+      image: nginx:1.27.0
+      ports:
+        - containerPort: 80
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        runAsNonRoot: false   # nginx requires root; set true for non-root images

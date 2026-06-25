@@ -1,0 +1,50 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-security-context
+  annotations:
+    policies.kyverno.io/title: Add Secure Security Context Defaults
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/description: >-
+      Many workloads do not explicitly set a security context, which leaves
+      them with permissive defaults. This mutation policy automatically
+      adds secure defaults: runAsNonRoot=true and
+      allowPrivilegeEscalation=false on every container unless those fields
+      are already set by the workload author.
+spec:
+  background: false
+  rules:
+    - name: add-container-security-context
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      mutate:
+        foreach:
+          - list: "request.object.spec.containers"
+            patchStrategicMerge:
+              spec:
+                containers:
+                  - (name): "{{ element.name }}"
+                    securityContext:
+                      +(allowPrivilegeEscalation): false
+                      +(runAsNonRoot): true
+                      +(readOnlyRootFilesystem): false
+
+    - name: add-pod-level-security-context
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      mutate:
+        patchStrategicMerge:
+          spec:
+            securityContext:
+              +(runAsNonRoot): true
+              +(seccompProfile):
+                type: RuntimeDefault
