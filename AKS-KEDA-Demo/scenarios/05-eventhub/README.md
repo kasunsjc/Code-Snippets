@@ -134,35 +134,74 @@ kubectl create secret generic azure-eventhub-secret \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-## Validation Steps
+## How to Test Scale-Up and Scale-Down
+
+### 1) Deploy the scenario
 
 ```bash
-# 1. Ensure resources are deployed (recommended via deploy.sh)
 ./deploy.sh --demo eventhub --image-tag latest
+```
 
-# 2. Verify 0 replicas (no lag — scaled to zero)
-kubectl get deployment eventhub-consumer -n keda-demo
+### 2) Verify scaler is ready
 
-# 3. Check ScaledObject is ready
+```bash
 kubectl get scaledobject eventhub-scaler -n keda-demo
-
-# 4. Watch pods in a second terminal
-kubectl get pods -n keda-demo -w
-
-# 5. Producer runs continuously and drives scale-out
-kubectl get deployment eventhub-producer -n keda-demo
-
-# 6. Watch KEDA scale the consumer out (up to 10 replicas)
 kubectl describe scaledobject eventhub-scaler -n keda-demo
-kubectl get hpa -n keda-demo
+```
 
-# 7. After events are processed, watch replicas scale back to zero
+Expected: `READY=True`
+
+### 3) Scale-up test (generate backlog)
+
+The producer Deployment is already continuous, but you can increase pressure to make scale-up obvious:
+
+```bash
+# Optional: increase producer rate
+kubectl set env deployment/eventhub-producer -n keda-demo EVENT_INTERVAL_SECONDS=0.05 BATCH_SIZE=20
+
+# Watch consumer replicas and HPA in separate terminals
 kubectl get deployment eventhub-consumer -n keda-demo -w
+kubectl get hpa keda-hpa-eventhub-scaler -n keda-demo -w
+kubectl get scaledobject eventhub-scaler -n keda-demo -w
+```
 
-# Optional: stop producer to let consumers fully drain backlog
+Expected:
+- `eventhub-consumer` scales above 0
+- HPA target/metrics increase and desired replicas grow
+- ScaledObject shows `ACTIVE=True`
+
+### 4) Scale-down test (drain backlog)
+
+```bash
+# Stop producing new events
 kubectl scale deployment eventhub-producer -n keda-demo --replicas=0
 
-# 8. Cleanup
+# Keep watching until lag is drained and cooldown expires
+kubectl get deployment eventhub-consumer -n keda-demo -w
+kubectl get hpa keda-hpa-eventhub-scaler -n keda-demo -w
+```
+
+Expected:
+- Consumer replicas gradually decrease
+- Eventually returns to `0` replicas (`minReplicaCount: 0`)
+
+If downscale is slow, remember this scenario uses:
+- `pollingInterval: 15`
+- `cooldownPeriod: 60`
+
+So a few minutes is normal after traffic stops.
+
+### 5) Optional reset for repeatable tests
+
+```bash
+# Restore default producer rate and restart producer
+kubectl set env deployment/eventhub-producer -n keda-demo EVENT_INTERVAL_SECONDS=0.2 BATCH_SIZE=10
+kubectl scale deployment eventhub-producer -n keda-demo --replicas=1
+```
+
+### 6) Cleanup
+
+```bash
 kubectl delete -f scenarios/05-eventhub/ -n keda-demo
 ```
 
