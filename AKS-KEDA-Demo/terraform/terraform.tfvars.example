@@ -12,6 +12,8 @@ node_vm_size        = "Standard_D2s_v4"
 acr_name = ""
 acr_sku  = "Basic"
 
+eventhub_partition_count = 20
+
 tags = {
   Environment = "Demo"
   Project     = "AKS-KEDA"

@@ -81,6 +81,12 @@ variable "checkpoint_container_name" {
   default     = "eventhub-checkpoints"
 }
 
+variable "eventhub_partition_count" {
+  description = "Number of partitions for the Event Hub used by Scenario 05."
+  type        = number
+  default     = 20
+}
+
 variable "tags" {
   description = "Tags applied to all resources."
   type        = map(string)

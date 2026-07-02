@@ -56,3 +56,12 @@ spec:
             limits:
               cpu: "500m"
               memory: "256Mi"
+          livenessProbe:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - "cat /proc/1/cmdline | grep -q app.py"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3

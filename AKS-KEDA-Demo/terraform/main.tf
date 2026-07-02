@@ -82,6 +82,7 @@ module "eventhub" {
   resource_group_name = azurerm_resource_group.this.name
   location            = var.location
   eventhub_name       = "keda-demo-hub"
+  partition_count     = var.eventhub_partition_count
   tags                = var.tags
 }
 

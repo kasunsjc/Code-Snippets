@@ -33,10 +33,31 @@ the consumer must point at the **same** storage container and consumer group (`$
 | File | Description |
 |---|---|
 | `00-secret.yaml` | Template — `deploy.sh` creates the real Secret |
-| `01-deployment.yaml` | Consumer Deployment (starts at 0 replicas) |
+| `01-deployment.yaml` | Consumer Deployment (starts at 0 replicas, includes liveness probe) |
 | `02-trigger-auth.yaml` | `TriggerAuthentication` — Event Hub + Storage connection strings |
 | `03-scaled-object.yaml` | `ScaledObject` — scale when unprocessed events > 10/replica |
-| `05-producer-deployment.yaml` | Continuous producer Deployment to generate load |
+| `05-producer-deployment.yaml` | Continuous producer Deployment to generate load (includes liveness probe) |
+
+## Health Checks
+
+Both the consumer and producer Deployments include an exec-based **liveness probe**
+that verifies the Python process is running:
+
+```yaml
+livenessProbe:
+  exec:
+    command:
+    - /bin/sh
+    - -c
+    - "cat /proc/1/cmdline | grep -q app.py"   # consumer
+  initialDelaySeconds: 30
+  periodSeconds: 60
+  failureThreshold: 3
+```
+
+Kubernetes will restart the container if the process exits unexpectedly (e.g., a
+fatal Azure SDK error). The `initialDelaySeconds: 30` allows time for the Event Hub
+connection to be established before the first probe fires.
 
 ## Recommended Deployment Path
 

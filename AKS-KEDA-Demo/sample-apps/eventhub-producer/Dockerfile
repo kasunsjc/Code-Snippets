@@ -1,29 +1,26 @@
-# =======================================================
-# Multi-stage build for eventhub-producer
-# =======================================================
+# ── Build stage ───────────────────────────────────────────────────────────────
 FROM python:3.12-slim AS builder
 
-WORKDIR /app
-
-# Install dependencies
+WORKDIR /build
 COPY requirements.txt .
-RUN pip install --user --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir --target /build/deps -r requirements.txt
 
-# ─────────────────────────────────────────────────────
-# Runtime stage
-# ─────────────────────────────────────────────────────
+# ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
+# Non-root user for security
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
 WORKDIR /app
 
-# Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
+# Copy installed packages from builder
+COPY --from=builder /build/deps /usr/local/lib/python3.12/site-packages/
 
-# Copy application code
-COPY producer.py .
+COPY --chown=appuser:appgroup producer.py .
 
-# Set PATH to use user-installed packages
-ENV PATH=/root/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1
+USER appuser
+
+ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["python", "producer.py"]
