@@ -6,9 +6,9 @@
 #  Unprocessed events  |  Replicas
 #  ────────────────────────────────
 #          0           |     0   (scale-to-zero)
-#         1–10         |     1
-#        11–20         |     2
-#        91–100        |    10   (capped)
+#          1–5         |     1
+#         6–10         |     2
+#        96–100        |    20   (capped)
 #
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
@@ -20,7 +20,7 @@ spec:
     name: eventhub-consumer           # Deployment to scale
 
   minReplicaCount: 0                  # Allow scale-to-zero
-  maxReplicaCount: 10
+  maxReplicaCount: 20
 
   cooldownPeriod: 60                  # Seconds before scaling down
   pollingInterval: 15                 # Seconds between trigger polls
@@ -33,7 +33,7 @@ spec:
         # Consumer group whose lag is measured
         consumerGroup: $Default
         # Scale 1 replica for every N unprocessed events (across all partitions)
-        unprocessedEventThreshold: "10"
+        unprocessedEventThreshold: "5"
         # Blob container where the consumer app writes its checkpoints
         blobContainer: "{{ CHECKPOINT_CONTAINER_NAME }}"
         # Python azure-eventhub v5 stores checkpoints in blob metadata.

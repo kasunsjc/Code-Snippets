@@ -35,7 +35,7 @@ the consumer must point at the **same** storage container and consumer group (`$
 | `00-secret.yaml` | Template — `deploy.sh` creates the real Secret |
 | `01-deployment.yaml` | Consumer Deployment (starts at 0 replicas, includes liveness probe) |
 | `02-trigger-auth.yaml` | `TriggerAuthentication` — Event Hub + Storage connection strings |
-| `03-scaled-object.yaml` | `ScaledObject` — scale when unprocessed events > 10/replica |
+| `03-scaled-object.yaml` | `ScaledObject` — scale when unprocessed events > 5/replica |
 | `05-producer-deployment.yaml` | Continuous producer Deployment to generate load (includes liveness probe) |
 
 ## Health Checks
@@ -216,7 +216,7 @@ So a few minutes is normal after traffic stops.
 
 ```bash
 # Restore default producer rate and restart producer
-kubectl set env deployment/eventhub-producer -n keda-demo EVENT_INTERVAL_SECONDS=1 BATCH_SIZE=10
+kubectl set env deployment/eventhub-producer -n keda-demo EVENT_INTERVAL_SECONDS=5 BATCH_SIZE=10
 kubectl scale deployment eventhub-producer -n keda-demo --replicas=1
 ```
 
@@ -245,11 +245,11 @@ In a separate terminal, send test events using the Azure CLI or SDK.
 | Unprocessed events | Replicas |
 |---|---|
 | 0 | 0 (scale-to-zero) |
-| 1–10 | 1 |
-| 11–20 | 2 |
-| 91–100 | 10 (capped) |
+| 1–5 | 1 |
+| 6–10 | 2 |
+| 96–100 | 20 (capped) |
 
-Threshold is configured via `unprocessedEventThreshold: "10"` in `03-scaled-object.yaml`.
+Threshold is configured via `unprocessedEventThreshold: "5"` in `03-scaled-object.yaml`.
 
 ## Troubleshooting
 
