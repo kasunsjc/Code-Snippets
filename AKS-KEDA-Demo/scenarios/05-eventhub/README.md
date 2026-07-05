@@ -272,3 +272,16 @@ kubectl logs deployment/eventhub-consumer -n keda-demo --tail=200 | grep -Ei 'ch
 POD=$(kubectl get pods -n keda-demo -l app=eventhub-consumer -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -n keda-demo "$POD" -- python -c "from azure.eventhub.extensions.checkpointstoreblob import BlobCheckpointStore; print('checkpoint-import-ok')"
 ```
+
+4. Confirm `azure-storage-blob` exists in the consumer image (required by checkpoint store):
+
+```bash
+POD=$(kubectl get pods -n keda-demo -l app=eventhub-consumer -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n keda-demo "$POD" -- python -c "import importlib.util; print('azure-storage-blob', 'OK' if importlib.util.find_spec('azure.storage.blob') else 'MISSING')"
+```
+
+If this prints `MISSING`, rebuild and redeploy the eventhub-consumer image:
+
+```bash
+./deploy.sh --demo eventhub --image-tag v1
+```
