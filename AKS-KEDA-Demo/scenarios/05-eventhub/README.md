@@ -253,27 +253,46 @@ Threshold is configured via `unprocessedEventThreshold: "5"` in `03-scaled-objec
 
 ## Troubleshooting
 
-If replicas do not scale down after stopping producer:
-1. Confirm scaler metric value reaches 0:
+### Consumer does not scale down after stopping producer
+
+If replicas stay above 0 after draining the backlog:
+
+1. **Confirm scaler metric value reaches 0:**
 
 ```bash
 kubectl get --raw '/apis/external.metrics.k8s.io/v1beta1/namespaces/keda-demo/s0-azure-eventhub-$Default?labelSelector=scaledobject.keda.sh%2Fname%3Deventhub-scaler'
 ```
 
-2. Confirm consumer is not in in-memory checkpoint mode:
+Expected: `"value":"0"` or a small number below `activationUnprocessedEventThreshold`.
+
+2. **Verify checkpoint blobs exist in storage:**
 
 ```bash
-kubectl logs deployment/eventhub-consumer -n keda-demo --tail=200 | grep -Ei 'checkpoint|in-memory'
+STORAGE_CS=$(kubectl get secret azure-eventhub-secret -n keda-demo -o jsonpath='{.data.storage-connection-string}' | base64 --decode)
+CHECKPOINT_CONTAINER=$(kubectl get scaledobject eventhub-scaler -n keda-demo -o jsonpath='{.spec.triggers[0].metadata.blobContainer}')
+
+az storage blob list --connection-string "$STORAGE_CS" --container-name "$CHECKPOINT_CONTAINER" --query '[].name' -o tsv
 ```
 
-3. Confirm checkpoint import in the running pod:
+Expected: Blob paths like `<namespace>.servicebus.windows.net/keda-demo-hub/$default/checkpoint/0` for each partition.
+
+If no checkpoint blobs exist, KEDA may incorrectly calculate lag. Check consumer logs:
+
+```bash
+kubectl logs deployment/eventhub-consumer -n keda-demo --tail=200 | grep -Ei 'checkpoint|in-memory|error'
+```
+
+If you see `"Checkpoint store: in-memory only"`, the consumer is not persisting checkpoints.
+Ensure `AZURE_STORAGE_CHECKPOINT_CONNECTION_STRING` is set in the Secret and the consumer Deployment.
+
+3. **Confirm checkpoint import in the running pod:**
 
 ```bash
 POD=$(kubectl get pods -n keda-demo -l app=eventhub-consumer -o jsonpath='{.items[0].metadata.name}')
 kubectl exec -n keda-demo "$POD" -- python -c "from azure.eventhub.extensions.checkpointstoreblob import BlobCheckpointStore; print('checkpoint-import-ok')"
 ```
 
-4. Confirm `azure-storage-blob` exists in the consumer image (required by checkpoint store):
+4. **Confirm `azure-storage-blob` exists in the consumer image (required by checkpoint store):**
 
 ```bash
 POD=$(kubectl get pods -n keda-demo -l app=eventhub-consumer -o jsonpath='{.items[0].metadata.name}')
@@ -283,5 +302,34 @@ kubectl exec -n keda-demo "$POD" -- python -c "import importlib.util; print('azu
 If this prints `MISSING`, rebuild and redeploy the eventhub-consumer image:
 
 ```bash
-./deploy.sh --demo eventhub --image-tag v1
+./deploy.sh --demo eventhub --image-tag v2
+```
+
+5. **Check KEDA operator logs for checkpoint errors:**
+
+```bash
+kubectl logs -n kube-system deploy/keda-operator --tail=100 | grep -Ei 'eventhub-scaler|BlobNotFound|error'
+```
+
+If you see `BlobNotFound` or `ContainerNotFound` errors, KEDA cannot read checkpoints.
+Verify the `blobContainer` name in `03-scaled-object.yaml` matches the container created by Terraform.
+
+### Checkpoint Behavior Notes
+
+- **First run**: When the consumer starts for the first time, it begins at `STARTING_POSITION` (default: `@latest`).
+  It will only create checkpoint blobs **after processing events**.
+- **Scale-down delay**: After traffic stops, the consumer must finish processing queued events and write final checkpoints.
+  KEDA's `cooldownPeriod: 60` adds another minute before scaling down.
+- **Checkpoint write failures**: If the consumer cannot write to Blob Storage (e.g., due to RBAC, network, or expired SAS),
+  it logs errors but continues processing. KEDA will see stale checkpoints and may not scale down correctly.
+
+To force checkpoint initialization for testing:
+
+```bash
+# Temporarily set consumer to read from beginning (creates checkpoints immediately)
+kubectl set env deployment/eventhub-consumer -n keda-demo STARTING_POSITION="-1"
+kubectl rollout restart deployment/eventhub-consumer -n keda-demo
+
+# Wait 30s, then restore default
+kubectl set env deployment/eventhub-consumer -n keda-demo STARTING_POSITION="@latest"
 ```

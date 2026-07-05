@@ -37,7 +37,10 @@ spec:
         # Blob container where the consumer app writes its checkpoints
         blobContainer: "{{ CHECKPOINT_CONTAINER_NAME }}"
         # Python azure-eventhub v5 stores checkpoints in blob metadata.
+        # If checkpoints don't exist yet, KEDA falls back to total partition count.
         checkpointStrategy: blobMetadata
+        # Activate only when there are unprocessed events (allows scale-to-zero)
+        activationUnprocessedEventThreshold: "1"
         cloud: AzurePublicCloud
       authenticationRef:
         name: azure-eventhub-auth

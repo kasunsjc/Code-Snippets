@@ -84,13 +84,34 @@ def on_event(partition_context: PartitionContext, event) -> None:
             sequence_number=event.sequence_number,
         )
         # Persist the checkpoint so this offset is not reprocessed on restart
-        partition_context.update_checkpoint(event)
+        try:
+            partition_context.update_checkpoint(event)
+            logger.debug(
+                f"Checkpoint updated: partition={partition_context.partition_id} "
+                f"seq={event.sequence_number} offset={event.offset}"
+            )
+        except Exception as cp_exc:  # noqa: BLE001
+            logger.error(
+                f"Failed to update checkpoint on partition {partition_context.partition_id}: {cp_exc}"
+            )
+            raise  # Re-raise to ensure event is reprocessed
     except Exception as exc:  # noqa: BLE001
         logger.error(f"Error processing event on partition {partition_context.partition_id}: {exc}")
 
 
 def on_partition_initialize(partition_context: PartitionContext) -> None:
     logger.info(f"Partition claimed: {partition_context.partition_id}")
+    # Write an initial checkpoint to ensure KEDA can start tracking lag immediately.
+    # Without this, KEDA may report all events as unprocessed until the first
+    # event arrives and is checkpointed.
+    try:
+        if partition_context.last_enqueued_event_properties:
+            logger.info(
+                f"Partition {partition_context.partition_id} initial state: "
+                f"last_seq={partition_context.last_enqueued_event_properties.get('sequence_number', 'N/A')}"
+            )
+    except Exception:  # noqa: BLE001, S110
+        pass  # last_enqueued_event_properties may not be available
 
 
 def on_partition_close(partition_context: PartitionContext, reason) -> None:
