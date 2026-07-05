@@ -216,7 +216,7 @@ So a few minutes is normal after traffic stops.
 
 ```bash
 # Restore default producer rate and restart producer
-kubectl set env deployment/eventhub-producer -n keda-demo EVENT_INTERVAL_SECONDS=5 BATCH_SIZE=10
+kubectl set env deployment/eventhub-producer -n keda-demo EVENT_INTERVAL_SECONDS=1 BATCH_SIZE=10
 kubectl scale deployment eventhub-producer -n keda-demo --replicas=1
 ```
 
