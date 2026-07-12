@@ -1,6 +1,8 @@
 ---
 # Cilium Network Policy: L7 HTTP-aware policy
 # Only allow GET and POST on specific paths to the backend-api
+# NOTE: This policy is for demonstration of L7 capabilities.
+# For demo nginx pods, use 02-cilium-l3-l4-policy.yaml instead.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
@@ -20,9 +22,8 @@ spec:
               protocol: TCP
           rules:
             http:
+              # Allow all GET requests (for demo nginx)
               - method: GET
-                path: "/api/.*"
+              # Allow POST to API paths
               - method: POST
                 path: "/api/.*"
-              - method: GET
-                path: "/health"
