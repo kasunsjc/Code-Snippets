@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo ""
 echo "--- Installing k6 Operator ---"
 
+# The chart is published in the 'grafana' Helm repo; this does not deploy Grafana itself.
 helm repo add grafana https://grafana.github.io/helm-charts --force-update
 helm repo update
 

@@ -1,117 +1,108 @@
 # k6 Load Testing Demo on AKS
 
-Demonstrates all major k6 load testing patterns using the **k6 Operator** running inside AKS, with results flowing to **Azure Managed Prometheus** and **Azure Managed Grafana**.
+This demo shows practical k6 patterns on AKS using the k6 Operator and a sample target app. It is intentionally simple: no Prometheus, no Grafana, and no metrics relay.
 
 ## Architecture
 
 ```
-k6 Runner Pods (k6-tests ns)
-        │
-        │ --out experimental-prometheus-rw
-        ▼
-Prometheus Relay (monitoring ns)        ← kube-prometheus-stack
-  remote-write-receiver enabled
-        │
-        │ remote write + workload identity
-        ▼
-Azure Managed Prometheus
-        │
-        ▼
-Azure Managed Grafana ──── k6 dashboard (ID: 18030)
-                     └──── AKS dashboards (built-in)
+k6 TestRun CRDs (k6-tests namespace)
+        |
+        v
+k6 Runner Pods
+        |
+        v
+go-httpbin app (demo-apps namespace)
+        |
+        v
+Results in runner pod logs
 ```
 
-The **go-httpbin** app serves as the target — it exposes `/get`, `/post`, `/delay/{n}`, and `/status/{code}` endpoints without any extra deployment complexity.
+## What Gets Deployed
+
+- AKS cluster (Standard tier)
+- k6 Operator (Helm)
+- go-httpbin sample app + HPA
+- 7 scenario folders (ConfigMap + TestRun per scenario)
 
 ## Prerequisites
 
 | Tool | Purpose |
 |------|---------|
-| `az` (Azure CLI) | Provision Azure resources |
+| `az` | Provision Azure resources |
 | `kubectl` | Apply Kubernetes manifests |
-| `helm` | Install k6 Operator + Prometheus |
-| `envsubst` (gettext) | Template the Prometheus values file |
+| `helm` | Install k6 Operator |
 
-Install `envsubst` on macOS: `brew install gettext && brew link --force gettext`
-
-## Deploy
+## Quick Start
 
 ```bash
-# 1. Log in to Azure
+# 1. Authenticate
 az login
 
-# 2. Run the deployment (creates RG, AKS, Managed Prometheus, Grafana, k6 Operator)
+# 2. Deploy infra + operator + sample app
 chmod +x deploy.sh cleanup.sh k6-operator/install.sh
 ./deploy.sh
 ```
 
-The script outputs the Grafana URL and Prometheus query endpoint on completion.
-
-## Run a Test Scenario
+## Run a Scenario
 
 ```bash
-# Apply the scenario (ConfigMap + TestRun)
+# Apply ConfigMap + TestRun
 kubectl apply -f scenarios/01-smoke-test/
 
-# Watch the test run
+# Watch TestRun state
 kubectl get testrun -n k6-tests -w
 
-# Stream runner pod logs
+# Stream runner output
 kubectl logs -n k6-tests -l k6_cr=smoke-test -f
 ```
 
-Delete the `TestRun` between runs to re-apply:
+Run the same scenario again:
+
 ```bash
 kubectl delete testrun smoke-test -n k6-tests
 kubectl apply -f scenarios/01-smoke-test/
 ```
 
-## Grafana Setup
+## Scenario Catalog
 
-1. Open the Grafana URL printed by `deploy.sh`
-2. Dashboards → Import → enter ID **18030** → select the Azure Managed Prometheus data source
-3. Run any scenario — metrics appear within ~30 seconds
+| # | Name | Pattern | Parallelism | Goal |
+|---|------|---------|-------------|------|
+| 01 | Smoke Test | Fixed 2 VUs | 1 | Sanity check |
+| 02 | Load Test | Ramp-hold-ramp | 1 | Baseline steady traffic |
+| 03 | Stress Test | Staircase ramp | 3 | Find scaling limits |
+| 04 | Spike Test | Sudden bursts | 2 | Simulate traffic spikes |
+| 05 | Soak Test | Long hold | 1 | Find long-run instability |
+| 06 | Breakpoint Test | Ramp + abortOnFail | 1 | Identify break threshold |
+| 07 | Advanced | groups + custom metrics + summary | 1 | Advanced k6 scripting patterns |
 
-## Scenarios
+## Useful Commands
 
-| # | Name | Pattern | VUs | Purpose |
-|---|------|---------|-----|---------|
-| 01 | Smoke Test | Fixed 2 VUs, 2 min | 2 | Sanity check before heavier tests |
-| 02 | Load Test | Ramp → hold → ramp | 50 | Normal steady-state load |
-| 03 | Stress Test | Staircase ramp | 300 (3 pods × 100) | Find capacity ceiling |
-| 04 | Spike Test | Two sudden bursts | 500 (2 pods × 250) | Simulate flash-sale traffic |
-| 05 | Soak Test | Hold 20 min | 50 | Expose memory leaks |
-| 06 | Breakpoint Test | Ramp to 1000, abortOnFail | 1000 | Find exact breaking point |
-| 07 | Advanced | Groups, custom metrics, handleSummary | 20 | Full k6 observability API |
+```bash
+# List all scenarios
+find scenarios -maxdepth 1 -mindepth 1 -type d | sort
 
-### Key concepts demonstrated
+# List k6 pods
+kubectl get pods -n k6-tests
 
-- **`stages`** — shape the traffic curve (ramp-up, hold, ramp-down)
-- **`thresholds`** — define pass/fail SLOs; `abortOnFail` halts the test automatically
-- **`parallelism`** — distribute VUs across multiple k6 runner pods for true distributed load
-- **`group()`** — segment requests by logical flow (read path, write path)
-- **Custom metrics** — `Counter`, `Rate`, `Trend` tracked alongside built-in metrics
-- **`handleSummary()`** — emit structured output at test end (no external dependencies)
-- **Tags** — `--tag scenario=<name>` lets you filter results by scenario in Grafana
+# Watch target app autoscaling
+kubectl get hpa httpbin -n demo-apps -w
+
+# Delete all TestRun objects
+kubectl delete testrun --all -n k6-tests
+```
 
 ## Target App Endpoints
 
-| Endpoint | Behaviour |
-|----------|-----------|
-| `GET /get` | Returns request metadata as JSON |
-| `POST /post` | Echoes the request body |
-| `GET /delay/1` | Responds after 1 second (simulates slow DB call) |
-| `GET /status/500` | Returns 500 (simulates error path) |
+| Endpoint | Behavior |
+|----------|----------|
+| `GET /get` | Returns request metadata |
+| `POST /post` | Echoes request body |
+| `GET /delay/1` | Responds after 1 second |
+| `GET /status/500` | Returns 500 |
 
-Service address from inside the cluster: `http://httpbin.demo-apps.svc.cluster.local`
+Internal URL used by scenarios:
 
-## HPA Autoscaling
-
-The httpbin deployment ships with an HPA (2–10 replicas, CPU 50%). During stress and spike tests you can watch the app scale out:
-
-```bash
-kubectl get hpa httpbin -n demo-apps -w
-```
+`http://httpbin.demo-apps.svc.cluster.local`
 
 ## Cleanup
 
@@ -119,4 +110,4 @@ kubectl get hpa httpbin -n demo-apps -w
 ./cleanup.sh
 ```
 
-Deletes the resource group and all Azure resources. This does not remove local kubeconfig entries.
+Deletes the demo resource group and all contained Azure resources.

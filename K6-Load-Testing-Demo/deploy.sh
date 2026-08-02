@@ -42,6 +42,7 @@ az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --output table
 echo ""
 echo "[2/5] Deploying AKS cluster..."
 
+# Best-effort lookup for signed-in user object id so we can grant AKS RBAC admin.
 USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
 if [[ -z "$USER_OBJECT_ID" ]]; then
   echo "  Warning: Could not retrieve user Object ID. Admin role assignment will be skipped."
@@ -58,6 +59,11 @@ az deployment group create \
 AKS_NAME=$(az deployment group show \
   --resource-group "$RESOURCE_GROUP" --name "$DEPLOYMENT_NAME" \
   --query 'properties.outputs.aksClusterName.value' -o tsv)
+
+if [[ -z "$AKS_NAME" ]]; then
+  echo "ERROR: Failed to resolve AKS cluster name from deployment outputs."
+  exit 1
+fi
 
 # ========== AKS Credentials ==========
 
@@ -95,6 +101,7 @@ echo "  kubectl get testrun -n k6-tests -w"
 echo "  kubectl logs -n k6-tests -l k6_cr=smoke-test -f"
 echo ""
 echo "Available scenarios:"
+# Print direct apply commands so demo steps are copy/paste friendly.
 for dir in "$SCRIPT_DIR"/scenarios/*/; do
   echo "  kubectl apply -f ${dir}"
 done
