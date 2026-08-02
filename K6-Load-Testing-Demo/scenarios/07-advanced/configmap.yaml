@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-advanced-test
+  namespace: k6-tests
+data:
+  advanced-test.js: |
+    import http from 'k6/http';
+    import { check, group, sleep } from 'k6';
+    import { Counter, Rate, Trend } from 'k6/metrics';
+
+    // Custom metrics tracked alongside built-in k6 metrics
+    const businessErrors = new Counter('business_errors_total');
+    const slowRequestRate = new Rate('slow_requests');
+    const postLatency    = new Trend('post_latency_ms');
+
+    export const options = {
+      stages: [
+        { duration: '1m', target: 20 },
+        { duration: '3m', target: 20 },
+        { duration: '1m', target: 0  },
+      ],
+      thresholds: {
+        http_req_duration:    ['p(95)<1000'],
+        http_req_failed:      ['rate<0.05'],
+        slow_requests:        ['rate<0.20'],
+        business_errors_total: ['count<10'],
+      },
+    };
+
+    const BASE_URL = 'http://httpbin.demo-apps.svc.cluster.local';
+
+    export default function () {
+      group('read path', function () {
+        const res = http.get(`${BASE_URL}/get`, {
+          tags: { endpoint: 'get' },
+        });
+        check(res, {
+          'GET 200':              (r) => r.status === 200,
+          'has json body':        (r) => r.headers['Content-Type'].includes('application/json'),
+        });
+        slowRequestRate.add(res.timings.duration > 300);
+      });
+
+      group('write path', function () {
+        const payload = JSON.stringify({ user: `vu-${__VU}`, iteration: __ITER });
+        const params  = { headers: { 'Content-Type': 'application/json' }, tags: { endpoint: 'post' } };
+        const res = http.post(`${BASE_URL}/post`, payload, params);
+        check(res, {
+          'POST 200':             (r) => r.status === 200,
+          'echoes posted json':   (r) => r.json('json.user') !== undefined,
+        });
+        postLatency.add(res.timings.duration);
+        if (res.status !== 200) businessErrors.add(1);
+      });
+
+      group('slow endpoint', function () {
+        const res = http.get(`${BASE_URL}/delay/1`, {
+          timeout: '5s',
+          tags: { endpoint: 'delay' },
+        });
+        check(res, { 'delay 200': (r) => r.status === 200 });
+        if (res.status !== 200) businessErrors.add(1);
+      });
+
+      sleep(1);
+    }
+
+    export function handleSummary(data) {
+      const p95         = (data.metrics.http_req_duration?.values['p(95)'] ?? 0).toFixed(1);
+      const errorRate   = ((data.metrics.http_req_failed?.values['rate'] ?? 0) * 100).toFixed(2);
+      const totalReqs   = data.metrics.http_reqs?.values['count'] ?? 0;
+      const bizErrors   = data.metrics.business_errors_total?.values['count'] ?? 0;
+      const slowRate    = ((data.metrics.slow_requests?.values['rate'] ?? 0) * 100).toFixed(2);
+      const postP95     = (data.metrics.post_latency_ms?.values['p(95)'] ?? 0).toFixed(1);
+
+      return {
+        stdout: [
+          '',
+          '=== Advanced Test Summary ===',
+          `Total Requests   : ${totalReqs}`,
+          `p(95) Duration   : ${p95}ms`,
+          `Error Rate       : ${errorRate}%`,
+          `Slow Requests    : ${slowRate}%  (>300ms)`,
+          `POST p(95)       : ${postP95}ms`,
+          `Business Errors  : ${bizErrors}`,
+          '='.repeat(30),
+          '',
+        ].join('\n'),
+      };
+    }

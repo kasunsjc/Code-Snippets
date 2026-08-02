@@ -1,0 +1,20 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: spike-test
+  namespace: k6-tests
+spec:
+  # 2 pods × 250 VUs each = 500 concurrent at peak
+  parallelism: 2
+  script:
+    configMap:
+      name: k6-spike-test
+      file: spike-test.js
+  runner:
+    resources:
+      requests:
+        cpu: 300m
+        memory: 384Mi
+      limits:
+        cpu: 1000m
+        memory: 768Mi

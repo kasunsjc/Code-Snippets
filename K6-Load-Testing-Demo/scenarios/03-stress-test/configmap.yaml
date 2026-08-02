@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-stress-test
+  namespace: k6-tests
+data:
+  stress-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+
+    // Staircase ramp: find the ceiling before the system degrades.
+    // parallelism: 3 in TestRun → each pod runs 100 VUs max = 300 total.
+    export const options = {
+      stages: [
+        { duration: '2m', target: 50  },
+        { duration: '2m', target: 75  },
+        { duration: '2m', target: 100 },
+        { duration: '5m', target: 100 },
+        { duration: '3m', target: 0   },
+      ],
+      thresholds: {
+        http_req_duration: ['p(95)<2000'],
+        http_req_failed:   ['rate<0.05'],
+      },
+    };
+
+    const BASE_URL = 'http://httpbin.demo-apps.svc.cluster.local';
+
+    export default function () {
+      const res = http.get(`${BASE_URL}/get`);
+      check(res, {
+        'status is 200': (r) => r.status === 200,
+      });
+      sleep(0.3);
+    }

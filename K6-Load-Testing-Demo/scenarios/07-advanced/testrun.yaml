@@ -1,0 +1,19 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: advanced-test
+  namespace: k6-tests
+spec:
+  parallelism: 1
+  script:
+    configMap:
+      name: k6-advanced-test
+      file: advanced-test.js
+  runner:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

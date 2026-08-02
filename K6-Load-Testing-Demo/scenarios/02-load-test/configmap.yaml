@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-load-test
+  namespace: k6-tests
+data:
+  load-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+
+    // Ramp up → hold steady state → ramp down
+    export const options = {
+      stages: [
+        { duration: '2m', target: 50 },
+        { duration: '5m', target: 50 },
+        { duration: '2m', target: 0  },
+      ],
+      thresholds: {
+        http_req_duration: ['p(95)<500'],
+        http_req_failed:   ['rate<0.01'],
+      },
+    };
+
+    const BASE_URL = 'http://httpbin.demo-apps.svc.cluster.local';
+
+    export default function () {
+      const res = http.get(`${BASE_URL}/get`);
+      check(res, {
+        'status is 200':          (r) => r.status === 200,
+        'response time < 500ms':  (r) => r.timings.duration < 500,
+      });
+      sleep(0.5);
+    }

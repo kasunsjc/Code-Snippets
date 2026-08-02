@@ -1,0 +1,20 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: stress-test
+  namespace: k6-tests
+spec:
+  # 3 parallel pods × 100 VUs each = 300 concurrent virtual users total
+  parallelism: 3
+  script:
+    configMap:
+      name: k6-stress-test
+      file: stress-test.js
+  runner:
+    resources:
+      requests:
+        cpu: 300m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 512Mi

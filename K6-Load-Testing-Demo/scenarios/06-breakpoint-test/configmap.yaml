@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-breakpoint-test
+  namespace: k6-tests
+data:
+  breakpoint-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+
+    // Steadily ramps VUs until the error threshold is breached.
+    // abortOnFail stops the test automatically at the breaking point,
+    // revealing the maximum throughput the system can sustain.
+    export const options = {
+      stages: [
+        { duration: '10m', target: 1000 },
+      ],
+      thresholds: {
+        http_req_failed: [
+          { threshold: 'rate>0.10', abortOnFail: true, delayAbortEval: '10s' },
+        ],
+        http_req_duration: [
+          { threshold: 'p(95)>5000', abortOnFail: true, delayAbortEval: '10s' },
+        ],
+      },
+    };
+
+    const BASE_URL = 'http://httpbin.demo-apps.svc.cluster.local';
+
+    export default function () {
+      const res = http.get(`${BASE_URL}/get`);
+      check(res, {
+        'status is 200': (r) => r.status === 200,
+      });
+      sleep(0.1);
+    }

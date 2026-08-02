@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin
+  namespace: demo-apps
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: httpbin
+  template:
+    metadata:
+      labels:
+        app: httpbin
+    spec:
+      containers:
+      - name: httpbin
+        image: ghcr.io/mccutchen/go-httpbin:v2.15.0
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MAX_BODY_SIZE
+          value: "1048576"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        readinessProbe:
+          httpGet:
+            path: /status/200
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /status/200
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
