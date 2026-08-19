@@ -78,7 +78,25 @@ az aks get-credentials \
 
 echo ""
 echo "[4/5] Deploying go-httpbin target app..."
-kubectl apply -f "$SCRIPT_DIR/sample-app/kubernetes-manifests/"
+# Apply namespace first to avoid eventual-consistency race on fresh clusters.
+kubectl apply -f "$SCRIPT_DIR/sample-app/kubernetes-manifests/namespace.yaml"
+
+# Wait until API server can resolve the namespace before creating namespaced objects.
+for _ in {1..30}; do
+  if kubectl get namespace demo-apps >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+
+if ! kubectl get namespace demo-apps >/dev/null 2>&1; then
+  echo "ERROR: namespace 'demo-apps' was not created in time."
+  exit 1
+fi
+
+kubectl apply -f "$SCRIPT_DIR/sample-app/kubernetes-manifests/service.yaml"
+kubectl apply -f "$SCRIPT_DIR/sample-app/kubernetes-manifests/deployment.yaml"
+kubectl apply -f "$SCRIPT_DIR/sample-app/kubernetes-manifests/hpa.yaml"
 kubectl rollout status deployment/httpbin -n demo-apps --timeout=120s
 
 # ========== k6 Operator ==========

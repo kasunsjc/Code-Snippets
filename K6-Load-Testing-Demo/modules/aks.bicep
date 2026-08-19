@@ -12,9 +12,12 @@ param userId string = ''
 @description('Tags applied to all resources')
 param tags object
 
+@description('AKS system node pool VM size')
+param nodeVmSize string = 'Standard_D4s_v6'
+
 // ========== AKS Cluster ==========
 
-resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-preview' = {
+resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-01' = {
   name: clusterName
   location: location
   tags: tags
@@ -34,7 +37,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-07-02-previ
         name: 'systempool'
         mode: 'System'
         count: 3
-        vmSize: 'Standard_D4s_v5'
+        vmSize: nodeVmSize
         osType: 'Linux'
         osDiskSizeGB: 128
         maxPods: 110

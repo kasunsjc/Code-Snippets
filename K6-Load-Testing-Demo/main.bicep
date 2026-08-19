@@ -11,6 +11,9 @@ param clusterName string = 'aks-k6-demo'
 @description('Object ID of the user to receive AKS Cluster Admin role')
 param userId string = ''
 
+@description('AKS system node pool VM size')
+param nodeVmSize string = 'Standard_D4s_v6'
+
 @description('Tags applied to all resources')
 param tags object = {
   Environment: 'Demo'
@@ -26,6 +29,7 @@ module aks 'modules/aks.bicep' = {
     clusterName: clusterName
     location: location
     userId: userId
+    nodeVmSize: nodeVmSize
     tags: tags
   }
 }
