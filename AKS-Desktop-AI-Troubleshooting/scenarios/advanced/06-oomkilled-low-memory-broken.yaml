@@ -1,0 +1,38 @@
+# Advanced scenario 06 (BROKEN): memory limit far below the working set -> OOMKilled loop.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-worker
+  namespace: ai-demo-advanced
+  labels:
+    app: analytics-worker
+    scenario: advanced-06
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analytics-worker
+  template:
+    metadata:
+      labels:
+        app: analytics-worker
+    spec:
+      containers:
+        - name: worker
+          image: polinux/stress:latest
+          command: ["stress"]
+          # Process allocates ~200Mi.
+          args: ["--vm", "1", "--vm-bytes", "200M", "--vm-hang", "0"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              # Intentional failure: limit is far below what the process needs.
+              memory: 64Mi

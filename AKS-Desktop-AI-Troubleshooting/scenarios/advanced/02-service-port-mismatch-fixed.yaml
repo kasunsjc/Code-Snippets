@@ -1,0 +1,79 @@
+# Advanced scenario 02 (FIXED): align Service targetPort with the container's port.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-service
+  namespace: ai-demo-advanced
+  labels:
+    app: catalog-service
+    scenario: advanced-02
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog-service
+  template:
+    metadata:
+      labels:
+        app: catalog-service
+    spec:
+      containers:
+        - name: app
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=catalog ok"]
+          ports:
+            - containerPort: 5678
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: catalog-service
+  namespace: ai-demo-advanced
+spec:
+  selector:
+    app: catalog-service
+  ports:
+    - port: 80
+      targetPort: 5678
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: catalog-probe
+  namespace: ai-demo-advanced
+  labels:
+    app: catalog-probe
+    scenario: advanced-02
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: catalog-probe
+  template:
+    metadata:
+      labels:
+        app: catalog-probe
+    spec:
+      containers:
+        - name: probe
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              while true; do
+                echo '--- probing catalog-service ---';
+                curl -sS --max-time 3 http://catalog-service.ai-demo-advanced.svc.cluster.local/ || true;
+                echo;
+                sleep 10;
+              done
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }

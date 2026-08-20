@@ -1,0 +1,40 @@
+# Basic scenario 03 (BROKEN): nodeSelector targets a hostname that does not exist -> Pending.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: ai-demo
+  labels:
+    app: notification-service
+    demo: aks-desktop-ai
+    scenario: basic-03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      # Intentional failure: no node in the cluster has this hostname label.
+      nodeSelector:
+        kubernetes.io/hostname: this-node-does-not-exist
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

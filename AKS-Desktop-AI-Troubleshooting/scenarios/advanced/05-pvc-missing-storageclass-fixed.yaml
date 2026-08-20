@@ -1,0 +1,59 @@
+# Advanced scenario 05 (FIXED): use the built-in AKS StorageClass 'managed-csi'.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-db
+  namespace: ai-demo-advanced
+spec:
+  clusterIP: None
+  selector:
+    app: inventory-db
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: redis
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: inventory-db
+  namespace: ai-demo-advanced
+  labels:
+    app: inventory-db
+    scenario: advanced-05
+spec:
+  serviceName: inventory-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-db
+  template:
+    metadata:
+      labels:
+        app: inventory-db
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: managed-csi
+        resources:
+          requests:
+            storage: 1Gi

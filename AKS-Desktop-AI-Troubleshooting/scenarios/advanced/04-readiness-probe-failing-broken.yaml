@@ -1,0 +1,52 @@
+# Advanced scenario 04 (BROKEN): readiness probe path returns 404 -> pod stays 0/1 Ready.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-service
+  namespace: ai-demo-advanced
+  labels:
+    app: checkout-service
+    scenario: advanced-04
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: checkout-service
+  template:
+    metadata:
+      labels:
+        app: checkout-service
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.27
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              # Intentional failure: stock nginx does not serve /ready, so probe returns 404.
+              path: /ready
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-service
+  namespace: ai-demo-advanced
+spec:
+  selector:
+    app: checkout-service
+  ports:
+    - port: 80
+      targetPort: 80

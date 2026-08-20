@@ -1,0 +1,50 @@
+# Advanced scenario 09 (BROKEN): ServiceAccount used by the pod has no permission to list pods.
+# Expected symptom: cluster-inspector logs show 'Forbidden' from the Kubernetes API.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inspector-sa
+  namespace: ai-demo-advanced
+# Intentional failure: no Role or RoleBinding is created for this SA.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-inspector
+  namespace: ai-demo-advanced
+  labels:
+    app: cluster-inspector
+    scenario: advanced-09
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-inspector
+  template:
+    metadata:
+      labels:
+        app: cluster-inspector
+    spec:
+      serviceAccountName: inspector-sa
+      containers:
+        - name: inspector
+          image: alpine:3.20
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              apk add --no-cache curl ca-certificates >/dev/null 2>&1 &&
+              curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl &&
+              chmod +x /usr/local/bin/kubectl &&
+              while true; do
+                echo '--- listing pods in ai-demo-advanced ---';
+                kubectl get pods -n ai-demo-advanced || true;
+                sleep 20;
+              done
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }

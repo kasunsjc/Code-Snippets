@@ -1,0 +1,54 @@
+# Advanced scenario 01 (BROKEN): env var references a ConfigMap key that does not exist.
+# Expected symptom: pod status CreateContainerConfigError / CrashLoopBackOff.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payment-config
+  namespace: ai-demo-advanced
+data:
+  APP_MODE: "production"
+  LOG_LEVEL: "info"
+  # Intentional failure: DB_URL is not present, but the deployment requires it.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: ai-demo-advanced
+  labels:
+    app: payment-service
+    scenario: advanced-01
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: app
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=payment ok"]
+          ports:
+            - containerPort: 5678
+          env:
+            - name: DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: payment-config
+                  key: DB_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

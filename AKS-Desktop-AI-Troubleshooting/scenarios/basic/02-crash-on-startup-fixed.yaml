@@ -1,0 +1,36 @@
+# Basic scenario 02 (FIXED): replace failing command with a long-running loop.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: ai-demo
+  labels:
+    app: order-service
+    demo: aks-desktop-ai
+    scenario: basic-02
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["/bin/sh", "-c", "while true; do echo 'processing orders'; sleep 30; done"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi

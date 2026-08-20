@@ -1,0 +1,99 @@
+# Advanced scenario 08 (FIXED): allow ingress from auth-client pods on the app port.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: ai-demo-advanced
+  labels:
+    app: auth-service
+    scenario: advanced-08
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-service
+  template:
+    metadata:
+      labels:
+        app: auth-service
+    spec:
+      containers:
+        - name: app
+          image: hashicorp/http-echo:1.0
+          args: ["-listen=:5678", "-text=auth ok"]
+          ports:
+            - containerPort: 5678
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: ai-demo-advanced
+spec:
+  selector:
+    app: auth-service
+  ports:
+    - port: 80
+      targetPort: 5678
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: auth-service-policy
+  namespace: ai-demo-advanced
+spec:
+  podSelector:
+    matchLabels:
+      app: auth-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: auth-client
+      ports:
+        - protocol: TCP
+          port: 5678
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-client
+  namespace: ai-demo-advanced
+  labels:
+    app: auth-client
+    scenario: advanced-08
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-client
+  template:
+    metadata:
+      labels:
+        app: auth-client
+    spec:
+      containers:
+        - name: client
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              while true; do
+                echo '--- calling auth-service ---';
+                curl -sS --max-time 3 http://auth-service.ai-demo-advanced.svc.cluster.local/ || true;
+                echo;
+                sleep 10;
+              done
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 64Mi }

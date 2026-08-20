@@ -1,0 +1,72 @@
+# Advanced scenario 09 (FIXED): bind the ServiceAccount to a Role that allows listing pods.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo-advanced
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inspector-sa
+  namespace: ai-demo-advanced
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: inspector-role
+  namespace: ai-demo-advanced
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inspector-role-binding
+  namespace: ai-demo-advanced
+subjects:
+  - kind: ServiceAccount
+    name: inspector-sa
+    namespace: ai-demo-advanced
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: inspector-role
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-inspector
+  namespace: ai-demo-advanced
+  labels:
+    app: cluster-inspector
+    scenario: advanced-09
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-inspector
+  template:
+    metadata:
+      labels:
+        app: cluster-inspector
+    spec:
+      serviceAccountName: inspector-sa
+      containers:
+        - name: inspector
+          image: alpine:3.20
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              apk add --no-cache curl ca-certificates >/dev/null 2>&1 &&
+              curl -fsSL -o /usr/local/bin/kubectl https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl &&
+              chmod +x /usr/local/bin/kubectl &&
+              while true; do
+                echo '--- listing pods in ai-demo-advanced ---';
+                kubectl get pods -n ai-demo-advanced || true;
+                sleep 20;
+              done
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }

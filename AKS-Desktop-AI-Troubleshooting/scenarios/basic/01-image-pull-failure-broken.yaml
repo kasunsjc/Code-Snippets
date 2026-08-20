@@ -1,0 +1,52 @@
+# Basic scenario 01 (BROKEN): image tag does not exist -> ImagePullBackOff.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-frontend
+  namespace: ai-demo
+  labels:
+    app: web-frontend
+    demo: aks-desktop-ai
+    scenario: basic-01
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-frontend
+  template:
+    metadata:
+      labels:
+        app: web-frontend
+    spec:
+      containers:
+        - name: app
+          # Intentional failure: this tag does not exist in the registry.
+          image: mcr.microsoft.com/azuredocs/aks-helloworld:v9-nonexistent
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-frontend
+  namespace: ai-demo
+spec:
+  selector:
+    app: web-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
