@@ -17,7 +17,6 @@ kubectl apply -f "$SCRIPT_DIR/namespace.yaml"
 
 helm upgrade --install k6-operator grafana/k6-operator \
   --namespace k6-operator \
-  --create-namespace \
   --wait \
   --timeout 5m
 
