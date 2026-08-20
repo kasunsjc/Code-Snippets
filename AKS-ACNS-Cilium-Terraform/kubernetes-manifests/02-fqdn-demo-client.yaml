@@ -1,3 +1,5 @@
+# Test client used for the FQDN filtering demo.
+# Deploy into the `demo` namespace alongside 03-fqdn-filtering-policy.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,6 +17,6 @@ spec:
         app: demo-container
     spec:
       containers:
-      - name: agnhost
-        image: registry.k8s.io/e2e-test-images/agnhost:2.43
-        command: ["sleep", "infinity"]
+        - name: agnhost
+          image: registry.k8s.io/e2e-test-images/agnhost:2.43
+          command: ["sleep", "infinity"]

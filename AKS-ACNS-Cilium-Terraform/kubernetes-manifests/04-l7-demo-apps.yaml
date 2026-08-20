@@ -1,4 +1,4 @@
-# HTTP Server - Nginx with custom routes
+# HTTP server + client used for the Layer 7 policy demo.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -34,17 +34,17 @@ spec:
         app: http-server
     spec:
       containers:
-      - name: http-server
-        image: nginx:latest
-        ports:
-        - containerPort: 8080
-        volumeMounts:
-        - name: config-volume
-          mountPath: /etc/nginx/conf.d
+        - name: http-server
+          image: nginx:1.27
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: config-volume
+              mountPath: /etc/nginx/conf.d
       volumes:
-      - name: config-volume
-        configMap:
-          name: nginx-config
+        - name: config-volume
+          configMap:
+            name: nginx-config
 ---
 apiVersion: v1
 kind: Service
@@ -54,11 +54,10 @@ spec:
   selector:
     app: http-server
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8080
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
 ---
-# HTTP Client - curl image for testing
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -76,6 +75,6 @@ spec:
         app: http-client
     spec:
       containers:
-      - name: http-client
-        image: curlimages/curl:latest
-        command: ["sleep", "infinity"]
+        - name: http-client
+          image: curlimages/curl:8.10.1
+          command: ["sleep", "infinity"]

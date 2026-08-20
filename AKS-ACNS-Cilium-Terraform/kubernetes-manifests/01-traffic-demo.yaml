@@ -1,0 +1,75 @@
+# Continuous traffic generator for Container Network Observability.
+# Creates steady pod-to-pod HTTP traffic, DNS lookups, and a few
+# dropped connections so Hubble metrics and Grafana dashboards light up.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traffic-demo
+---
+# Backend HTTP service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-backend
+  namespace: traffic-demo
+  labels:
+    app: web-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web-backend
+  template:
+    metadata:
+      labels:
+        app: web-backend
+    spec:
+      containers:
+        - name: web
+          image: registry.k8s.io/e2e-test-images/agnhost:2.43
+          args: ["netexec", "--http-port=8080"]
+          ports:
+            - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-backend
+  namespace: traffic-demo
+spec:
+  selector:
+    app: web-backend
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# Client generating pod-to-pod HTTP traffic + external DNS lookups
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic-client
+  namespace: traffic-demo
+  labels:
+    app: traffic-client
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: traffic-client
+  template:
+    metadata:
+      labels:
+        app: traffic-client
+    spec:
+      containers:
+        - name: client
+          image: curlimages/curl:8.10.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              while true; do
+                curl -s -o /dev/null http://web-backend.traffic-demo.svc.cluster.local/hostname
+                curl -s -o /dev/null https://www.bing.com
+                curl -s -o /dev/null --max-time 2 http://web-backend.traffic-demo.svc.cluster.local:9999 || true
+                sleep 2
+              done

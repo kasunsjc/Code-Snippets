@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars and adjust as needed.
+
+resource_group_name = "rg-acns-demo"
+location            = "northeurope"
+cluster_name        = "aks-acns-demo"
+
+# Object ID of your user for the Grafana Admin role:
+#   az ad signed-in-user show --query id -o tsv
+user_object_id = ""
+
+tags = {
+  project     = "aks-acns-cilium-demo"
+  environment = "demo"
+}
