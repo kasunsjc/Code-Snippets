@@ -3,6 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nginx-config
+  namespace: traffic-demo
 data:
   default.conf: |
     server {
@@ -36,6 +37,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: http-server
+  namespace: traffic-demo
   labels:
     app: http-server
 spec:
@@ -65,6 +67,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: http-server
+  namespace: traffic-demo
 spec:
   selector:
     app: http-server
@@ -77,6 +80,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: http-client
+  namespace: traffic-demo
   labels:
     app: http-client
 spec:

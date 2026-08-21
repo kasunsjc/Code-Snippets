@@ -6,6 +6,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: allow-get-products
+  namespace: traffic-demo
 spec:
   description: "Allow GET /products, /, and /status/* from http-client to http-server"
   endpointSelector:

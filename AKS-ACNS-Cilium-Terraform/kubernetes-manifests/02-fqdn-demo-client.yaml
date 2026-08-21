@@ -1,9 +1,10 @@
 # Test client used for the FQDN filtering demo.
-# Deploy into the `demo` namespace alongside 03-fqdn-filtering-policy.yaml.
+# Deployed in traffic-demo alongside 03-fqdn-filtering-policy.yaml.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: demo-client
+  namespace: traffic-demo
   labels:
     app: demo-container
 spec:

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: http-load
-  namespace: l7-demo
+  namespace: traffic-demo
   labels:
     app: http-client
     role: load

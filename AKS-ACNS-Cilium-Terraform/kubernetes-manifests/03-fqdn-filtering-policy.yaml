@@ -4,6 +4,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: allow-bing-fqdn
+  namespace: traffic-demo
 spec:
   endpointSelector:
     matchLabels:

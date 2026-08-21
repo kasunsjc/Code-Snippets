@@ -2,7 +2,7 @@ apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: http-client-egress-l7
-  namespace: l7-demo
+  namespace: traffic-demo
 spec:
   description: "Allow http-client egress to http-server on GET /products, /, and /status/*"
   endpointSelector:

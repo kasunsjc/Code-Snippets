@@ -134,6 +134,8 @@ resource "azapi_update_resource" "acns_l7_policy_mode" {
 
 ## 🔭 Demo 1: Container Network Observability
 
+> All demo manifests are standardized to the `traffic-demo` namespace to avoid namespace confusion.
+
 ### Generate traffic
 
 ```bash
@@ -236,18 +238,19 @@ The relay uses mutual TLS. If the client certificate and key are not configured,
 Restrict egress by domain name instead of IP addresses:
 
 ```bash
-kubectl create ns demo
-kubectl apply -n demo -f kubernetes-manifests/02-fqdn-demo-client.yaml
-kubectl apply -n demo -f kubernetes-manifests/03-fqdn-filtering-policy.yaml
+kubectl apply -f kubernetes-manifests/02-fqdn-demo-client.yaml
+kubectl apply -f kubernetes-manifests/03-fqdn-filtering-policy.yaml
 
 # Allowed — *.bing.com matches the policy
-kubectl exec -n demo deploy/demo-client -- ./agnhost connect www.bing.com:80 --timeout=5s
+kubectl exec -n traffic-demo deploy/demo-client -- ./agnhost connect www.bing.com:80 --timeout=5s
 
 # Blocked — DNS for other domains is denied
-kubectl exec -n demo deploy/demo-client -- ./agnhost connect www.example.com:80 --timeout=5s
+kubectl exec -n traffic-demo deploy/demo-client -- ./agnhost connect www.example.com:80 --timeout=5s
 ```
 
-How it works: the `CiliumNetworkPolicy` allows DNS lookups only for `*.bing.com` via kube-dns, then permits egress only to the resolved IPs (`toFQDNs`). Everything else is dropped in-kernel by eBPF — watch it live with `hubble observe --verdict DROPPED -n demo`.
+`02-fqdn-demo-client.yaml` and `03-fqdn-filtering-policy.yaml` explicitly target `traffic-demo`.
+
+How it works: the `CiliumNetworkPolicy` allows DNS lookups only for `*.bing.com` via kube-dns, then permits egress only to the resolved IPs (`toFQDNs`). Everything else is dropped in-kernel by eBPF — watch it live with `hubble observe --verdict DROPPED -n traffic-demo`.
 
 ## 🛡️ Demo 3: Layer 7 Policy and HTTP Observability
 
@@ -256,9 +259,8 @@ ACNS is provisioned in **L7 mode** by Terraform (`azapi_update_resource.acns_l7_
 ### 1. Deploy the demo apps and policies
 
 ```bash
-kubectl create ns l7-demo
-kubectl apply -n l7-demo -f kubernetes-manifests/04-l7-demo-apps.yaml
-kubectl apply -n l7-demo -f kubernetes-manifests/05-l7-policy.yaml
+kubectl apply -f kubernetes-manifests/04-l7-demo-apps.yaml
+kubectl apply -f kubernetes-manifests/05-l7-policy.yaml
 kubectl apply -f kubernetes-manifests/12-l7-client-egress-policy.yaml
 ```
 
@@ -274,22 +276,22 @@ What each manifest does:
 
 ```bash
 # Allowed — GET /products
-kubectl exec -n l7-demo deploy/http-client -- curl -s http://http-server/products
+kubectl exec -n traffic-demo deploy/http-client -- curl -s http://http-server/products
 
 # Allowed — GET / (root)
-kubectl exec -n l7-demo deploy/http-client -- curl -s http://http-server/
+kubectl exec -n traffic-demo deploy/http-client -- curl -s http://http-server/
 
 # Allowed — server-generated status codes (200/201/204/301/302/400/401/404/418/429/500/502/503)
-kubectl exec -n l7-demo deploy/http-client -- \
+kubectl exec -n traffic-demo deploy/http-client -- \
   sh -c 'for c in 200 201 204 301 302 400 401 404 418 429 500 502 503; do \
            printf "%s -> %s\n" "$c" "$(curl -s -o /dev/null -w %{http_code} http://http-server/status/$c)"; \
          done'
 
 # Denied by policy (403) — POST /products
-kubectl exec -n l7-demo deploy/http-client -- curl -s -o /dev/null -w '%{http_code}\n' -X POST http://http-server/products
+kubectl exec -n traffic-demo deploy/http-client -- curl -s -o /dev/null -w '%{http_code}\n' -X POST http://http-server/products
 
 # Denied by policy (403) — GET /admin (not in allowed paths)
-kubectl exec -n l7-demo deploy/http-client -- curl -s -o /dev/null -w '%{http_code}\n' http://http-server/admin
+kubectl exec -n traffic-demo deploy/http-client -- curl -s -o /dev/null -w '%{http_code}\n' http://http-server/admin
 ```
 
 ### 3. Continuous multi-status load generator
@@ -298,8 +300,8 @@ To drive the Grafana **L7 Flows / HTTP** dashboards with realistic 2xx / 3xx / 4
 
 ```bash
 kubectl apply -f kubernetes-manifests/11-l7-load-generator.yaml
-kubectl -n l7-demo rollout restart deploy/http-client deploy/http-load
-kubectl -n l7-demo get pods -l role=load
+kubectl -n traffic-demo rollout restart deploy/http-client deploy/http-load
+kubectl -n traffic-demo get pods -l role=load
 ```
 
 The `http-load` deployment runs a curl loop that in each iteration:
@@ -355,9 +357,8 @@ These dashboards only display data when L7 policies are applied to the workloads
 ```bash
 kubectl delete -f kubernetes-manifests/11-l7-load-generator.yaml --ignore-not-found
 kubectl delete -f kubernetes-manifests/12-l7-client-egress-policy.yaml --ignore-not-found
-kubectl delete -n l7-demo -f kubernetes-manifests/05-l7-policy.yaml --ignore-not-found
-kubectl delete -n l7-demo -f kubernetes-manifests/04-l7-demo-apps.yaml --ignore-not-found
-kubectl delete ns l7-demo --ignore-not-found
+kubectl delete -f kubernetes-manifests/05-l7-policy.yaml --ignore-not-found
+kubectl delete -f kubernetes-manifests/04-l7-demo-apps.yaml --ignore-not-found
 ```
 
 The policy is enforced by a node-local Envoy proxy — part of the ACNS security agent, deployed as its own DaemonSet decoupled from the Cilium agent. It is HTTP method/path aware and returns application-level error codes (HTTP 403) instead of silently dropping traffic, with L7 flow metrics visible in Hubble and Grafana.
