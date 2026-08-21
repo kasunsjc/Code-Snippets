@@ -79,11 +79,10 @@ AKS-ACNS-Cilium-Terraform/
 ## 🚀 Quick Start
 
 ```bash
-./deploy.sh              # infra + observability (FQDN policies enabled by default)
-./deploy.sh --enable-l7  # also enable Layer 7 network policies
+./deploy.sh   # infra + observability + security (ACNS in L7 policy mode)
 ```
 
-The script runs `terraform init/apply`, fetches AKS credentials, verifies the Cilium/Hubble components, and prints the Grafana URL.
+The script runs `terraform init/apply`, fetches AKS credentials, verifies the Cilium/Hubble components, and prints the Grafana URL. Terraform provisions ACNS directly in **L7 policy mode** (which is a superset of FQDN filtering), so both FQDN and L7 demos work without extra steps. The legacy `--enable-l7` flag remains as a no-op safety net that re-applies the same setting through `az aks update`.
 
 Or run Terraform directly:
 
@@ -193,11 +192,14 @@ The deployment is configured with three replicas and liveness/readiness probes. 
 
 ### Explore Grafana dashboards
 
-Open the Grafana URL from the deploy output (`terraform -chdir=terraform output -raw grafana_endpoint`) and browse **Dashboards → Azure Managed Prometheus** folder:
+Open the Grafana URL from the deploy output (`terraform -chdir=terraform output -raw grafana_endpoint`) and browse **Dashboards → Azure Managed Prometheus** folder. The prebuilt dashboards are named **"Kubernetes / Networking / `<name>`"**:
 
-- **Kubernetes / Networking / Clusters** — cluster-wide traffic, drops, TCP state
-- **Kubernetes / Networking / DNS** — DNS request/response rates and errors
-- **Kubernetes / Networking (Workload)** — per-workload traffic breakdown
+- **Clusters** — node-level traffic, drops, TCP state
+- **DNS (Cluster)** / **DNS (Workload)** — DNS request/response rates and errors
+- **Drops (Workload)** — drops to/from a specific workload
+- **Pod Flows (Namespace)** / **Pod Flows (Workload)** — L4/L7 packet flows
+
+> On Cilium clusters, the DNS dashboards only populate when a Cilium FQDN/DNS network policy applies to the workload — that is exactly what `08-dns-metrics-trigger-policy.yaml` provides ([docs](https://learn.microsoft.com/en-us/azure/aks/container-network-observability-metrics)).
 
 ### Inspect flows with Hubble CLI
 
@@ -343,8 +345,10 @@ histogram_quantile(0.95,
 
 The expected Grafana L7 dashboards (folder **Azure Managed Prometheus**):
 
-- **Kubernetes / Networking / Clusters (L7)** — Outgoing / Incoming HTTP request rate and success rate
-- **Kubernetes / Networking (Workload) (L7)** — per-workload HTTP breakdown
+- **Kubernetes / Networking / L7 (Namespace)** — HTTP/gRPC/Kafka flows at namespace level
+- **Kubernetes / Networking / L7 (Workload)** — per-workload L7 breakdown
+
+These dashboards only display data when L7 policies are applied to the workloads — the metrics themselves are collected by the Hubble agent (observability), not by Envoy ([docs](https://learn.microsoft.com/en-us/azure/aks/container-network-security-l7-policy-concepts)).
 
 ### 5. Turn the L7 load off
 
@@ -356,7 +360,7 @@ kubectl delete -n l7-demo -f kubernetes-manifests/04-l7-demo-apps.yaml --ignore-
 kubectl delete ns l7-demo --ignore-not-found
 ```
 
-The policy is enforced by a node-local Envoy proxy managed by Cilium — HTTP method/path aware, with L7 flow metrics visible in Hubble and Grafana.
+The policy is enforced by a node-local Envoy proxy — part of the ACNS security agent, deployed as its own DaemonSet decoupled from the Cilium agent. It is HTTP method/path aware and returns application-level error codes (HTTP 403) instead of silently dropping traffic, with L7 flow metrics visible in Hubble and Grafana.
 
 ## 🧹 Cleanup
 
