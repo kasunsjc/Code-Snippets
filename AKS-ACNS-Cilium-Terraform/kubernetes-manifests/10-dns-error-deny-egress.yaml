@@ -1,0 +1,12 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: dns-error-generator-deny-egress
+  namespace: traffic-demo
+spec:
+  podSelector:
+    matchLabels:
+      app: dns-error-generator
+  policyTypes:
+  - Egress
+  egress: []

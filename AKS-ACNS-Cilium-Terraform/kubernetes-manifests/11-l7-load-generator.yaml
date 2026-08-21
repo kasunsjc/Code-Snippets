@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: http-load
+  namespace: traffic-demo
+  labels:
+    app: http-client
+    role: load
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: http-client
+      role: load
+  template:
+    metadata:
+      labels:
+        app: http-client
+        role: load
+    spec:
+      containers:
+      - name: curl
+        image: curlimages/curl:8.10.1
+        command:
+        - sh
+        - -c
+        - |
+          CODES="200 201 204 301 302 400 401 404 418 429 500 502 503"
+          while true; do
+            # Server-defined status codes (allowed by policy)
+            for c in $CODES; do
+              curl -s -o /dev/null http://http-server/status/$c
+            done
+            # Baseline allowed traffic
+            curl -s -o /dev/null http://http-server/products
+            curl -s -o /dev/null http://http-server/
+            # Policy-denied requests (Envoy returns 403)
+            curl -s -o /dev/null -X POST http://http-server/products
+            curl -s -o /dev/null http://http-server/admin
+            sleep 0.2
+          done
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 200m
+            memory: 64Mi
