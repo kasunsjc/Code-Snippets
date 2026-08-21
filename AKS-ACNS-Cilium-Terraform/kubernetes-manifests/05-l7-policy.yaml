@@ -1,7 +1,8 @@
 # Layer 7 policy (Container Network Security).
 # Allow GET /products, GET /, and the /status/* demo endpoints from http-client
 # to http-server. Other paths (e.g. /admin) are denied by Envoy with HTTP 403.
-# Requires ACNS advanced network policies set to L7 (see deploy.sh --enable-l7).
+# Requires ACNS advanced network policies set to L7. Terraform enables this
+# declaratively via `azapi_update_resource.acns_l7_policy_mode` in `terraform/main.tf`.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:

@@ -36,7 +36,7 @@ graph LR
 Terraform provisions:
 
 - AKS cluster: Azure CNI **overlay** mode, **Cilium** data plane and network policy, ACNS observability + security enabled
-- Custom node resource group (`rg-aks-acns-demo-nodes`), 3 availability zones, cluster autoscaler
+- Custom node resource group (`rg-aks-acns-demo-nodes`), cluster autoscaler
 - Azure Monitor workspace (Managed Prometheus) + data collection endpoint/rule/association
 - Azure Managed Grafana wired to Prometheus, with prebuilt Kubernetes networking dashboards
 - Role assignments (Grafana → `Monitoring Data Reader`, you → `Grafana Admin`)

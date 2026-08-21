@@ -4,7 +4,7 @@ metadata:
   name: http-client-egress-l7
   namespace: traffic-demo
 spec:
-  description: "Allow http-client egress to http-server on GET /products, /, and /status/*"
+  description: "Allow http-client egress to http-server on GET /products, POST /products, GET /, GET /status/*, and GET /admin (denied paths are enforced by the server-side ingress policy)"
   endpointSelector:
     matchLabels:
       app: http-client
@@ -37,3 +37,5 @@ spec:
                 path: "/"
               - method: "GET"
                 path: "/status/[0-9]+"
+              - method: "GET"
+                path: "/admin"

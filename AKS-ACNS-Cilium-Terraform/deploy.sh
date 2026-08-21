@@ -74,7 +74,7 @@ get_credentials() {
 
 configure_prometheus_hubble_metrics() {
     print_message "Enabling Hubble flow metrics for Managed Prometheus dashboards..."
-    kubectl apply -f "$SCRIPT_DIR/kubernetes-manifests/06-prometheus-hubble-metrics.yaml" --output none
+    kubectl apply -f "$SCRIPT_DIR/kubernetes-manifests/06-prometheus-hubble-metrics.yaml" >/dev/null
     kubectl -n kube-system rollout status deployment/ama-metrics --timeout=5m
 }
 
