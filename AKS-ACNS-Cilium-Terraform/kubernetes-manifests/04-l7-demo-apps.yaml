@@ -15,6 +15,21 @@ data:
         location /products {
             return 200 "Listing products...\n";
         }
+
+        # Explicit status-code endpoints used by the L7 load generator
+        location = /status/200 { return 200 "ok\n"; }
+        location = /status/201 { return 201 "created\n"; }
+        location = /status/204 { return 204; }
+        location = /status/301 { add_header Location /products; return 301; }
+        location = /status/302 { add_header Location /products; return 302; }
+        location = /status/400 { return 400 "bad request\n"; }
+        location = /status/401 { return 401 "unauthorized\n"; }
+        location = /status/404 { return 404 "not found\n"; }
+        location = /status/418 { return 418; }
+        location = /status/429 { return 429 "too many requests\n"; }
+        location = /status/500 { return 500 "internal error\n"; }
+        location = /status/502 { return 502 "bad gateway\n"; }
+        location = /status/503 { return 503 "service unavailable\n"; }
     }
 ---
 apiVersion: apps/v1

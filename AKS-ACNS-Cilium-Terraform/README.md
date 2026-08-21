@@ -49,17 +49,24 @@ AKS-ACNS-Cilium-Terraform/
 ├── deploy.sh                             # One-command deployment
 ├── cleanup.sh                            # Destroy everything
 ├── terraform/
-│   ├── versions.tf                       # Providers (azurerm ~> 4.31)
+│   ├── versions.tf                       # Providers (azurerm ~> 4.31, azapi ~> 2.2)
 │   ├── variables.tf
-│   ├── main.tf                           # AKS + ACNS + Prometheus + Grafana
+│   ├── main.tf                           # AKS + ACNS (L7) + Prometheus + Grafana
 │   ├── outputs.tf
 │   └── terraform.tfvars.example
 └── kubernetes-manifests/
-    ├── 01-traffic-demo.yaml              # Continuous traffic generator
+    ├── 01-traffic-demo.yaml              # Baseline pod-to-pod and egress traffic
     ├── 02-fqdn-demo-client.yaml          # Test pod for FQDN filtering
     ├── 03-fqdn-filtering-policy.yaml     # CiliumNetworkPolicy (FQDN egress)
     ├── 04-l7-demo-apps.yaml              # HTTP server/client for L7 demo
-    └── 05-l7-policy.yaml                 # CiliumNetworkPolicy (L7 HTTP rules)
+    ├── 05-l7-policy.yaml                 # CiliumNetworkPolicy (L7 HTTP rules)
+    ├── 06-prometheus-hubble-metrics.yaml # Keep Hubble flow metrics in Managed Prometheus
+    ├── 07-dns-traffic-generator.yaml     # Continuous DNS query generator pods
+    ├── 08-dns-metrics-trigger-policy.yaml # DNS/FQDN Cilium policy for DNS metrics
+    ├── 09-dns-error-generator.yaml       # Optional workload that generates DNS lookup failures
+    ├── 10-dns-error-deny-egress.yaml     # Optional deny policy to force DNS failures
+    ├── 11-l7-load-generator.yaml         # Continuous HTTP load for L7 dashboards
+    └── 12-l7-client-egress-policy.yaml   # Client-side L7 egress policy for outgoing HTTP metrics
 ```
 
 ## ✅ Prerequisites
@@ -103,17 +110,86 @@ network_profile {
 }
 ```
 
-> **L7 policies**: the `azurerm` provider currently exposes only the observability/security toggles. `deploy.sh --enable-l7` runs `az aks update --acns-advanced-networkpolicies L7` on top of the Terraform-provisioned cluster.
+ACNS is put into **L7 policy mode** declaratively via `azapi` because the `azurerm` provider does not expose that field yet:
+
+```hcl
+resource "azapi_update_resource" "acns_l7_policy_mode" {
+  type        = "Microsoft.ContainerService/managedClusters@2025-04-01"
+  resource_id = azurerm_kubernetes_cluster.this.id
+
+  body = {
+    properties = {
+      networkProfile = {
+        advancedNetworking = {
+          security = {
+            advancedNetworkPolicies = "L7"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+> **L7 policies**: the `azurerm` provider's `advanced_networking` block does not yet expose the `advancedNetworkPolicies` mode (`FQDN` / `L7`). Terraform declares that setting via an `azapi_update_resource` on the AKS cluster, so `terraform apply` provisions ACNS in **L7 mode** end-to-end. No extra `az aks update` step is required.
 
 ## 🔭 Demo 1: Container Network Observability
 
 ### Generate traffic
 
 ```bash
+kubectl apply -f kubernetes-manifests/06-prometheus-hubble-metrics.yaml
 kubectl apply -f kubernetes-manifests/01-traffic-demo.yaml
+kubectl apply -f kubernetes-manifests/07-dns-traffic-generator.yaml
+kubectl apply -f kubernetes-manifests/08-dns-metrics-trigger-policy.yaml
 ```
 
-This creates a `traffic-demo` namespace with clients producing pod-to-pod HTTP traffic, external DNS lookups, and intentionally failing connections.
+The first manifest expands Azure Monitor's minimal-ingestion keep-list for the `networkobservabilityHubble` and `networkobservabilityCilium` targets. Without it, high-cardinality flow metrics such as `hubble_flows_processed_total` are scraped but discarded, leaving the ACNS flow dashboards empty. Managed Prometheus reloads the configuration automatically; allow a few minutes for new series to appear.
+
+The baseline traffic manifest creates a `traffic-demo` namespace with clients producing pod-to-pod HTTP traffic, external DNS lookups, and intentionally failing connections. The DNS generator deployment continuously issues DNS lookups, while the DNS trigger policy routes those lookups through Cilium's DNS-aware policy path so DNS panels in Grafana populate consistently.
+
+Quick validation:
+
+```bash
+kubectl -n traffic-demo get pods -l app=dns-traffic-generator
+kubectl -n traffic-demo logs deploy/dns-traffic-generator --tail=20
+kubectl -n traffic-demo rollout status deploy/dns-traffic-generator
+```
+
+Optional scale-up for faster dashboard population:
+
+```bash
+kubectl -n traffic-demo scale deploy/dns-traffic-generator --replicas=4
+```
+
+Generate DNS errors on demand (optional):
+
+```bash
+kubectl apply -f kubernetes-manifests/09-dns-error-generator.yaml
+kubectl apply -f kubernetes-manifests/10-dns-error-deny-egress.yaml
+```
+
+This creates dedicated pods that continuously attempt DNS lookups while egress is denied. The failed lookups are useful for demonstrating error/drop behavior in networking dashboards.
+
+Disable DNS error traffic:
+
+```bash
+kubectl delete -f kubernetes-manifests/10-dns-error-deny-egress.yaml --ignore-not-found
+kubectl delete -f kubernetes-manifests/09-dns-error-generator.yaml --ignore-not-found
+```
+
+Keep it running continuously:
+
+```bash
+# If DNS charts flatten, restart pods without deleting objects
+kubectl -n traffic-demo rollout restart deploy/dns-traffic-generator
+
+# Verify all replicas are Ready
+kubectl -n traffic-demo get deploy dns-traffic-generator
+kubectl -n traffic-demo get pods -l app=dns-traffic-generator -w
+```
+
+The deployment is configured with three replicas and liveness/readiness probes. If a pod gets stuck and stops producing DNS lookups, Kubernetes restarts it automatically.
 
 ### Explore Grafana dashboards
 
@@ -129,16 +205,29 @@ Open the Grafana URL from the deploy output (`terraform -chdir=terraform output 
 # Port-forward the Hubble relay
 kubectl port-forward -n kube-system svc/hubble-relay 4245:443 &
 
-# Watch live flows (TLS certs are managed by ACNS)
-hubble config set tls true
-hubble config set tls-server-name instance.hubble-relay.cilium.io
+# Export the ACNS-managed Hubble client mTLS credentials
+kubectl get secret hubble-relay-client-certs -n kube-system \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/hubble-client.crt
+kubectl get secret hubble-relay-client-certs -n kube-system \
+  -o jsonpath='{.data.tls\.key}' | base64 -d > /tmp/hubble-client.key
 kubectl get secret hubble-relay-client-certs -n kube-system \
   -o jsonpath='{.data.ca\.crt}' | base64 -d > /tmp/hubble-ca.crt
+
+# Configure Hubble CLI for the relay's mTLS endpoint
+hubble config set tls true
+hubble config set tls-server-name instance.hubble-relay.cilium.io
 hubble config set tls-ca-cert-files /tmp/hubble-ca.crt
+hubble config set tls-client-cert-file /tmp/hubble-client.crt
+hubble config set tls-client-key-file /tmp/hubble-client.key
+
+# Validate the connection and watch live flows
+hubble status
 
 hubble observe --namespace traffic-demo
 hubble observe --verdict DROPPED
 ```
+
+The relay uses mutual TLS. If the client certificate and key are not configured, the relay closes the forwarded connection and `kubectl port-forward` reports `broken pipe`.
 
 ## 🔒 Demo 2: FQDN Filtering (Container Network Security)
 
@@ -158,23 +247,113 @@ kubectl exec -n demo deploy/demo-client -- ./agnhost connect www.example.com:80 
 
 How it works: the `CiliumNetworkPolicy` allows DNS lookups only for `*.bing.com` via kube-dns, then permits egress only to the resolved IPs (`toFQDNs`). Everything else is dropped in-kernel by eBPF — watch it live with `hubble observe --verdict DROPPED -n demo`.
 
-## 🛡️ Demo 3: Layer 7 Policy
+## 🛡️ Demo 3: Layer 7 Policy and HTTP Observability
 
-Requires `./deploy.sh --enable-l7` (or `az aks update --enable-acns --acns-advanced-networkpolicies L7`).
+ACNS is provisioned in **L7 mode** by Terraform (`azapi_update_resource.acns_l7_policy_mode`), so `CiliumNetworkPolicy` resources with `http` rules are accepted by the Azure validating admission policy and enforced by a node-local Cilium Envoy proxy.
+
+### 1. Deploy the demo apps and policies
 
 ```bash
 kubectl create ns l7-demo
 kubectl apply -n l7-demo -f kubernetes-manifests/04-l7-demo-apps.yaml
 kubectl apply -n l7-demo -f kubernetes-manifests/05-l7-policy.yaml
+kubectl apply -f kubernetes-manifests/12-l7-client-egress-policy.yaml
+```
 
+What each manifest does:
+
+- `04-l7-demo-apps.yaml` — deploys `http-server` (nginx) and `http-client` (curl). The nginx config exposes:
+  - `GET /` and `GET /products` returning `200`
+  - `GET /status/{200,201,204,301,302,400,401,404,418,429,500,502,503}` returning the requested status code
+- `05-l7-policy.yaml` — ingress L7 policy on `http-server` that allows only `GET /`, `GET /products`, and `GET /status/[0-9]+` from `http-client`. Any other method or path (for example `POST /products` or `GET /admin`) is denied by Envoy with **HTTP 403**.
+- `12-l7-client-egress-policy.yaml` — egress L7 policy on `http-client` that attaches an Envoy proxy on the client side. Without this, Hubble only reports `reporter="server"` metrics and the Grafana **Outgoing HTTP** panels stay empty.
+
+### 2. Confirm policy enforcement
+
+```bash
 # Allowed — GET /products
 kubectl exec -n l7-demo deploy/http-client -- curl -s http://http-server/products
 
-# Denied (403) — POST to the same path
-kubectl exec -n l7-demo deploy/http-client -- curl -s -X POST http://http-server/products
-
-# Denied (403) — GET to a different path
+# Allowed — GET / (root)
 kubectl exec -n l7-demo deploy/http-client -- curl -s http://http-server/
+
+# Allowed — server-generated status codes (200/201/204/301/302/400/401/404/418/429/500/502/503)
+kubectl exec -n l7-demo deploy/http-client -- \
+  sh -c 'for c in 200 201 204 301 302 400 401 404 418 429 500 502 503; do \
+           printf "%s -> %s\n" "$c" "$(curl -s -o /dev/null -w %{http_code} http://http-server/status/$c)"; \
+         done'
+
+# Denied by policy (403) — POST /products
+kubectl exec -n l7-demo deploy/http-client -- curl -s -o /dev/null -w '%{http_code}\n' -X POST http://http-server/products
+
+# Denied by policy (403) — GET /admin (not in allowed paths)
+kubectl exec -n l7-demo deploy/http-client -- curl -s -o /dev/null -w '%{http_code}\n' http://http-server/admin
+```
+
+### 3. Continuous multi-status load generator
+
+To drive the Grafana **L7 Flows / HTTP** dashboards with realistic 2xx / 3xx / 4xx / 5xx activity:
+
+```bash
+kubectl apply -f kubernetes-manifests/11-l7-load-generator.yaml
+kubectl -n l7-demo rollout restart deploy/http-client deploy/http-load
+kubectl -n l7-demo get pods -l role=load
+```
+
+The `http-load` deployment runs a curl loop that in each iteration:
+
+1. Hits every `/status/<code>` endpoint (server-generated 2xx / 3xx / 4xx / 5xx)
+2. Hits `GET /products` and `GET /` (allowed)
+3. Hits `POST /products` and `GET /admin` (denied by policy, Envoy returns 403)
+
+The `rollout restart` is important the first time: Cilium regenerates the client pods' endpoints so the Envoy proxy is attached and `reporter="client"` metrics start flowing.
+
+### 4. Verify metrics in Managed Prometheus
+
+Get an access token and query the workspace directly:
+
+```bash
+MON_ID=$(terraform -chdir=terraform output -raw monitor_workspace_id)
+PROM_URL=$(az resource show --ids "$MON_ID" \
+  --query properties.metrics.prometheusQueryEndpoint -o tsv)
+TOKEN=$(az account get-access-token \
+  --resource https://prometheus.monitor.azure.com --query accessToken -o tsv)
+
+curl -fsS -H "Authorization: Bearer $TOKEN" --get \
+  --data-urlencode 'query=sum by (reporter,status) (increase(hubble_http_requests_total[3m]))' \
+  "$PROM_URL/api/v1/query" | jq '.data.result'
+```
+
+Useful PromQL for Grafana **Explore**:
+
+```promql
+# Overall request rate by reporter (client = outgoing, server = incoming)
+sum by (reporter) (rate(hubble_http_requests_total[2m]))
+
+# Full status-code breakdown (both directions)
+sum by (reporter,status,method) (rate(hubble_http_requests_total[2m]))
+
+# Error rate (4xx + 5xx)
+sum by (reporter) (rate(hubble_http_requests_total{status=~"4..|5.."}[2m]))
+
+# Latency percentiles
+histogram_quantile(0.95,
+  sum by (le,reporter) (rate(hubble_http_request_duration_seconds_bucket[2m])))
+```
+
+The expected Grafana L7 dashboards (folder **Azure Managed Prometheus**):
+
+- **Kubernetes / Networking / Clusters (L7)** — Outgoing / Incoming HTTP request rate and success rate
+- **Kubernetes / Networking (Workload) (L7)** — per-workload HTTP breakdown
+
+### 5. Turn the L7 load off
+
+```bash
+kubectl delete -f kubernetes-manifests/11-l7-load-generator.yaml --ignore-not-found
+kubectl delete -f kubernetes-manifests/12-l7-client-egress-policy.yaml --ignore-not-found
+kubectl delete -n l7-demo -f kubernetes-manifests/05-l7-policy.yaml --ignore-not-found
+kubectl delete -n l7-demo -f kubernetes-manifests/04-l7-demo-apps.yaml --ignore-not-found
+kubectl delete ns l7-demo --ignore-not-found
 ```
 
 The policy is enforced by a node-local Envoy proxy managed by Cilium — HTTP method/path aware, with L7 flow metrics visible in Hubble and Grafana.

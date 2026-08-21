@@ -30,4 +30,8 @@ if [ -n "$CLUSTER_NAME" ] && command -v kubectl &> /dev/null; then
     kubectl config delete-cluster "$CLUSTER_NAME" 2>/dev/null || true
 fi
 
+echo -e "${GREEN}==>${NC} Removing local Terraform state and provider files..."
+find "$TF_DIR" -maxdepth 1 -type f \( -name '*.tfstate' -o -name '*.tfstate.*' \) -delete
+rm -rf "$TF_DIR/.terraform"
+
 echo -e "${GREEN}==>${NC} Cleanup complete!"

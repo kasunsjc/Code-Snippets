@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traffic-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-traffic-generator
+  namespace: traffic-demo
+  labels:
+    app: dns-traffic-generator
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: dns-traffic-generator
+  template:
+    metadata:
+      labels:
+        app: dns-traffic-generator
+    spec:
+      containers:
+      - name: dns-loop
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            touch /tmp/dns-loop-heartbeat
+            nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1
+            nslookup bing.com >/dev/null 2>&1
+            nslookup github.com >/dev/null 2>&1
+            nslookup cloudflare.com >/dev/null 2>&1
+            nslookup nxdomain-${HOSTNAME}-$(date +%s).invalid >/dev/null 2>&1
+            sleep 1
+          done
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - find /tmp/dns-loop-heartbeat -mmin -1 | grep -q dns-loop-heartbeat
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - find /tmp/dns-loop-heartbeat -mmin -1 | grep -q dns-loop-heartbeat
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

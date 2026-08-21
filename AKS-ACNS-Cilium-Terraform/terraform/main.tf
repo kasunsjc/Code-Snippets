@@ -47,7 +47,6 @@ resource "azurerm_kubernetes_cluster" "this" {
     auto_scaling_enabled = true
     min_count            = var.node_min_count
     max_count            = var.node_max_count
-    zones                = ["1", "2", "3"]
 
     upgrade_settings {
       max_surge = "10%"
@@ -77,6 +76,24 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   lifecycle {
     ignore_changes = [default_node_pool[0].node_count]
+  }
+}
+
+# azurerm has no attribute for advancedNetworkPolicies yet; declare it via azapi.
+resource "azapi_update_resource" "acns_l7_policy_mode" {
+  type        = "Microsoft.ContainerService/managedClusters@2025-04-01"
+  resource_id = azurerm_kubernetes_cluster.this.id
+
+  body = {
+    properties = {
+      networkProfile = {
+        advancedNetworking = {
+          security = {
+            advancedNetworkPolicies = "L7"
+          }
+        }
+      }
+    }
   }
 }
 
@@ -132,7 +149,7 @@ resource "azurerm_dashboard_grafana" "this" {
   name                  = local.grafana_name
   resource_group_name   = azurerm_resource_group.this.name
   location              = azurerm_resource_group.this.location
-  grafana_major_version = 11
+  grafana_major_version = 12
   tags                  = var.tags
 
   identity {

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dns-error-generator
+  namespace: traffic-demo
+  labels:
+    app: dns-error-generator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: dns-error-generator
+  template:
+    metadata:
+      labels:
+        app: dns-error-generator
+    spec:
+      containers:
+      - name: dns-error-loop
+        image: busybox:1.36
+        command:
+        - /bin/sh
+        - -c
+        - |
+          while true; do
+            touch /tmp/dns-error-heartbeat
+            nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1 || true
+            nslookup nxdomain-${HOSTNAME}-$(date +%s).invalid >/dev/null 2>&1 || true
+            sleep 1
+          done
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - find /tmp/dns-error-heartbeat -mmin -1 | grep -q dns-error-heartbeat
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - find /tmp/dns-error-heartbeat -mmin -1 | grep -q dns-error-heartbeat
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi

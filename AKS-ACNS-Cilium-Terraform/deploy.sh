@@ -72,6 +72,12 @@ get_credentials() {
         --overwrite-existing
 }
 
+configure_prometheus_hubble_metrics() {
+    print_message "Enabling Hubble flow metrics for Managed Prometheus dashboards..."
+    kubectl apply -f "$SCRIPT_DIR/kubernetes-manifests/06-prometheus-hubble-metrics.yaml" --output none
+    kubectl -n kube-system rollout status deployment/ama-metrics --timeout=5m
+}
+
 enable_l7_policies() {
     print_message "Enabling L7 advanced network policies (includes FQDN)..."
     print_warning "This 'az aks update' may take 5-10 minutes..."
@@ -126,6 +132,7 @@ show_summary() {
 check_prerequisites
 terraform_apply
 get_credentials
+configure_prometheus_hubble_metrics
 if [ "$ENABLE_L7" = true ]; then
     enable_l7_policies
 fi

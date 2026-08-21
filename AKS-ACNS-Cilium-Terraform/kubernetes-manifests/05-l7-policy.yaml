@@ -1,13 +1,13 @@
 # Layer 7 policy (Container Network Security).
-# Only GET /products from http-client is allowed to reach http-server;
-# other methods/paths get an HTTP 403 from the Cilium Envoy proxy.
+# Allow GET /products, GET /, and the /status/* demo endpoints from http-client
+# to http-server. Other paths (e.g. /admin) are denied by Envoy with HTTP 403.
 # Requires ACNS advanced network policies set to L7 (see deploy.sh --enable-l7).
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
   name: allow-get-products
 spec:
-  description: "Allow only GET /products from http-client to http-server"
+  description: "Allow GET /products, /, and /status/* from http-client to http-server"
   endpointSelector:
     matchLabels:
       app: http-server
@@ -23,3 +23,7 @@ spec:
             http:
               - method: "GET"
                 path: "/products"
+              - method: "GET"
+                path: "/"
+              - method: "GET"
+                path: "/status/[0-9]+"
