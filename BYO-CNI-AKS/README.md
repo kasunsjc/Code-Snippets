@@ -388,10 +388,15 @@ HTTP-aware policy that restricts `backend-api` access to specific HTTP methods a
 - `GET /health` — allowed
 - All other paths/methods — denied with HTTP 403
 
-> **Note:** Applying `04-cilium-l7-policy.yaml` replaces `02-cilium-l3-l4-policy.yaml` because L7 rules implicitly supersede L3/L4 rules for the same endpoint selector.
+> **Note:** Cilium policies are additive (OR logic) — when `02-cilium-l3-l4-policy.yaml` and `04-cilium-l7-policy.yaml` are both applied to the same endpoint, traffic allowed by either policy passes, so the L7 restrictions never take effect. Delete the L3/L4 policy first:
+>
+> ```bash
+> kubectl delete -f sample-apps/02-cilium-l3-l4-policy.yaml
+> kubectl apply -f sample-apps/04-cilium-l7-policy.yaml
+> ```
 
 ### Cluster-wide Default Deny (`05-cilium-clusterwide-policy.yaml`)
-Uses a `CiliumClusterwideNetworkPolicy` (CCNP) to enforce a zero-trust baseline by denying all ingress traffic across every namespace, except from `kube-system` pods. Unlike standard `NetworkPolicy` (which is namespace-scoped and only applies to selected pods), a CCNP applies globally and can only be created by cluster admins. Apply this before deploying workloads to implement an explicit-allow posture.
+Uses a `CiliumClusterwideNetworkPolicy` (CCNP) to enforce a zero-trust baseline by denying ingress traffic in every namespace **except `kube-system`**, unless it comes from `kube-system` pods. The selector deliberately excludes `kube-system` endpoints: if CoreDNS itself were selected, its ingress would be restricted to `kube-system` sources and DNS queries from every other namespace would be dropped, breaking the whole cluster. Unlike standard `NetworkPolicy` (which is namespace-scoped and only applies to selected pods), a CCNP applies globally and can only be created by cluster admins. Apply this before deploying workloads to implement an explicit-allow posture.
 
 ### DNS-aware Egress (`06-cilium-dns-egress-policy.yaml`)
 Controls which external domains `backend-api` can reach using Cilium's FQDN matching (powered by the Cilium DNS proxy):
