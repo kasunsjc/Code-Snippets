@@ -159,7 +159,13 @@ install_cilium() {
     API_SERVER_FQDN=$(az aks show \
         --resource-group "$RESOURCE_GROUP_NAME" \
         --name "$AKS_CLUSTER_NAME" \
-        --query fqdn -o tsv)
+        --query "fqdn || privateFqdn" -o tsv)
+
+    if [ -z "$API_SERVER_FQDN" ]; then
+        print_error "AKS API server FQDN/privateFQDN is empty. Set up a reachable API server endpoint before enabling kube-proxy-free mode."
+        return 1
+    fi
+
     print_info "API server FQDN: $API_SERVER_FQDN"
 
     # Install Cilium with AKS-compatible settings
@@ -306,7 +312,7 @@ disable_kube_proxy() {
         attempt=$((attempt + 1))
         if [ $attempt -ge $max_attempts ]; then
             print_warning "kube-proxy DaemonSet still present. Check manually with: kubectl -n kube-system get ds kube-proxy"
-            return 0
+            return 1
         fi
         print_info "Waiting for kube-proxy DaemonSet removal... (attempt $attempt/$max_attempts)"
         sleep 10
