@@ -42,7 +42,8 @@ echo "  Backend:  $BACKEND_POD"
 
 print_section "Test 1: Frontend -> Backend (should SUCCEED)"
 print_test "Frontend can reach backend-api on port 80..."
-if kubectl -n cilium-demo exec "$FRONTEND_POD" -- wget -qO- --timeout=5 http://backend-api 2>/dev/null | head -1 > /dev/null 2>&1; then
+# Note: don't pipe wget output - the pipeline would mask wget's exit code
+if kubectl -n cilium-demo exec "$FRONTEND_POD" -- wget -qO- --timeout=5 http://backend-api > /dev/null 2>&1; then
     print_pass "Frontend -> Backend: Connection allowed"
 else
     print_fail "Frontend -> Backend: Connection blocked (unexpected)"
@@ -50,7 +51,7 @@ fi
 
 print_section "Test 2: Frontend -> Database (should FAIL with policy)"
 print_test "Frontend cannot directly reach database..."
-if kubectl -n cilium-demo exec "$FRONTEND_POD" -- wget -qO- --timeout=5 http://database 2>/dev/null | head -1 > /dev/null 2>&1; then
+if kubectl -n cilium-demo exec "$FRONTEND_POD" -- wget -qO- --timeout=5 http://database > /dev/null 2>&1; then
     print_fail "Frontend -> Database: Connection allowed (policy not enforced)"
 else
     print_pass "Frontend -> Database: Connection blocked by policy"
@@ -58,7 +59,7 @@ fi
 
 print_section "Test 3: Backend -> Database (should SUCCEED)"
 print_test "Backend-api can reach database on port 80..."
-if kubectl -n cilium-demo exec "$BACKEND_POD" -- wget -qO- --timeout=5 http://database 2>/dev/null | head -1 > /dev/null 2>&1; then
+if kubectl -n cilium-demo exec "$BACKEND_POD" -- wget -qO- --timeout=5 http://database > /dev/null 2>&1; then
     print_pass "Backend -> Database: Connection allowed"
 else
     print_fail "Backend -> Database: Connection blocked (unexpected)"

@@ -154,6 +154,20 @@ install_cilium() {
     helm repo add cilium https://helm.cilium.io/
     helm repo update
 
+    # API server endpoint - required for kube-proxy-free mode so Cilium
+    # can reach the API server without the in-cluster kubernetes ClusterIP
+    API_SERVER_FQDN=$(az aks show \
+        --resource-group "$RESOURCE_GROUP_NAME" \
+        --name "$AKS_CLUSTER_NAME" \
+        --query "fqdn || privateFqdn" -o tsv)
+
+    if [ -z "$API_SERVER_FQDN" ]; then
+        print_error "AKS API server FQDN/privateFQDN is empty. Set up a reachable API server endpoint before enabling kube-proxy-free mode."
+        return 1
+    fi
+
+    print_info "API server FQDN: $API_SERVER_FQDN"
+
     # Install Cilium with AKS-compatible settings
     helm upgrade cilium cilium/cilium \
         --version "${CILIUM_VERSION}" \
@@ -167,6 +181,8 @@ install_cilium() {
         --set hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,httpV2:exemplars=true;labelsContext=source_ip\,source_namespace\,source_workload\,destination_ip\,destination_namespace\,destination_workload\,traffic_direction}" \
         --set ipam.operator.clusterPoolIPv4PodCIDRList="{10.244.0.0/16}" \
         --set kubeProxyReplacement=true \
+        --set k8sServiceHost="$API_SERVER_FQDN" \
+        --set k8sServicePort=443 \
         --set l2announcements.enabled=true \
         --set devices="{eth0}" \
         --set ipam.mode=cluster-pool \
@@ -241,6 +257,76 @@ verify_nodes() {
     kubectl get nodes -o wide
 }
 
+disable_kube_proxy() {
+    print_message "Removing AKS-managed kube-proxy (Cilium eBPF replaces it)..."
+
+    # The kube-proxy DaemonSet is reconciled by AKS, so deleting it directly
+    # won't stick. It must be disabled via the cluster's kubeProxyConfig.
+    if ! az extension show --name aks-preview &> /dev/null; then
+        print_info "Installing aks-preview Azure CLI extension..."
+        az extension add --name aks-preview --output none
+    fi
+
+    local state
+    state=$(az feature show \
+        --namespace Microsoft.ContainerService \
+        --name KubeProxyConfigurationPreview \
+        --query properties.state -o tsv 2>/dev/null || echo "NotRegistered")
+
+    if [ "$state" != "Registered" ]; then
+        print_info "Registering KubeProxyConfigurationPreview feature flag (one-time, may take a few minutes)..."
+        az feature register \
+            --namespace Microsoft.ContainerService \
+            --name KubeProxyConfigurationPreview \
+            --output none
+
+        while [ "$state" != "Registered" ]; do
+            sleep 20
+            state=$(az feature show \
+                --namespace Microsoft.ContainerService \
+                --name KubeProxyConfigurationPreview \
+                --query properties.state -o tsv)
+            print_info "Feature registration state: $state"
+        done
+
+        az provider register --namespace Microsoft.ContainerService --output none
+    fi
+
+    print_info "Disabling kube-proxy on cluster $AKS_CLUSTER_NAME..."
+    local kube_proxy_config
+    kube_proxy_config=$(mktemp)
+    echo '{"enabled": false}' > "$kube_proxy_config"
+
+    az aks update \
+        --resource-group "$RESOURCE_GROUP_NAME" \
+        --name "$AKS_CLUSTER_NAME" \
+        --kube-proxy-config "$kube_proxy_config" \
+        --output none
+
+    rm -f "$kube_proxy_config"
+
+    # Wait for the kube-proxy DaemonSet to be removed
+    local max_attempts=30
+    local attempt=0
+    while kubectl -n kube-system get daemonset kube-proxy &> /dev/null; do
+        attempt=$((attempt + 1))
+        if [ $attempt -ge $max_attempts ]; then
+            print_warning "kube-proxy DaemonSet still present. Check manually with: kubectl -n kube-system get ds kube-proxy"
+            return 1
+        fi
+        print_info "Waiting for kube-proxy DaemonSet removal... (attempt $attempt/$max_attempts)"
+        sleep 10
+    done
+
+    # Restart Cilium agents so eBPF service maps take over cleanly
+    print_info "Restarting Cilium agents to take over service routing..."
+    kubectl -n kube-system rollout restart daemonset/cilium
+    kubectl -n kube-system rollout status daemonset/cilium --timeout=300s
+
+    print_message "kube-proxy removed! Cilium eBPF now handles all service routing."
+    kubectl -n kube-system get pods -l component=kube-proxy --no-headers 2>/dev/null || true
+}
+
 deploy_bookinfo() {
     print_message "Deploying Bookinfo sample application..."
 
@@ -274,6 +360,7 @@ display_summary() {
     echo "Cilium Version:    $CILIUM_VERSION"
     echo "Hubble UI:         Enabled"
     echo "Hubble Relay:      Enabled"
+    echo "kube-proxy:        Removed (Cilium eBPF kube-proxy replacement)"
     echo ""
     echo "=========================================="
     echo "   Cilium Components"
@@ -300,6 +387,9 @@ display_summary() {
     echo ""
     echo "5. View Hubble flows:"
     echo "   hubble observe --follow"
+    echo ""
+    echo "6. Verify kube-proxy replacement:"
+    echo "   kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep KubeProxyReplacement"
     echo ""
     echo "=========================================="
 }
@@ -332,6 +422,7 @@ install_cilium
 install_gateway_api_crds
 wait_for_cilium
 verify_nodes
+disable_kube_proxy
 if [ "$DEPLOY_BOOKINFO" = true ]; then
     deploy_bookinfo
 fi
