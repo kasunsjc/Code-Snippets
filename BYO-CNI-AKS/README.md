@@ -195,6 +195,8 @@ helm upgrade cilium cilium/cilium \
   --set hubble.metrics.enabled="{dns,drop,tcp,flow,port-distribution,icmp,httpV2:exemplars=true;labelsContext=source_ip\,source_namespace\,source_workload\,destination_ip\,destination_namespace\,destination_workload\,traffic_direction}" \
   --set ipam.operator.clusterPoolIPv4PodCIDRList="{10.244.0.0/16}" \
   --set kubeProxyReplacement=true \
+  --set k8sServiceHost=<cluster API server FQDN> \
+  --set k8sServicePort=443 \
   --set l2announcements.enabled=true \
   --set devices="{eth0}" \
   --set ipam.mode=cluster-pool \
@@ -207,6 +209,7 @@ helm upgrade cilium cilium/cilium \
 | `aksbyocni.enabled=true` | Activates AKS-specific node bootstrap: configures routes on Azure VMs, sets up CNI config directory expected by AKS kubelet, and handles cloud-provider metadata. Without this flag, Cilium agents will fail to start on Azure nodes. |
 | `nodeinit.enabled=true` | Deploys the `cilium-node-init` DaemonSet which runs before Cilium agents and prepares each node (e.g., mounts BPF filesystem, clears stale CNI state). |
 | `kubeProxyReplacement=true` | Replaces kube-proxy with Cilium's eBPF-based service proxy. All `ClusterIP`, `NodePort`, `LoadBalancer`, and `ExternalIPs` routing is handled in the kernel via eBPF. |
+| `k8sServiceHost` / `k8sServicePort` | The API server FQDN and port (resolved by `deploy.sh` via `az aks show --query fqdn`). Required for kube-proxy-free mode: without kube-proxy, the in-cluster `kubernetes` ClusterIP is not routable until Cilium is up, so agents must reach the API server directly. |
 | `ipam.mode=cluster-pool` | Cilium operator assigns pod IP blocks from a central pool (`10.244.0.0/16`) to each node, rather than delegating to Azure IPAM. Keeps pod IPs inside a known CIDR and avoids VNet IP exhaustion. |
 | `ipam.operator.clusterPoolIPv4PodCIDRList` | Defines the overall pod CIDR pool. Must match `networkProfile.podCidr` set in the Bicep AKS module. |
 | `devices="{eth0}"` | Tells Cilium which network interface to attach eBPF programs to. Azure VMs use `eth0` as the primary NIC. |
@@ -237,6 +240,26 @@ helm upgrade cilium cilium/cilium \
 
 The script polls `kubectl get nodes` until all nodes report `Ready`, then optionally runs `cilium status --wait` for a detailed health summary. A deployment summary table is printed showing the cluster name, Cilium version, and next steps.
 
+### Phase 5 — kube-proxy Removal
+
+Even with `networkPlugin: none`, AKS deploys its managed `kube-proxy` DaemonSet into `kube-system`. It is reconciled by the AKS addon manager (`addonmanager.kubernetes.io/mode: Reconcile`), so deleting it with `kubectl` only works until the addon manager restores it. The supported removal path is the cluster-level kube-proxy configuration:
+
+```bash
+az aks update \
+  --resource-group rg-byocni-cilium-demo \
+  --name byocni-aks-dev \
+  --kube-proxy-config '{"enabled": false}'
+```
+
+This requires the `KubeProxyConfigurationPreview` feature flag and the `aks-preview` CLI extension — `deploy.sh` registers/installs both if missing. After the update, the script waits for the DaemonSet to disappear and restarts the Cilium agents so eBPF service maps take over all routing.
+
+Verify:
+
+```bash
+kubectl -n kube-system get ds kube-proxy            # NotFound
+kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep KubeProxyReplacement   # True
+```
+
 ### Complete Deployment Flow
 
 ```
@@ -249,13 +272,15 @@ deploy.sh
   ├─ 4. get_outputs             (az deployment group show)
   ├─ 5. configure_aks_access    (az aks get-credentials)
   ├─ 6. wait_for_nodes          (poll kubectl get nodes ≥2)
-  ├─ 7. install_cilium          (helm upgrade --install)
+  ├─ 7. install_cilium          (helm upgrade --install, k8sServiceHost = API server FQDN)
   │       └── Nodes transition to Ready
   ├─ 8. install_gateway_api_crds (kubectl apply Gateway API CRDs)
   │       └── cilium DaemonSet + Operator restarted
   ├─ 9. wait_for_cilium         (rollout status cilium, operator, hubble-relay)
   ├─ 10. verify_nodes           (poll until NotReady count = 0)
-  └─ 11. display_summary
+  ├─ 11. disable_kube_proxy     (az aks update --kube-proxy-config '{"enabled": false}')
+  │       └── kube-proxy DaemonSet removed, Cilium eBPF handles all service routing
+  └─ 12. display_summary
 ```
 
 ## Quick Start
@@ -405,6 +430,9 @@ kubectl -n kube-system logs -l app.kubernetes.io/name=cilium-agent --tail=50
 # Inspect the eBPF service map (kube-proxy replacement)
 kubectl -n kube-system exec -it ds/cilium -- cilium service list
 
+# Confirm kube-proxy replacement is active (kube-proxy DaemonSet is removed)
+kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep KubeProxyReplacement
+
 # Check node-level IPAM allocations
 kubectl -n kube-system exec -it ds/cilium -- cilium ip list
 ```
@@ -433,7 +461,7 @@ chmod +x cleanup.sh
 
 4. **`cilium-operator` manages IPAM** — The operator assigns a `/24` pod CIDR block from `10.244.0.0/16` to each node. Pods receive IPs within their node's block without consuming any Azure VNet IPs.
 
-5. **Cilium handles all service routing** — All service routing (ClusterIP, NodePort, LoadBalancer) is handled by eBPF programs in the kernel, programmed by Cilium. This is faster and requires no iptables rules.
+5. **Cilium handles all service routing — kube-proxy is removed** — The AKS-managed `kube-proxy` DaemonSet is disabled via the cluster's `kubeProxyConfig`, and all service routing (ClusterIP, NodePort, LoadBalancer) is handled by eBPF programs in the kernel, programmed by Cilium. This is faster and requires no iptables rules.
 
 6. **Hubble provides deep observability** — Hubble hooks into Cilium's eBPF datapath and records every network flow with Kubernetes metadata (namespace, pod name, labels). Flows are aggregated by Hubble Relay and viewable via the UI or CLI.
 
