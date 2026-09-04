@@ -5,14 +5,14 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **21 examples** | Kubernetes: 14 | Docker: 4 | Azure: 1 | *Last Updated: June 2026*
+> **21 examples** | Kubernetes: 14 | Docker: 4 | Azure: 1 | *Last Updated: September 2026*
 
 ## 📋 Table of Contents
 
 | # | Demo | Description | Category |
 |---|------|-------------|----------|
 | 1 | [ACR-Task](./ACR-Task/) | Build container images directly in Azure without needing Docker installed locally. | Azure |
-| 2 | [AKS-Advanced-Container-Networking](./AKS-Advanced-Container-Networking/) | Demonstrate Advanced Container Networking Services on Azure Kubernetes Service, including network... | Kubernetes |
+| 2 | [AKS-ACNS-Cilium-Terraform](./AKS-ACNS-Cilium-Terraform/) | Deep network traffic visibility and security on Azure Kubernetes Service using **Advanced Contain... | Kubernetes |
 | 3 | [AKS-AppGW-Containers](./AKS-AppGW-Containers/) | Deploy an AKS cluster using **Application Gateway for Containers** — the next generation of Azure... | Kubernetes |
 | 4 | [AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/) | End-to-end Terraform automation that deploys [Argo CD](https://argo-cd.readthedocs.io/) on Azure ... | Kubernetes |
 | 5 | [AKS-Desktop](./AKS-Desktop/) | This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and... | Kubernetes |
@@ -39,8 +39,8 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 
 ### Kubernetes
 
-- **[AKS-Advanced-Container-Networking](./AKS-Advanced-Container-Networking/)** — Demonstrate Advanced Container Networking Services on Azure Kubernetes Service, including network observability, FQDN-based security policies, and Layer 7 traffic control.
-  - 📄 README: Yes | 📁 Files: 10
+- **[AKS-ACNS-Cilium-Terraform](./AKS-ACNS-Cilium-Terraform/)** — Deep network traffic visibility and security on Azure Kubernetes Service using **Advanced Container Networking Services** with **Azure CNI Powered by Cilium**, provisioned entirely with **Terraform**.
+  - 📄 README: Yes | 📁 Files: 20
 - **[AKS-AppGW-Containers](./AKS-AppGW-Containers/)** — Deploy an AKS cluster using **Application Gateway for Containers** — the next generation of Azure Application Gateway designed for Kubernetes workloads. This demo uses the **Gateway API** (the successor to Ingress) with the ALB Controller AKS add-on.
   - 📄 README: Yes | 📁 Files: 22
 - **[AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/)** — End-to-end Terraform automation that deploys [Argo CD](https://argo-cd.readthedocs.io/) on Azure Kubernetes Service (AKS) using the **`Microsoft.ArgoCD` cluster extension**, with Microsoft Entra ID single sign-on, group-based RBAC, TLS from Azure Key Vault, and automatic DNS via the App Routing add-on — all in a single `./deploy.sh` invocation.
