@@ -41,8 +41,7 @@ kubectl get service web
 ## Clean up
 
 ```sh
-kubectl delete -f kubernetes-manifests/hello-kubevela.yaml
-cd terraform
-terraform destroy
-rm -rf .terraform terraform.tfstate terraform.tfstate.* tfplan
+./cleanup.sh
 ```
+
+The script asks for explicit confirmation, destroys the Terraform-managed Azure resources, removes the local kubeconfig context, and deletes local Terraform state and provider files.
