@@ -19,8 +19,8 @@ param namePrefix string = 'byocni'
 ])
 param environment string = 'dev'
 
-@description('AKS Kubernetes version')
-param kubernetesVersion string = '1.31.2'
+@description('AKS Kubernetes minor version; AKS selects a currently available patch')
+param kubernetesVersion string = '1.36'
 
 @description('System node pool count')
 @minValue(1)

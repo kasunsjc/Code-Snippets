@@ -59,7 +59,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
         mode: 'System'
         type: 'VirtualMachineScaleSets'
         osType: 'Linux'
-        osSKU: 'AzureLinux'
+        osSKU: 'AzureLinux3'
         vnetSubnetID: subnetId
         maxPods: 110
         enableAutoScaling: true
@@ -79,7 +79,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-09-01' = {
         mode: 'User'
         type: 'VirtualMachineScaleSets'
         osType: 'Linux'
-        osSKU: 'AzureLinux'
+        osSKU: 'AzureLinux3'
         vnetSubnetID: subnetId
         maxPods: 110
         enableAutoScaling: true
