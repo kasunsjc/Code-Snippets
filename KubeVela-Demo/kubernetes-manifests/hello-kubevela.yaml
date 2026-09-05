@@ -1,0 +1,14 @@
+apiVersion: core.oam.dev/v1beta1
+kind: Application
+metadata:
+  name: hello-kubevela
+  namespace: default
+spec:
+  components:
+    - name: web
+      type: webservice
+      properties:
+        image: nginx:1.27-alpine
+        ports:
+          - port: 80
+            expose: true
