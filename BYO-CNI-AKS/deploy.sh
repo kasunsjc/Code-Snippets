@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 RESOURCE_GROUP_NAME="rg-byocni-cilium-demo"
 LOCATION="northeurope"
 DEPLOYMENT_NAME="byocni-deployment-$(date +%Y%m%d-%H%M%S)"
-CILIUM_VERSION="1.18.7"
+CILIUM_VERSION="1.20.1"
 
 # Functions
 print_message() {
@@ -193,22 +193,24 @@ install_cilium() {
 }
 
 install_gateway_api_crds() {
-    print_message "Installing Gateway API CRDs..."
+    print_message "Installing Gateway API v1.6.1 CRDs before Cilium..."
 
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
-    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
+    local gateway_api_base="https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.1/config/crd/standard"
+    local crds=(
+        gateway.networking.k8s.io_gatewayclasses.yaml
+        gateway.networking.k8s.io_gateways.yaml
+        gateway.networking.k8s.io_httproutes.yaml
+        gateway.networking.k8s.io_referencegrants.yaml
+        gateway.networking.k8s.io_grpcroutes.yaml
+        gateway.networking.k8s.io_backendtlspolicies.yaml
+        gateway.networking.k8s.io_tlsroutes.yaml
+    )
+
+    for crd in "${crds[@]}"; do
+        kubectl apply --server-side -f "${gateway_api_base}/${crd}"
+    done
 
     print_message "Gateway API CRDs installed!"
-
-    # Restart Cilium pods to pick up the Gateway API CRDs
-    print_message "Restarting Cilium pods to detect Gateway API CRDs..."
-    kubectl -n kube-system rollout restart daemonset/cilium
-    kubectl -n kube-system rollout restart deployment/cilium-operator
-
-    print_message "Cilium pods restarted!"
 }
 
 wait_for_cilium() {
@@ -418,8 +420,8 @@ deploy_bicep
 get_outputs
 configure_aks_access
 wait_for_nodes
-install_cilium
 install_gateway_api_crds
+install_cilium
 wait_for_cilium
 verify_nodes
 disable_kube_proxy

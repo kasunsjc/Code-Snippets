@@ -20,7 +20,7 @@ Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Ciliu
 │  │  │  │  ┌──────────────┐  ┌──────────────┐  │  │  │  │
 │  │  │  │  │ System Pool  │  │  User Pool   │  │  │  │  │
 │  │  │  │  │ D2s_v3 ×2   │  │ D4s_v3 ×2   │  │  │  │  │
-│  │  │  │  │ (AzureLinux) │  │ (AzureLinux) │  │  │  │  │
+│  │  │  │  │ (AzureLinux3) │  │ (AzureLinux3) │  │  │  │  │
 │  │  │  │  └──────────────┘  └──────────────┘  │  │  │  │
 │  │  │  │                                       │  │  │  │
 │  │  │  │  Pod CIDR:     10.244.0.0/16          │  │  │  │
@@ -58,10 +58,10 @@ By default, AKS ships with two built-in networking options:
 
 | Option | How it works | Limitations |
 |--------|-------------|-------------|
-| **kubenet** | Nodes get VNet IPs; pods get private overlay IPs (NAT at node level) | No direct pod-to-pod routing across nodes; limited policy support |
+| **kubenet** | Nodes get VNet IPs; pods get private overlay IPs (NAT at node level) | Pods aren't directly addressable from the VNet; limited built-in policy features |
 | **Azure CNI** | Every pod gets a real VNet IP address | Consumes large IP blocks; iptables-based kube-proxy; no L7/DNS policy |
 
-Both options rely on **iptables** for service routing and network policy enforcement. iptables scales poorly — every connection must traverse a linear list of rules, and the entire rule table is reloaded on each policy change.
+In their traditional configurations, these options commonly use `kube-proxy` in iptables mode for Kubernetes Service routing. Network-policy enforcement is provided separately by the selected policy engine; the standard `NetworkPolicy` API itself is implementation-independent and limited to L3/L4 controls.
 
 ### BYO CNI (`networkPlugin: none`)
 
@@ -85,7 +85,7 @@ Cilium is purpose-built around **eBPF** (extended Berkeley Packet Filter), a Lin
 | Network observability | Limited (`conntrack`) | **Hubble** — per-flow visibility with labels |
 | kube-proxy replacement | No | ✅ Full kube-proxy replacement via eBPF |
 | Load balancer (L2) | No | ✅ L2 announcements + Gateway API |
-| Transparent encryption | No | ✅ WireGuard or IPsec, zero-config |
+| Transparent encryption | No | ✅ WireGuard or IPsec when explicitly configured |
 | Cluster-wide policies | No (namespace-scoped) | ✅ `CiliumClusterwideNetworkPolicy` |
 | Policy change impact | Full iptables reload | Incremental eBPF map update |
 
@@ -103,7 +103,7 @@ Cilium is purpose-built around **eBPF** (extended Berkeley Packet Filter), a Lin
 
 ## Prerequisites
 
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (v2.50+)
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (v2.39+ for AKS BYO CNI; use a current release)
 - [Helm](https://helm.sh/docs/intro/install/) (v3.x)
 - [kubectl](https://kubernetes.io/docs/tasks/tools/)
 - [Cilium CLI](https://docs.cilium.io/en/stable/gettingstarted/k8s-install-default/#install-the-cilium-cli) (recommended)
@@ -166,25 +166,29 @@ main.bicep
               ├── networkProfile.podCidr       = 10.244.0.0/16
               ├── networkProfile.serviceCidr   = 10.2.0.0/16
               ├── networkProfile.dnsServiceIP  = 10.2.0.10
-              ├── agentPoolProfiles[system]    Standard_D2s_v3 ×2, AzureLinux
-              └── agentPoolProfiles[userpool]  Standard_D4s_v3 ×2, AzureLinux
+              ├── agentPoolProfiles[system]    Standard_D2s_v3 ×2, AzureLinux3
+              └── agentPoolProfiles[userpool]  Standard_D4s_v3 ×2, AzureLinux3
 ```
 
 **What happens after Bicep completes:**
 
 - The AKS API server and control plane are running normally.
 - Worker nodes exist but are in `NotReady` state — the kubelet is running but cannot report `Ready` because there is no CNI to set up pod networking or pass the CNI health check.
-- No pods (not even `kube-system` DaemonSets like `kube-proxy`) are scheduled on nodes yet, because the scheduler will not place pods on `NotReady` nodes.
+- Normal application pods can't start because pod networking is unavailable. Host-networked system DaemonSets that tolerate the `NotReady` taint, including `kube-proxy`, can still be scheduled.
 
 > ⚠️ This is expected and correct. AKS nodes must be `NotReady` between Bicep completion and Cilium installation.
 
-### Phase 2 — Cilium Installation (Helm)
+### Phase 2 — Gateway API CRDs
+
+Because the demo enables Cilium's Gateway API controller, `deploy.sh` first installs the required upstream Gateway API v1.6.1 CRDs with server-side apply. Installing the CRDs first lets Cilium discover them during startup.
+
+### Phase 3 — Cilium Installation (Helm)
 
 `deploy.sh` adds the Cilium Helm repo and runs `helm upgrade --install`. The exact values used are documented below.
 
 ```bash
 helm upgrade cilium cilium/cilium \
-  --version 1.18.7 \
+  --version 1.20.1 \
   --install \
   --namespace kube-system \
   --set aksbyocni.enabled=true \
@@ -232,9 +236,7 @@ helm upgrade cilium cilium/cilium \
 4. Once the CNI config is in place, the kubelet CNI health check passes and nodes transition to `Ready`.
 5. `cilium-operator` starts and begins assigning pod CIDRs from `10.244.0.0/16` to each node (one `/24` per node by default).
 
-### Phase 3 — Gateway API CRDs
-
-`deploy.sh` installs Cilium with `gatewayAPI.enabled=true` first, then installs the upstream Gateway API CRDs (v1.2.1) from `kubernetes-sigs/gateway-api`. After the CRDs are applied, the script restarts the Cilium DaemonSet and Operator so they detect the new CRDs and register as a Gateway API controller.
+With `gatewayAPI.enabled=true`, Cilium registers the `cilium` GatewayClass after startup.
 
 ### Phase 4 — Verification
 
@@ -242,16 +244,22 @@ The script polls `kubectl get nodes` until all nodes report `Ready`, then option
 
 ### Phase 5 — kube-proxy Removal
 
-Even with `networkPlugin: none`, AKS deploys its managed `kube-proxy` DaemonSet into `kube-system`. It is reconciled by the AKS addon manager (`addonmanager.kubernetes.io/mode: Reconcile`), so deleting it with `kubectl` only works until the addon manager restores it. The supported removal path is the cluster-level kube-proxy configuration:
+Even with `networkPlugin: none`, AKS deploys its managed `kube-proxy` DaemonSet into `kube-system`. It is reconciled by the AKS addon manager (`addonmanager.kubernetes.io/mode: Reconcile`), so deleting it with `kubectl` only works until the addon manager restores it. The AKS cluster-level kube-proxy configuration is the persistent removal path. This capability is still an **AKS preview feature**, is excluded from the AKS SLA, and isn't recommended for production workloads:
 
 ```bash
+cat > kube-proxy.json <<'EOF'
+{"enabled": false}
+EOF
+
 az aks update \
   --resource-group rg-byocni-cilium-demo \
   --name byocni-aks-dev \
-  --kube-proxy-config '{"enabled": false}'
+  --kube-proxy-config kube-proxy.json
+
+rm kube-proxy.json
 ```
 
-This requires the `KubeProxyConfigurationPreview` feature flag and the `aks-preview` CLI extension — `deploy.sh` registers/installs both if missing. After the update, the script waits for the DaemonSet to disappear and restarts the Cilium agents so eBPF service maps take over all routing.
+The script creates the same temporary configuration file automatically. This requires the `KubeProxyConfigurationPreview` feature flag and the `aks-preview` CLI extension — `deploy.sh` registers/installs both if missing. After the update, the script waits for the DaemonSet to disappear and restarts the Cilium agents so eBPF service maps take over all routing.
 
 Verify:
 
@@ -272,13 +280,12 @@ deploy.sh
   ├─ 4. get_outputs             (az deployment group show)
   ├─ 5. configure_aks_access    (az aks get-credentials)
   ├─ 6. wait_for_nodes          (poll kubectl get nodes ≥2)
-  ├─ 7. install_cilium          (helm upgrade --install, k8sServiceHost = API server FQDN)
+  ├─ 7. install_gateway_api_crds (server-side apply Gateway API v1.6.1 CRDs)
+  ├─ 8. install_cilium          (helm upgrade --install, k8sServiceHost = API server FQDN)
   │       └── Nodes transition to Ready
-  ├─ 8. install_gateway_api_crds (kubectl apply Gateway API CRDs)
-  │       └── cilium DaemonSet + Operator restarted
   ├─ 9. wait_for_cilium         (rollout status cilium, operator, hubble-relay)
   ├─ 10. verify_nodes           (poll until NotReady count = 0)
-  ├─ 11. disable_kube_proxy     (az aks update --kube-proxy-config '{"enabled": false}')
+  ├─ 11. disable_kube_proxy     (AKS preview: az aks update --kube-proxy-config kube-proxy.json)
   │       └── kube-proxy DaemonSet removed, Cilium eBPF handles all service routing
   └─ 12. display_summary
 ```
@@ -347,7 +354,7 @@ hubble observe -n cilium-demo --to-label app=database
 | `namePrefix` | `byocni` | Short prefix for all resource names |
 | `environment` | `dev` | Environment tag; allowed: `dev`, `test`, `prod` |
 | `location` | `northeurope` | Azure region |
-| `kubernetesVersion` | `1.34` | AKS Kubernetes version |
+| `kubernetesVersion` | `1.36` | AKS Kubernetes minor version; AKS selects an available patch |
 | `systemNodeCount` | `2` | System node pool size (autoscales 1–3) |
 | `systemNodeVmSize` | `Standard_D2s_v3` | System node VM SKU |
 | `userNodeCount` | `2` | User node pool size (autoscales 1–5) |
@@ -368,10 +375,10 @@ hubble observe -n cilium-demo --to-label app=database
 
 | Pool | Mode | VM Size | OS | Autoscale | Taint |
 |------|------|---------|-----|-----------|-------|
-| `system` | System | Standard_D2s_v3 | AzureLinux | 1–3 nodes | `CriticalAddonsOnly=true:NoSchedule` |
-| `userpool` | User | Standard_D4s_v3 | AzureLinux | 1–5 nodes | none |
+| `system` | System | Standard_D2s_v3 | AzureLinux3 | 1–3 nodes | `CriticalAddonsOnly=true:NoSchedule` |
+| `userpool` | User | Standard_D4s_v3 | AzureLinux3 | 1–5 nodes | none |
 
-The system pool taint ensures only critical add-ons (CoreDNS, Cilium, metrics-server) run on system nodes. All workloads go to the user pool.
+The system-pool taint reserves those nodes for workloads with the matching toleration, such as CoreDNS and other critical add-ons. Ordinary application workloads go to the user pool. Cilium is a DaemonSet and runs on every node, including user-pool nodes.
 
 ## Sample Network Policies
 
@@ -433,13 +440,13 @@ hubble observe -n cilium-demo --to-label app=database
 kubectl -n kube-system logs -l app.kubernetes.io/name=cilium-agent --tail=50
 
 # Inspect the eBPF service map (kube-proxy replacement)
-kubectl -n kube-system exec -it ds/cilium -- cilium service list
+kubectl -n kube-system exec -it ds/cilium -- cilium-dbg service list
 
 # Confirm kube-proxy replacement is active (kube-proxy DaemonSet is removed)
 kubectl -n kube-system exec ds/cilium -- cilium-dbg status | grep KubeProxyReplacement
 
 # Check node-level IPAM allocations
-kubectl -n kube-system exec -it ds/cilium -- cilium ip list
+kubectl -n kube-system exec -it ds/cilium -- cilium-dbg ip list
 ```
 
 ## Cleanup
@@ -458,7 +465,7 @@ chmod +x cleanup.sh
 
 ## How It Works (Summary)
 
-1. **Bicep deploys AKS with `networkPlugin: none`** — The API server starts, but worker nodes have no CNI plugin. Kubelet reports `NotReady` because the CNI health check fails. No pods are scheduled yet.
+1. **Bicep deploys AKS with `networkPlugin: none`** — The API server starts, but worker nodes have no CNI plugin. Kubelet reports `NotReady` because the CNI health check fails. Normal application pods cannot start yet; host-networked system DaemonSets may still run.
 
 2. **`cilium-node-init` DaemonSet runs first** — Before the main Cilium agent starts, `node-init` prepares each node: mounts the BPF filesystem (`/sys/fs/bpf`), sets up required kernel parameters, and clears stale CNI state from any previous run.
 
@@ -468,13 +475,15 @@ chmod +x cleanup.sh
 
 5. **Cilium handles all service routing — kube-proxy is removed** — The AKS-managed `kube-proxy` DaemonSet is disabled via the cluster's `kubeProxyConfig`, and all service routing (ClusterIP, NodePort, LoadBalancer) is handled by eBPF programs in the kernel, programmed by Cilium. This is faster and requires no iptables rules.
 
-6. **Hubble provides deep observability** — Hubble hooks into Cilium's eBPF datapath and records every network flow with Kubernetes metadata (namespace, pod name, labels). Flows are aggregated by Hubble Relay and viewable via the UI or CLI.
+6. **Hubble provides deep observability** — Hubble hooks into Cilium's eBPF datapath and provides flow visibility with Kubernetes metadata (namespace, pod name, labels). Flows are aggregated by Hubble Relay and viewable via the UI or CLI.
 
 7. **Cilium Network Policies enforce zero-trust** — `CiliumNetworkPolicy` (CNP) and `CiliumClusterwideNetworkPolicy` (CCNP) extend standard Kubernetes `NetworkPolicy` with L7 rules, DNS-aware egress, and cluster-wide scope. Policies are compiled to eBPF maps for O(1) rule lookup regardless of policy count.
 
 ## References
 
 - [AKS BYO CNI Documentation](https://learn.microsoft.com/en-us/azure/aks/use-byo-cni)
+- [Supported AKS Kubernetes versions](https://learn.microsoft.com/en-us/azure/aks/supported-kubernetes-versions)
+- [Configure kube-proxy on AKS (Preview)](https://learn.microsoft.com/en-us/azure/aks/configure-kube-proxy)
 - [Cilium on AKS (BYO CNI)](https://docs.cilium.io/en/stable/installation/k8s-install-helm/)
 - [Cilium eBPF Datapath](https://docs.cilium.io/en/stable/concepts/ebpf/)
 - [Cilium Network Policies](https://docs.cilium.io/en/stable/security/policy/)
