@@ -8,11 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 TF_VARS_FILE="$TF_DIR/terraform.tfvars"
 
-TF_VAR_ARGS=()
-if [[ -f "$TF_VARS_FILE" ]]; then
-  TF_VAR_ARGS+=("-var-file=$TF_VARS_FILE")
-fi
-
 echo "=================================================="
 echo "  KubeVela on AKS - Deployment"
 echo "=================================================="
@@ -37,7 +32,11 @@ terraform -chdir="$TF_DIR" validate
 
 echo ""
 echo "[2/5] Applying AKS infrastructure..."
-terraform -chdir="$TF_DIR" apply -auto-approve "${TF_VAR_ARGS[@]}"
+if [[ -f "$TF_VARS_FILE" ]]; then
+  terraform -chdir="$TF_DIR" apply -auto-approve -var-file="$TF_VARS_FILE"
+else
+  terraform -chdir="$TF_DIR" apply -auto-approve
+fi
 
 tf_output() {
   terraform -chdir="$TF_DIR" output -raw "$1"

@@ -8,11 +8,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 TF_VARS_FILE="$TF_DIR/terraform.tfvars"
 
-TF_VAR_ARGS=()
-if [[ -f "$TF_VARS_FILE" ]]; then
-  TF_VAR_ARGS+=("-var-file=$TF_VARS_FILE")
-fi
-
 if ! command -v terraform &>/dev/null; then
   echo "ERROR: 'terraform' is not installed or not in PATH."
   exit 1
@@ -36,7 +31,11 @@ terraform -chdir="$TF_DIR" init
 
 echo ""
 echo "[2/3] Destroying Azure resources..."
-terraform -chdir="$TF_DIR" destroy -auto-approve "${TF_VAR_ARGS[@]}"
+if [[ -f "$TF_VARS_FILE" ]]; then
+  terraform -chdir="$TF_DIR" destroy -auto-approve -var-file="$TF_VARS_FILE"
+else
+  terraform -chdir="$TF_DIR" destroy -auto-approve
+fi
 
 echo ""
 echo "[3/3] Removing local cluster and Terraform data..."
