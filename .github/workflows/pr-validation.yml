@@ -168,7 +168,7 @@ jobs:
         run: |
           # Only validate the directories touched by this pull request
           jq -r '.[]' <<< "$CHANGED_TERRAFORM_FILES" \
-            | grep -v '/\.terraform/' \
+            | { grep -v '/\.terraform/' || true; } \
             | xargs -r -n1 dirname \
             | sort -u \
             | while read -r dir; do
@@ -180,15 +180,19 @@ jobs:
                 fi
               done > changed-terraform-dirs.txt
 
-          echo "Directories to validate:"
-          cat changed-terraform-dirs.txt
+          if [[ ! -s changed-terraform-dirs.txt ]]; then
+            echo "ℹ️  No Terraform directories to validate for this PR"
+          else
+            echo "Directories to validate:"
+            cat changed-terraform-dirs.txt
+          fi
 
       - name: Check Terraform formatting
         run: |
           exit_code=0
-          while IFS= read -r dir; do
+          while IFS= read -r dir || [[ -n "$dir" ]]; do
             echo "🔍 Checking format: $dir"
-            if terraform -chdir="$dir" fmt -check -recursive; then
+            if terraform -chdir="$dir" fmt -check; then
               echo "  ✅ Formatted correctly"
             else
               echo "  ❌ Formatting issues found — run 'terraform fmt -recursive' to fix"
@@ -201,7 +205,7 @@ jobs:
       - name: Validate Terraform configurations
         run: |
           exit_code=0
-          while IFS= read -r dir; do
+          while IFS= read -r dir || [[ -n "$dir" ]]; do
             echo "🔍 Validating: $dir"
             if terraform -chdir="$dir" init -backend=false -input=false > /dev/null 2>&1 && \
                terraform -chdir="$dir" validate; then
