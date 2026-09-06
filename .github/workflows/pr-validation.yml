@@ -17,11 +17,13 @@ jobs:
       shell: ${{ steps.filter.outputs.shell }}
       yaml: ${{ steps.filter.outputs.yaml }}
       terraform: ${{ steps.filter.outputs.terraform }}
+      terraform_files: ${{ steps.filter.outputs.terraform_files }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v4
         id: filter
         with:
+          list-files: json
           filters: |
             dockerfiles:
               - '**/Dockerfile*'
@@ -152,6 +154,8 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.terraform == 'true'
     runs-on: ubuntu-latest
+    env:
+      CHANGED_TERRAFORM_FILES: ${{ needs.detect-changes.outputs.terraform_files }}
     steps:
       - uses: actions/checkout@v4
 
@@ -160,25 +164,49 @@ jobs:
         with:
           terraform_wrapper: false
 
+      - name: Determine changed Terraform directories
+        run: |
+          set -euo pipefail
+          # Only validate the directories touched by this pull request
+          jq -r '.[]' <<< "$CHANGED_TERRAFORM_FILES" \
+            | { grep -v '/\.terraform/' || true; } \
+            | xargs -r -n1 dirname \
+            | sort -u \
+            | while read -r dir; do
+                # Skip directories deleted or left without Terraform files by this PR
+                if compgen -G "$dir/*.tf" > /dev/null; then
+                  echo "$dir"
+                else
+                  echo "⏭️  Skipping (no .tf files remain): $dir" >&2
+                fi
+              done > changed-terraform-dirs.txt
+
+          if [[ ! -s changed-terraform-dirs.txt ]]; then
+            echo "ℹ️  No Terraform directories to validate for this PR"
+          else
+            echo "Directories to validate:"
+            cat changed-terraform-dirs.txt
+          fi
+
       - name: Check Terraform formatting
         run: |
           exit_code=0
-          while IFS= read -r -d '' dir; do
+          while IFS= read -r dir || [[ -n "$dir" ]]; do
             echo "🔍 Checking format: $dir"
-            if terraform -chdir="$dir" fmt -check -recursive; then
+            if terraform -chdir="$dir" fmt -check; then
               echo "  ✅ Formatted correctly"
             else
-              echo "  ❌ Formatting issues found — run 'terraform fmt -recursive' to fix"
+              echo "  ❌ Formatting issues found — run 'terraform -chdir=\"$dir\" fmt' to fix"
               exit_code=1
             fi
-          done < <(find . -name '*.tf' -not -path './.git/*' -not -path '**/.terraform/*' -exec dirname {} \; | sort -u | while read -r d; do echo -ne "$d\0"; done)
+          done < changed-terraform-dirs.txt
 
           exit $exit_code
 
       - name: Validate Terraform configurations
         run: |
           exit_code=0
-          while IFS= read -r -d '' dir; do
+          while IFS= read -r dir || [[ -n "$dir" ]]; do
             echo "🔍 Validating: $dir"
             if terraform -chdir="$dir" init -backend=false -input=false > /dev/null 2>&1 && \
                terraform -chdir="$dir" validate; then
@@ -187,7 +215,7 @@ jobs:
               echo "  ❌ Validation failed"
               exit_code=1
             fi
-          done < <(find . -name '*.tf' -not -path './.git/*' -not -path '**/.terraform/*' -exec dirname {} \; | sort -u | while read -r d; do echo -ne "$d\0"; done)
+          done < changed-terraform-dirs.txt
 
           exit $exit_code
 
