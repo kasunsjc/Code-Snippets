@@ -99,14 +99,12 @@ jobs:
               '_This issue was created automatically by the `Scheduled Terraform Validation` workflow._'
             ].join('\n');
 
-            const existing = await github.paginate(github.rest.issues.listForRepo, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
+            const { data: searchResults } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`,
               per_page: 100
             });
 
-            const issue = existing.find(i => !i.pull_request && i.title === title);
+            const issue = searchResults.items.find(i => i.title === title);
 
             if (issue) {
               await github.rest.issues.createComment({
