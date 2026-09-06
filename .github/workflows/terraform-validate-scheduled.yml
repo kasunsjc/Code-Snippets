@@ -1,0 +1,113 @@
+name: Scheduled Terraform Validation
+
+on:
+  schedule:
+    - cron: '0 7 * * 1' # Every Monday at 7:00 AM UTC
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate-all-terraform:
+    name: Validate all Terraform demos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Validate all Terraform configurations
+        id: validate
+        run: |
+          exit_code=0
+          : > terraform-validation-report.md
+
+          while IFS= read -r dir; do
+            echo "==========================================="
+            echo "🔍 Validating: $dir"
+            echo "==========================================="
+
+            output=$(terraform -chdir="$dir" init -backend=false -input=false 2>&1 \
+              && terraform -chdir="$dir" fmt -check -recursive 2>&1 \
+              && terraform -chdir="$dir" validate 2>&1) && status=0 || status=1
+
+            echo "$output"
+
+            if [[ $status -eq 0 ]]; then
+              echo "  ✅ Valid"
+            else
+              echo "  ❌ Validation failed"
+              exit_code=1
+              {
+                echo "### ❌ \`$dir\`"
+                echo ""
+                echo '```'
+                echo "$output" | tail -n 40
+                echo '```'
+                echo ""
+              } >> terraform-validation-report.md
+            fi
+          done < <(find . -name '*.tf' -not -path './.git/*' -not -path '*/.terraform/*' -exec dirname {} \; | sort -u)
+
+          if [[ $exit_code -ne 0 ]]; then
+            echo "has_failures=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_failures=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit $exit_code
+
+      - name: Create or update issue on failure
+        if: failure() && steps.validate.outputs.has_failures == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            const details = fs.readFileSync('terraform-validation-report.md', 'utf8');
+            const title = '🏗️ Scheduled Terraform validation failed';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              'The scheduled Terraform validation run found issues in one or more demo directories.',
+              '',
+              `**Workflow run:** ${runUrl}`,
+              '',
+              '## Failing directories',
+              '',
+              details.slice(0, 55000),
+              '',
+              '_This issue was created automatically by the `Scheduled Terraform Validation` workflow._'
+            ].join('\n');
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'terraform,automated'
+            });
+
+            const issue = existing.data.find(i => i.title === title);
+
+            if (issue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body
+              });
+              core.info(`Commented on existing issue #${issue.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['terraform', 'automated', 'bug']
+              });
+              core.info(`Created issue #${created.data.number}`);
+            }
