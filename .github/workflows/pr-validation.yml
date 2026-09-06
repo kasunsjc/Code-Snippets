@@ -195,7 +195,7 @@ jobs:
             if terraform -chdir="$dir" fmt -check; then
               echo "  ✅ Formatted correctly"
             else
-              echo "  ❌ Formatting issues found — run 'terraform fmt -recursive' to fix"
+              echo "  ❌ Formatting issues found — run 'terraform -chdir=$dir fmt' to fix"
               exit_code=1
             fi
           done < changed-terraform-dirs.txt

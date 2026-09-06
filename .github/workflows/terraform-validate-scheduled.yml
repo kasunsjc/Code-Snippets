@@ -32,9 +32,24 @@ jobs:
             echo "🔍 Validating: $dir"
             echo "==========================================="
 
-            output=$(terraform -chdir="$dir" init -backend=false -input=false 2>&1 \
-              && terraform -chdir="$dir" fmt -check 2>&1 \
-              && terraform -chdir="$dir" validate 2>&1) && status=0 || status=1
+            status=0
+            output=""
+
+            if init_output=$(terraform -chdir="$dir" init -backend=false -input=false 2>&1); then
+              # Report formatting and configuration problems independently
+              if ! fmt_output=$(terraform -chdir="$dir" fmt -check 2>&1); then
+                status=1
+                output+="terraform fmt -check reported unformatted files:"$'\n'"$fmt_output"$'\n'
+              fi
+
+              if ! validate_output=$(terraform -chdir="$dir" validate 2>&1); then
+                status=1
+                output+="terraform validate failed:"$'\n'"$validate_output"$'\n'
+              fi
+            else
+              status=1
+              output="terraform init failed:"$'\n'"$init_output"
+            fi
 
             echo "$output"
 
