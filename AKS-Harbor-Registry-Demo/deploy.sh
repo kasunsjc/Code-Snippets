@@ -136,6 +136,12 @@ main() {
     --set harborAdminPassword="$HARBOR_ADMIN_PASSWORD" \
     --wait --timeout 10m
 
+  info "Applying Harbor TLS Certificate and Traefik routes..."
+  envsubst < "$MANIFESTS_DIR/harbor-certificate.yaml.tpl" > "$RENDERED_DIR/harbor-certificate.yaml"
+  envsubst < "$MANIFESTS_DIR/harbor-ingress-route.yaml.tpl" > "$RENDERED_DIR/harbor-ingress-route.yaml"
+  kubectl apply -f "$RENDERED_DIR/harbor-certificate.yaml"
+  kubectl apply -f "$RENDERED_DIR/harbor-ingress-route.yaml"
+
   info "Applying Azure Monitor ServiceMonitor for Harbor metrics..."
   kubectl apply -f "$MANIFESTS_DIR/harbor-azure-monitor-servicemonitor.yaml"
 

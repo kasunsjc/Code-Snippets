@@ -16,8 +16,8 @@ record for Harbor's hostname is created in an existing Azure DNS zone.
 | Concern | How it's covered |
 |---|---|
 | Container registry | Harbor Helm chart, "basic" install — bundled internal Postgres, Redis and Trivy (no external DB/object storage), persisted on the AKS default storage class (`managed-csi`) |
-| Ingress | [Traefik](https://traefik.io/traefik) (Helm), `LoadBalancer` service |
-| TLS | [cert-manager](https://cert-manager.io/) `ClusterIssuer`, Let's Encrypt production, DNS-01 challenge against Azure DNS |
+| Ingress | [Traefik](https://traefik.io/traefik) (Helm), `LoadBalancer` service, `IngressRoute` + HTTP-to-HTTPS redirect |
+| TLS | Standalone cert-manager `Certificate` (`harbor-tls`) issued by the Let's Encrypt production `ClusterIssuer`; TLS terminates at Traefik, not Harbor |
 | Identity for cert-manager | User-assigned managed identity + AKS OIDC federated credential (Azure Workload Identity) — `DNS Zone Contributor` on the zone only |
 | DNS | Existing Azure DNS zone (not created by this demo) — an A record for Harbor's hostname is created/updated by `deploy.sh` |
 | Audit logs | Fluent Bit sidecar re-emits Harbor's audit syslog stream to stdout → Container Insights (`ama-logs`) → Log Analytics `ContainerLogV2` |
@@ -65,6 +65,8 @@ AKS-Harbor-Registry-Demo/
 │   ├── namespace.yaml                        # harbor namespace
 │   ├── audit-log-forwarder.yaml              # Fluent Bit ConfigMap+Deployment+Service
 │   ├── cluster-issuer.yaml.tpl                # cert-manager ClusterIssuer (envsubst template)
+│   ├── harbor-certificate.yaml.tpl            # cert-manager Certificate (envsubst template)
+│   ├── harbor-ingress-route.yaml.tpl          # Traefik HTTPS/HTTP routes + security middleware
 │   ├── harbor-azure-monitor-servicemonitor.yaml
 │   └── harbor-values.yaml.tpl                 # Harbor Helm values (envsubst template)
 ├── azure-config/monitoring/
@@ -98,9 +100,10 @@ cd ..
 3. Installs Traefik and waits for its `LoadBalancer` external IP.
 4. Installs cert-manager (with CRDs, wired to the workload identity) and applies the `letsencrypt-prod` `ClusterIssuer` (Azure DNS DNS-01).
 5. Applies the `harbor` namespace and the audit-log forwarder, and waits for it to be `Ready` — **Harbor's `core` container fails to start if the forwarder isn't reachable**, so ordering matters.
-6. Installs Harbor via Helm with ingress/TLS wired to Traefik + cert-manager, metrics enabled, and audit forwarding configured.
-7. Applies the Azure-native `ServiceMonitor` for Harbor's metrics.
-8. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP.
+6. Installs Harbor via Helm as an internal `ClusterIP` service with Harbor-side TLS disabled, metrics enabled, and audit forwarding configured.
+7. Creates the standalone `harbor-tls` Certificate and applies Traefik `IngressRoute` resources for HTTPS, HTTP-to-HTTPS redirect, HSTS, and `X-Forwarded-Proto`.
+8. Applies the Azure-native `ServiceMonitor` for Harbor's metrics.
+9. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP.
 
 ### Terraform only
 
@@ -144,6 +147,7 @@ This removes only the Azure DNS record this demo created (never the shared zone)
 |---|---|---|
 | `harbor-core` CrashLoopBackOff on first install | Audit-log forwarder not `Ready` yet | Check `kubectl rollout status deployment/harbor-audit-forwarder -n harbor`; `helm upgrade` Harbor again once it's ready |
 | Certificate stuck in `Pending` | DNS-01 propagation delay, or workload identity misconfigured | `kubectl describe certificate harbor-tls -n harbor` and `kubectl logs -n cert-manager deploy/cert-manager`; confirm the federated credential subject matches `system:serviceaccount:cert-manager:cert-manager` |
+| Redirect loop or Harbor reports an HTTPS backend error | Harbor-side TLS was enabled while Traefik terminates TLS | Confirm `expose.type: clusterIP`, `expose.tls.enabled: false`, and `internalTLS.enabled: false` in the rendered values |
 | cert-manager gets 403 from Azure DNS | RBAC propagation delay (30–90s) or missing `Reader` on the DNS zone resource group | Re-check after a minute; confirm both role assignments in `terraform/main.tf` exist |
 | No audit events in `ContainerLogV2` | Container Insights excludes the `harbor` namespace, or `stdout` collection disabled | Check the cluster's Container Insights `exclude_namespaces` and `containerlog_schema_version` settings |
 | `harbor_up` missing in Grafana | ServiceMonitor not discovered | `kubectl describe servicemonitor.azmonitoring.coreos.com harbor-azure-monitor -n harbor`; confirm the `http-metrics` port name and `release`/`app` labels match the Harbor Services |

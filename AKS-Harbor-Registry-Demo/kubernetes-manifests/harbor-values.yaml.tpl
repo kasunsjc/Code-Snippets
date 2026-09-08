@@ -13,20 +13,21 @@ updateStrategy:
   type: Recreate
 
 expose:
-  type: ingress
+  # TLS is terminated by Traefik's IngressRoute, matching the reference
+  # Harbor deployment. Harbor receives HTTP on its internal ClusterIP service.
+  type: clusterIP
   tls:
-    enabled: true
-    certSource: secret
-    secret:
-      secretName: harbor-tls
-  ingress:
-    hosts:
-      core: ${HARBOR_FQDN}
-    className: traefik
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
+    enabled: false
+  clusterIP:
+    name: harbor
+    ports:
+      httpPort: 80
+      httpsPort: 443
 
 externalURL: https://${HARBOR_FQDN}
+
+internalTLS:
+  enabled: false
 
 persistence:
   enabled: true
