@@ -1,0 +1,146 @@
+# Fluent Bit bridge: re-emits Harbor's audit syslog stream to its own stdout so
+# Container Insights (already tailing every pod's stdout) picks it up into
+# ContainerLogV2 - no new Azure resource needed.
+# Must be applied and Ready BEFORE Harbor is installed/upgraded: harbor-core
+# dials audit_log_forward_endpoint at startup and exits if it's unreachable.
+# Source: https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-audit-forwarder
+  namespace: harbor
+  labels:
+    app.kubernetes.io/name: harbor-audit-forwarder
+    app.kubernetes.io/component: audit-logging
+    app.kubernetes.io/part-of: harbor
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Daemon        Off
+        Flush         1
+        Log_Level     info
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+        Health_Check  On
+
+    # Harbor's syslog writer emits newline-delimited RFC3164-style frames. Using
+    # the raw `tcp` input with `Format none` keeps the pipeline working even if
+    # Harbor changes its framing; the line is parsed at query time in KQL
+    # instead of at ingest time.
+    [INPUT]
+        Name          tcp
+        Listen        0.0.0.0
+        Port          10514
+        Format        none
+        Tag           harbor.audit
+        Mem_Buf_Limit 10MB
+
+    [FILTER]
+        Name   record_modifier
+        Match  harbor.audit
+        Record log_source harbor-audit
+
+    [OUTPUT]
+        Name             stdout
+        Match            harbor.audit
+        Format           json_lines
+        json_date_key    time
+        json_date_format iso8601
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harbor-audit-forwarder
+  namespace: harbor
+  labels:
+    app.kubernetes.io/name: harbor-audit-forwarder
+    app.kubernetes.io/component: audit-logging
+    app.kubernetes.io/part-of: harbor
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: harbor-audit-forwarder
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: harbor-audit-forwarder
+        app.kubernetes.io/component: audit-logging
+        app.kubernetes.io/part-of: harbor
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: fluent-bit
+          image: docker.io/fluent/fluent-bit:4.0.5
+          args:
+            - --config=/fluent-bit/etc/conf/fluent-bit.conf
+          ports:
+            - name: syslog
+              containerPort: 10514
+              protocol: TCP
+            - name: http
+              containerPort: 2020
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /fluent-bit/etc/conf
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: harbor-audit-forwarder
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: harbor-audit-forwarder
+  namespace: harbor
+  labels:
+    app.kubernetes.io/name: harbor-audit-forwarder
+    app.kubernetes.io/component: audit-logging
+    app.kubernetes.io/part-of: harbor
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: harbor-audit-forwarder
+  ports:
+    - name: syslog
+      port: 10514
+      targetPort: syslog
+      protocol: TCP

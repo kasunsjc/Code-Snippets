@@ -1,0 +1,21 @@
+# Copy to terraform.tfvars and fill in your own values.
+# terraform.tfvars is gitignored - never commit real values.
+
+# An Azure DNS zone that ALREADY EXISTS and is delegated to Azure DNS
+# (i.e. your domain registrar's NS records point at this zone). This demo
+# only adds an A record to it - it does not create or delegate the zone.
+dns_zone_name           = "example.com"
+dns_zone_resource_group = "rg-dns-zones"
+
+# Contact email for the Let's Encrypt production ACME account.
+acme_email = "you@example.com"
+
+# Subdomain Harbor will be exposed on: <harbor_subdomain>.<dns_zone_name>
+harbor_subdomain = "harbor-demo"
+
+# Optional: your Entra ID object ID, to grant yourself the Grafana Admin role.
+# user_object_id = ""
+
+project     = "harbor"
+environment = "demo"
+location    = "northeurope"

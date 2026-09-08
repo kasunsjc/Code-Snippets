@@ -1,0 +1,26 @@
+# Azure Monitor watches azmonitoring.coreos.com/v1, not the OSS
+# monitoring.coreos.com/v1 API group the Harbor Helm chart's own ServiceMonitor
+# uses (kept disabled via metrics.serviceMonitor.enabled=false in Helm values).
+# Source: https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: harbor-azure-monitor
+  namespace: harbor
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  selector:
+    matchLabels:
+      release: harbor
+      app: harbor
+  endpoints:
+    - port: http-metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: harbor_service
