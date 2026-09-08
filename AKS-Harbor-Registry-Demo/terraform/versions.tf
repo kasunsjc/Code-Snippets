@@ -10,11 +10,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    # Reserved for a future demo (Entra ID OIDC SSO for Harbor) - unused today.
-    azuread = {
-      source  = "hashicorp/azuread"
-      version = "~> 3.0"
-    }
   }
 }
 
