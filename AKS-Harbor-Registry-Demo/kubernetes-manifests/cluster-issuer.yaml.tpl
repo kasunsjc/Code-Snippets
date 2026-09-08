@@ -18,5 +18,5 @@ spec:
             resourceGroupName: ${DNS_ZONE_RESOURCE_GROUP}
             hostedZoneName: ${DNS_ZONE_NAME}
             environment: AzurePublicCloud
-          managedIdentity:
-            clientID: ${CERT_MANAGER_CLIENT_ID}
+            managedIdentity:
+              clientID: ${CERT_MANAGER_CLIENT_ID}
