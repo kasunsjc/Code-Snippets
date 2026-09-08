@@ -111,7 +111,7 @@ main() {
     --namespace cert-manager --create-namespace \
     --set crds.enabled=true \
     --set "serviceAccount.annotations.azure\.workload\.identity/client-id=$CERT_MANAGER_CLIENT_ID" \
-    --set "podLabels.azure\.workload\.identity/use=true" \
+    --set-string "podLabels.azure\.workload\.identity/use=true" \
     --wait --timeout 5m
 
   kubectl -n cert-manager rollout status deployment/cert-manager-webhook --timeout=120s
