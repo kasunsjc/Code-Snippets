@@ -42,7 +42,7 @@ check_prerequisites() {
 wait_for_lb_ip() {
   local namespace="$1" svc_name="$2"
   local ip=""
-  info "Waiting for LoadBalancer external IP on $namespace/$svc_name..."
+  info "Waiting for LoadBalancer external IP on $namespace/$svc_name..." >&2
   for _ in $(seq 1 60); do
     ip="$(kubectl get svc "$svc_name" -n "$namespace" -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)"
     if [[ -n "$ip" ]]; then
