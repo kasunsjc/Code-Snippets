@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ama-metrics-settings-configmap
+  namespace: kube-system
+data:
+  schema-version: v2
+  config-version: ver1
+  cluster-metrics: |-
+    default-targets-scrape-enabled: |-
+      kubelet = true
+      coredns = true
+      cadvisor = true
+      kubeproxy = true
+      apiserver = true
+      kubestate = true
+      nodeexporter = true
+      windowsexporter = true
+      windowskubeproxy = true
+      kappiebasic = true
+      networkobservabilityRetina = true
+      networkobservabilityHubble = true
+      networkobservabilityCilium = true
+      prometheuscollectorhealth = true
+    pod-annotation-based-scraping: |-
+      podannotationnamespaceregex = ""
+    default-targets-metrics-keep-list: |-
+      kubelet = ""
+      coredns = ""
+      cadvisor = ""
+      kubeproxy = ""
+      apiserver = ""
+      kubestate = ""
+      nodeexporter = ""
+      windowsexporter = ""
+      windowskubeproxy = ""
+      podannotations = ""
+      kappiebasic = ""
+      networkobservabilityRetina = ""
+      networkobservabilityHubble = ""
+      networkobservabilityCilium = ""
+    minimal-ingestion-profile: |-
+      enabled = true
+    default-targets-scrape-interval-settings: |-
+      kubelet = "30s"
+      coredns = "30s"
+      cadvisor = "30s"
+      kubeproxy = "30s"
+      apiserver = "30s"
+      kubestate = "30s"
+      nodeexporter = "30s"
+      windowsexporter = "30s"
+      windowskubeproxy = "30s"
+      kappiebasic = "30s"
+      networkobservabilityRetina = "30s"
+      networkobservabilityHubble = "30s"
+      networkobservabilityCilium = "30s"
+      prometheuscollectorhealth = "30s"
+      podannotations = "30s"
+  controlplane-metrics: |-
+    default-targets-scrape-enabled: |-
+      apiserver = true
+      cluster-autoscaler = false
+      node-auto-provisioning = false
+      kube-scheduler = false
+      kube-controller-manager = false
+      etcd = true
+    default-targets-metrics-keep-list: |-
+      apiserver = ""
+      cluster-autoscaler = ""
+      node-auto-provisioning = ""
+      kube-scheduler = ""
+      kube-controller-manager = ""
+      etcd = ""
+    minimal-ingestion-profile: |-
+      enabled = true
+  prometheus-collector-settings: |-
+    cluster_alias = ""
+    debug-mode = false
+    https_config = true

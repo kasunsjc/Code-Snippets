@@ -67,6 +67,9 @@ AKS-Harbor-Registry-Demo/
 │   ├── cluster-issuer.yaml.tpl                # cert-manager ClusterIssuer (envsubst template)
 │   ├── harbor-azure-monitor-servicemonitor.yaml
 │   └── harbor-values.yaml.tpl                 # Harbor Helm values (envsubst template)
+├── azure-config/monitoring/
+│   ├── container-azm-ms-agentconfig.yaml      # Container Insights stdout + ContainerLogV2
+│   └── ama-metrics-settings-configmap-v2.yaml # AMA managed Prometheus collection profile
 ├── deploy.sh
 ├── cleanup.sh
 └── README.md
@@ -91,12 +94,13 @@ cd ..
 
 `deploy.sh` runs, in order:
 1. `terraform apply` — resource group, AKS (workload identity + OIDC issuer enabled, Container Insights, managed Prometheus), Log Analytics, Azure Monitor workspace, Azure Managed Grafana, the cert-manager managed identity + federated credential + DNS role assignments.
-2. Installs Traefik and waits for its `LoadBalancer` external IP.
-3. Installs cert-manager (with CRDs, wired to the workload identity) and applies the `letsencrypt-prod` `ClusterIssuer` (Azure DNS DNS-01).
-4. Applies the `harbor` namespace and the audit-log forwarder, and waits for it to be `Ready` — **Harbor's `core` container fails to start if the forwarder isn't reachable**, so ordering matters.
-5. Installs Harbor via Helm with ingress/TLS wired to Traefik + cert-manager, metrics enabled, and audit forwarding configured.
-6. Applies the Azure-native `ServiceMonitor` for Harbor's metrics.
-7. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP.
+2. Applies the Azure Monitor ConfigMaps: Container Insights stdout collection with `harbor` included and ContainerLogV2 schema v2, plus the AMA managed Prometheus collection profile.
+3. Installs Traefik and waits for its `LoadBalancer` external IP.
+4. Installs cert-manager (with CRDs, wired to the workload identity) and applies the `letsencrypt-prod` `ClusterIssuer` (Azure DNS DNS-01).
+5. Applies the `harbor` namespace and the audit-log forwarder, and waits for it to be `Ready` — **Harbor's `core` container fails to start if the forwarder isn't reachable**, so ordering matters.
+6. Installs Harbor via Helm with ingress/TLS wired to Traefik + cert-manager, metrics enabled, and audit forwarding configured.
+7. Applies the Azure-native `ServiceMonitor` for Harbor's metrics.
+8. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP.
 
 ### Terraform only
 
@@ -143,6 +147,11 @@ This removes only the Azure DNS record this demo created (never the shared zone)
 | cert-manager gets 403 from Azure DNS | RBAC propagation delay (30–90s) or missing `Reader` on the DNS zone resource group | Re-check after a minute; confirm both role assignments in `terraform/main.tf` exist |
 | No audit events in `ContainerLogV2` | Container Insights excludes the `harbor` namespace, or `stdout` collection disabled | Check the cluster's Container Insights `exclude_namespaces` and `containerlog_schema_version` settings |
 | `harbor_up` missing in Grafana | ServiceMonitor not discovered | `kubectl describe servicemonitor.azmonitoring.coreos.com harbor-azure-monitor -n harbor`; confirm the `http-metrics` port name and `release`/`app` labels match the Harbor Services |
+
+The monitoring ConfigMaps are applied by `deploy.sh`. If the cluster was
+already running and you apply a changed configuration manually, restart the
+corresponding `ama-logs` or `ama-metrics` pods only when the agent does not
+reload the ConfigMap automatically.
 
 ## 🔒 Security notes
 

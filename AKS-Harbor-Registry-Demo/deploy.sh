@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 MANIFESTS_DIR="$SCRIPT_DIR/kubernetes-manifests"
+MONITORING_DIR="$SCRIPT_DIR/azure-config/monitoring"
 RENDERED_DIR="$SCRIPT_DIR/.rendered"
 
 HARBOR_CHART_VERSION="1.16.1"
@@ -81,13 +82,19 @@ main() {
   info "Fetching AKS credentials..."
   az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
 
-  # --- 2. Helm repos -------------------------------------------------------
+  # --- 2. Azure Monitor agent configuration -------------------------------
+  # Keep Harbor stdout audit logs in ContainerLogV2 and configure AMA metrics.
+  info "Applying Azure Monitor Container Insights and metrics settings..."
+  kubectl apply -f "$MONITORING_DIR/container-azm-ms-agentconfig.yaml"
+  kubectl apply -f "$MONITORING_DIR/ama-metrics-settings-configmap-v2.yaml"
+
+  # --- 3. Helm repos -------------------------------------------------------
   helm repo add traefik https://traefik.github.io/charts >/dev/null
   helm repo add jetstack https://charts.jetstack.io >/dev/null
   helm repo add harbor https://helm.goharbor.io >/dev/null
   helm repo update >/dev/null
 
-  # --- 3. Traefik ingress controller --------------------------------------
+  # --- 4. Traefik ingress controller --------------------------------------
   info "Installing Traefik..."
   helm upgrade --install traefik traefik/traefik \
     --version "$TRAEFIK_CHART_VERSION" \
@@ -97,7 +104,7 @@ main() {
   TRAEFIK_LB_IP="$(wait_for_lb_ip traefik traefik)"
   info "Traefik LoadBalancer IP: $TRAEFIK_LB_IP"
 
-  # --- 4. cert-manager (workload identity, no client secret) --------------
+  # --- 5. cert-manager (workload identity, no client secret) --------------
   info "Installing cert-manager..."
   helm upgrade --install cert-manager jetstack/cert-manager \
     --version "$CERT_MANAGER_CHART_VERSION" \
@@ -113,13 +120,13 @@ main() {
   envsubst < "$MANIFESTS_DIR/cluster-issuer.yaml.tpl" > "$RENDERED_DIR/cluster-issuer.yaml"
   kubectl apply -f "$RENDERED_DIR/cluster-issuer.yaml"
 
-  # --- 5. Harbor audit-log forwarder (must be Ready before Harbor) --------
+  # --- 6. Harbor audit-log forwarder (must be Ready before Harbor) --------
   info "Deploying harbor namespace and audit-log forwarder..."
   kubectl apply -f "$MANIFESTS_DIR/namespace.yaml"
   kubectl apply -f "$MANIFESTS_DIR/audit-log-forwarder.yaml"
   kubectl -n harbor rollout status deployment/harbor-audit-forwarder --timeout=180s
 
-  # --- 6. Harbor ------------------------------------------------------------
+  # --- 7. Harbor ------------------------------------------------------------
   info "Installing Harbor..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
   helm upgrade --install harbor harbor/harbor \
@@ -132,7 +139,7 @@ main() {
   info "Applying Azure Monitor ServiceMonitor for Harbor metrics..."
   kubectl apply -f "$MANIFESTS_DIR/harbor-azure-monitor-servicemonitor.yaml"
 
-  # --- 7. Azure DNS record --------------------------------------------------
+  # --- 8. Azure DNS record --------------------------------------------------
   info "Upserting Azure DNS A record for $HARBOR_FQDN -> $TRAEFIK_LB_IP..."
   az network dns record-set a create \
     --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
