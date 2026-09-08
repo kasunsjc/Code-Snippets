@@ -28,10 +28,6 @@ data "azurerm_dns_zone" "this" {
   resource_group_name = var.dns_zone_resource_group
 }
 
-data "azurerm_resource_group" "dns_zone" {
-  name = var.dns_zone_resource_group
-}
-
 # --- Observability: Container Insights (audit-log blog) -----------------------
 
 resource "azurerm_log_analytics_workspace" "this" {
@@ -144,15 +140,6 @@ resource "azurerm_federated_identity_credential" "cert_manager" {
 resource "azurerm_role_assignment" "cert_manager_dns_zone_contributor" {
   scope                = data.azurerm_dns_zone.this.id
   role_definition_name = "DNS Zone Contributor"
-  principal_id         = azurerm_user_assigned_identity.cert_manager.principal_id
-}
-
-# cert-manager's Azure DNS solver lists zones at the resource group scope before
-# reading the specific zone; Reader here avoids a 403 during propagation checks
-# (same gotcha documented for external-dns in AKS-ArgoCD-Extension).
-resource "azurerm_role_assignment" "cert_manager_dns_rg_reader" {
-  scope                = data.azurerm_resource_group.dns_zone.id
-  role_definition_name = "Reader"
   principal_id         = azurerm_user_assigned_identity.cert_manager.principal_id
 }
 

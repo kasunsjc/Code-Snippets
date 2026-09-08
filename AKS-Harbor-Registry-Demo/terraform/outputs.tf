@@ -15,7 +15,7 @@ output "dns_zone_name" {
 }
 
 output "dns_zone_resource_group" {
-  value = data.azurerm_resource_group.dns_zone.name
+  value = var.dns_zone_resource_group
 }
 
 output "harbor_fqdn" {
