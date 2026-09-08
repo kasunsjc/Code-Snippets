@@ -9,7 +9,7 @@ MANIFESTS_DIR="$SCRIPT_DIR/kubernetes-manifests"
 MONITORING_DIR="$SCRIPT_DIR/azure-config/monitoring"
 RENDERED_DIR="$SCRIPT_DIR/.rendered"
 
-HARBOR_CHART_VERSION="1.16.1"
+HARBOR_CHART_VERSION="1.19.2"
 TRAEFIK_CHART_VERSION="34.4.1"
 CERT_MANAGER_CHART_VERSION="v1.16.2"
 
@@ -129,11 +129,21 @@ main() {
   # --- 7. Harbor ------------------------------------------------------------
   info "Installing Harbor..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
+  rm -rf "$RENDERED_DIR/harbor"
+  helm pull harbor/harbor \
+    --version "$HARBOR_CHART_VERSION" \
+    --untar \
+    --untardir "$RENDERED_DIR"
+  info "Validating Harbor Helm values..."
+  helm lint "$RENDERED_DIR/harbor" \
+    --namespace harbor \
+    -f "$RENDERED_DIR/harbor-values.yaml" \
+    --set-string harborAdminPassword="$HARBOR_ADMIN_PASSWORD"
   helm upgrade --install harbor harbor/harbor \
     --version "$HARBOR_CHART_VERSION" \
     --namespace harbor \
     -f "$RENDERED_DIR/harbor-values.yaml" \
-    --set harborAdminPassword="$HARBOR_ADMIN_PASSWORD" \
+    --set-string harborAdminPassword="$HARBOR_ADMIN_PASSWORD" \
     --wait --timeout 10m
 
   info "Applying Harbor TLS Certificate and Traefik routes..."
