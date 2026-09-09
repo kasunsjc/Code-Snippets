@@ -30,7 +30,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   node_provisioning_profile {
-    mode = "Manual"
+    mode = "Auto"
   }
 
   network_profile {
