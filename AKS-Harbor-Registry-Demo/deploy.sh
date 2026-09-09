@@ -22,6 +22,16 @@ info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+json_escape() {
+  local input="$1"
+  input="${input//\\/\\\\}"
+  input="${input//\"/\\\"}"
+  input="${input//$'\n'/\\n}"
+  input="${input//$'\r'/\\r}"
+  input="${input//$'\t'/\\t}"
+  printf '%s' "$input"
+}
+
 check_prerequisites() {
   info "Checking prerequisites..."
   local missing=0
@@ -87,7 +97,7 @@ main() {
     HARBOR_OIDC_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_endpoint)"
     HARBOR_ADMIN_GROUP_OBJECT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_group_object_id)"
     # shellcheck disable=SC2089 # consumed only via envsubst below, never re-parsed by the shell
-    HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\"oidc_name\": \"entra-id\",\"oidc_endpoint\": \"${HARBOR_OIDC_ENDPOINT}\",\"oidc_client_id\": \"${HARBOR_OIDC_CLIENT_ID}\",\"oidc_client_secret\": \"${HARBOR_OIDC_CLIENT_SECRET}\",\"oidc_scope\": \"openid,profile,email,offline_access\",\"oidc_verify_cert\": true,\"oidc_auto_onboard\": true,\"oidc_user_claim\": \"preferred_username\",\"oidc_groups_claim\": \"groups\",\"oidc_admin_group\": \"${HARBOR_ADMIN_GROUP_OBJECT_ID}\""
+    HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\"oidc_name\": \"entra-id\",\"oidc_endpoint\": \"$(json_escape "$HARBOR_OIDC_ENDPOINT")\",\"oidc_client_id\": \"$(json_escape "$HARBOR_OIDC_CLIENT_ID")\",\"oidc_client_secret\": \"$(json_escape "$HARBOR_OIDC_CLIENT_SECRET")\",\"oidc_scope\": \"openid,profile,email,offline_access\",\"oidc_verify_cert\": true,\"oidc_auto_onboard\": true,\"oidc_user_claim\": \"preferred_username\",\"oidc_groups_claim\": \"groups\",\"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\""
   fi
 
   # shellcheck disable=SC2090 # HARBOR_OIDC_SETTINGS_JSON's quoting is intentional JSON content for envsubst, not shell syntax
@@ -146,7 +156,7 @@ main() {
   # Contains the OIDC client secret (embedded in configureUserSettings JSON) when SSO is enabled.
   chmod 600 "$RENDERED_DIR/harbor-values.yaml"
   # Single-quoted YAML scalar so special characters from random_password (":", "#", etc.) don't break parsing.
-  HARBOR_ADMIN_PASSWORD_YAML="${HARBOR_ADMIN_PASSWORD//\'/\'\'}"
+  HARBOR_ADMIN_PASSWORD_YAML="$(printf '%s' "$HARBOR_ADMIN_PASSWORD" | sed "s/'/''/g")"
   cat > "$RENDERED_DIR/harbor-secret-values.yaml" <<EOF
 harborAdminPassword: '${HARBOR_ADMIN_PASSWORD_YAML}'
 EOF

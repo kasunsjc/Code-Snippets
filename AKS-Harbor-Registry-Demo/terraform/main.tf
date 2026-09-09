@@ -263,7 +263,7 @@ resource "azuread_application_password" "harbor" {
 
   application_id = azuread_application.harbor[0].id
   display_name   = "harbor-oidc-secret"
-  end_date       = timeadd(timestamp(), "8760h") # 1 year - rotate by re-running terraform apply
+  end_date       = timeadd(timestamp(), "8760h") # 1 year - rotate by tainting/recreating this resource
 
   lifecycle {
     ignore_changes = [end_date]
@@ -344,7 +344,7 @@ resource "azuread_group" "harbor_limited_guests" {
 }
 
 data "azuread_user" "harbor_admin_members" {
-  for_each = var.enable_oidc_auth ? toset(var.harbor_admin_group_member_upns) : []
+  for_each = var.enable_oidc_auth ? toset(var.harbor_admin_group_member_upns) : toset([])
 
   user_principal_name = each.value
 }

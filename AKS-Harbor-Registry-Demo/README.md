@@ -212,7 +212,7 @@ Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_
 
 **Disabling SSO:** set `enable_oidc_auth = false` and re-apply — this destroys the Entra app/groups and Harbor falls back to local admin/password auth (the `admin` account always stays DB-authenticated as a break-glass login, even with SSO enabled).
 
-**Secret rotation:** the client secret (`azuread_application_password`) expires after 1 year; re-run `terraform apply` before then to rotate it (a new secret is only generated once the old one is within its rotation window or manually tainted).
+**Secret rotation:** the client secret (`azuread_application_password`) expires after 1 year; because `lifecycle.ignore_changes = [end_date]` is set, rotate it by tainting/recreating the password resource (for example `terraform taint azuread_application_password.harbor[0]`) and then running `terraform apply`.
 
 ## 🔒 Security notes
 
