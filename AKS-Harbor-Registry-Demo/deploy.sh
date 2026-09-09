@@ -84,12 +84,13 @@ main() {
   if [[ "$ENABLE_OIDC_AUTH" == "true" ]]; then
     HARBOR_OIDC_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_id)"
     HARBOR_OIDC_CLIENT_SECRET="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_secret)"
-    HARBOR_OIDC_TENANT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_tenant_id)"
     HARBOR_OIDC_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_endpoint)"
     HARBOR_ADMIN_GROUP_OBJECT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_group_object_id)"
+    # shellcheck disable=SC2089 # consumed only via envsubst below, never re-parsed by the shell
     HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\"oidc_name\": \"entra-id\",\"oidc_endpoint\": \"${HARBOR_OIDC_ENDPOINT}\",\"oidc_client_id\": \"${HARBOR_OIDC_CLIENT_ID}\",\"oidc_client_secret\": \"${HARBOR_OIDC_CLIENT_SECRET}\",\"oidc_scope\": \"openid,profile,email,offline_access\",\"oidc_verify_cert\": true,\"oidc_auto_onboard\": true,\"oidc_user_claim\": \"preferred_username\",\"oidc_groups_claim\": \"groups\",\"oidc_admin_group\": \"${HARBOR_ADMIN_GROUP_OBJECT_ID}\""
   fi
 
+  # shellcheck disable=SC2090 # HARBOR_OIDC_SETTINGS_JSON's quoting is intentional JSON content for envsubst, not shell syntax
   export SUBSCRIPTION_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN CERT_MANAGER_CLIENT_ID ACME_EMAIL HARBOR_OIDC_SETTINGS_JSON
 
   info "Fetching AKS credentials..."
