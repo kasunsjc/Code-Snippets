@@ -17,10 +17,9 @@ resource "azurerm_role_assignment" "monitoring_data_reader" {
 # as 'keda-operator'. KEDA exchanges that SA token for an Azure AD access token to
 # authenticate against Azure Managed Prometheus on behalf of the managed identity.
 resource "azurerm_federated_identity_credential" "keda_operator" {
-  name                = "${var.name}-federated"
-  resource_group_name = var.resource_group_name
-  parent_id           = azurerm_user_assigned_identity.this.id
-  issuer              = var.oidc_issuer_url
-  subject             = "system:serviceaccount:kube-system:keda-operator"
-  audience            = ["api://AzureADTokenExchange"]
+  name                      = "${var.name}-federated"
+  user_assigned_identity_id = azurerm_user_assigned_identity.this.id
+  issuer                    = var.oidc_issuer_url
+  subject                   = "system:serviceaccount:kube-system:keda-operator"
+  audience                  = ["api://AzureADTokenExchange"]
 }

@@ -32,6 +32,10 @@ resource "azurerm_kubernetes_cluster" "this" {
   oidc_issuer_enabled               = true
   workload_identity_enabled         = true
 
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   network_profile {
     network_plugin    = "azure"
     load_balancer_sku = "standard"
