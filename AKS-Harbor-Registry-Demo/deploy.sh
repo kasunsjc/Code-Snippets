@@ -76,8 +76,21 @@ main() {
   HARBOR_ADMIN_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_password)"
   LOG_ANALYTICS_WORKSPACE_NAME="$(terraform -chdir="$TF_DIR" output -raw log_analytics_workspace_name)"
   GRAFANA_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw grafana_endpoint)"
+  ENABLE_OIDC_AUTH="$(terraform -chdir="$TF_DIR" output -raw enable_oidc_auth)"
 
-  export SUBSCRIPTION_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN CERT_MANAGER_CLIENT_ID ACME_EMAIL
+  HARBOR_OIDC_SETTINGS_JSON=""
+  HARBOR_ADMIN_GROUP_OBJECT_ID=""
+  HARBOR_OIDC_CLIENT_ID=""
+  if [[ "$ENABLE_OIDC_AUTH" == "true" ]]; then
+    HARBOR_OIDC_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_id)"
+    HARBOR_OIDC_CLIENT_SECRET="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_secret)"
+    HARBOR_OIDC_TENANT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_tenant_id)"
+    HARBOR_OIDC_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_endpoint)"
+    HARBOR_ADMIN_GROUP_OBJECT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_group_object_id)"
+    HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\"oidc_name\": \"entra-id\",\"oidc_endpoint\": \"${HARBOR_OIDC_ENDPOINT}\",\"oidc_client_id\": \"${HARBOR_OIDC_CLIENT_ID}\",\"oidc_client_secret\": \"${HARBOR_OIDC_CLIENT_SECRET}\",\"oidc_scope\": \"openid,profile,email,offline_access\",\"oidc_verify_cert\": true,\"oidc_auto_onboard\": true,\"oidc_user_claim\": \"preferred_username\",\"oidc_groups_claim\": \"groups\",\"oidc_admin_group\": \"${HARBOR_ADMIN_GROUP_OBJECT_ID}\""
+  fi
+
+  export SUBSCRIPTION_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN CERT_MANAGER_CLIENT_ID ACME_EMAIL HARBOR_OIDC_SETTINGS_JSON
 
   info "Fetching AKS credentials..."
   az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
@@ -129,8 +142,12 @@ main() {
   # --- 7. Harbor ------------------------------------------------------------
   info "Installing Harbor..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
+  # Contains the OIDC client secret (embedded in configureUserSettings JSON) when SSO is enabled.
+  chmod 600 "$RENDERED_DIR/harbor-values.yaml"
+  # Single-quoted YAML scalar so special characters from random_password (":", "#", etc.) don't break parsing.
+  HARBOR_ADMIN_PASSWORD_YAML="${HARBOR_ADMIN_PASSWORD//\'/\'\'}"
   cat > "$RENDERED_DIR/harbor-secret-values.yaml" <<EOF
-harborAdminPassword: ${HARBOR_ADMIN_PASSWORD}
+harborAdminPassword: '${HARBOR_ADMIN_PASSWORD_YAML}'
 EOF
   chmod 600 "$RENDERED_DIR/harbor-secret-values.yaml"
   rm -rf "$RENDERED_DIR/harbor"
@@ -165,7 +182,7 @@ EOF
     --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
     --zone-name "$DNS_ZONE_NAME" \
     --name "$HARBOR_SUBDOMAIN" \
-    --ttl 300 &>/dev/null || true
+    --ttl 60 &>/dev/null || true
   # Remove any stale IPs (e.g. from a previous deploy) before adding the current one.
   EXISTING_IPS="$(az network dns record-set a show \
     --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
@@ -210,6 +227,26 @@ ${GREEN}Harbor demo deployed.${NC}
   Verify Prometheus metrics:
     kubectl get servicemonitor.azmonitoring.coreos.com -n harbor
 EOF
+
+  if [[ "$ENABLE_OIDC_AUTH" == "true" ]]; then
+    cat <<EOF
+
+${GREEN}OIDC SSO enabled.${NC}
+
+  Entra app (client ID):    ${HARBOR_OIDC_CLIENT_ID}
+  harbor-admins group ID:   ${HARBOR_ADMIN_GROUP_OBJECT_ID}
+
+  Maintainer/Developer/Guest/Limited Guest/ProjectAdmin groups were created
+  but are NOT auto-assigned to any project (Harbor has no global mapping for
+  those roles). For each project: Harbor UI -> Project -> Members -> + User
+  Group -> paste the group's object ID from:
+    terraform -chdir=${TF_DIR} output harbor_projectadmin_group_object_id
+    terraform -chdir=${TF_DIR} output harbor_maintainer_group_object_id
+    terraform -chdir=${TF_DIR} output harbor_developer_group_object_id
+    terraform -chdir=${TF_DIR} output harbor_guest_group_object_id
+    terraform -chdir=${TF_DIR} output harbor_limited_guest_group_object_id
+EOF
+  fi
 }
 
 main "$@"

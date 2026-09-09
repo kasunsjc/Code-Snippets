@@ -4,3 +4,4 @@
 *.tfstate.*
 terraform.tfvars
 .rendered/
+.plan/

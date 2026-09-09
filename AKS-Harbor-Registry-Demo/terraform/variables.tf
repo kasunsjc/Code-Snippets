@@ -73,27 +73,62 @@ variable "user_object_id" {
   default     = ""
 }
 
-# --- Reserved for a future demo: Azure AD (Microsoft Entra ID) OIDC SSO for Harbor ---
-# Not used by this iteration's Terraform or Helm values; kept here so the follow-up
-# demo only needs `-var` overrides instead of new variable plumbing.
+# --- Microsoft Entra ID OIDC SSO for Harbor -----------------------------------
+# Terraform creates the Entra ID app registration/SPN, client secret, and Harbor
+# role groups; set to false to fall back to Harbor's local admin/password auth.
 
 variable "enable_oidc_auth" {
-  description = "Reserved for a future demo. Does not change any resource in this iteration."
+  description = "Create the Entra ID app registration, groups, and Harbor OIDC config."
   type        = bool
-  default     = false
+  default     = true
 }
 
-variable "oidc_client_id" {
-  description = "Reserved for a future demo (Entra ID application client ID for Harbor OIDC login). Unused today."
+variable "harbor_oidc_app_display_name" {
+  description = "Display name of the Entra ID application used as Harbor's OIDC client."
   type        = string
-  default     = ""
+  default     = "harbor-oidc-sso"
 }
 
-variable "oidc_client_secret" {
-  description = "Reserved for a future demo (Entra ID application client secret for Harbor OIDC login). Unused today."
+variable "harbor_admin_group_name" {
+  description = "Entra ID security group mapped to Harbor's global system admin role (matched by object ID via oidc_admin_group)."
   type        = string
-  default     = ""
-  sensitive   = true
+  default     = "harbor-admins"
+}
+
+variable "harbor_maintainer_group_name" {
+  description = "Entra ID security group for Harbor project Maintainers (assign to a project manually after deploy)."
+  type        = string
+  default     = "harbor-maintainers"
+}
+
+variable "harbor_projectadmin_group_name" {
+  description = "Entra ID security group for Harbor project ProjectAdmins (assign to a project manually after deploy)."
+  type        = string
+  default     = "harbor-projectadmins"
+}
+
+variable "harbor_developer_group_name" {
+  description = "Entra ID security group for Harbor project Developers (assign to a project manually after deploy)."
+  type        = string
+  default     = "harbor-developers"
+}
+
+variable "harbor_guest_group_name" {
+  description = "Entra ID security group for Harbor project Guests, read-only (assign to a project manually after deploy)."
+  type        = string
+  default     = "harbor-guests"
+}
+
+variable "harbor_limited_guest_group_name" {
+  description = "Entra ID security group for Harbor project Limited Guests, pull-only with no logs/member visibility (assign to a project manually after deploy)."
+  type        = string
+  default     = "harbor-limited-guests"
+}
+
+variable "harbor_admin_group_member_upns" {
+  description = "User principal names added as initial members of the harbor-admins Entra ID group."
+  type        = list(string)
+  default     = []
 }
 
 variable "tags" {
