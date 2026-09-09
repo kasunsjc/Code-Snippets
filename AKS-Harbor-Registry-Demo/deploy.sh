@@ -11,7 +11,7 @@ RENDERED_DIR="$SCRIPT_DIR/.rendered"
 
 HARBOR_CHART_VERSION="1.19.2"
 TRAEFIK_CHART_VERSION="34.4.1"
-CERT_MANAGER_CHART_VERSION="v1.16.2"
+CERT_MANAGER_CHART_VERSION="1.16.2"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -89,9 +89,9 @@ main() {
   kubectl apply -f "$MONITORING_DIR/ama-metrics-settings-configmap-v2.yaml"
 
   # --- 3. Helm repos -------------------------------------------------------
-  helm repo add traefik https://traefik.github.io/charts >/dev/null
-  helm repo add jetstack https://charts.jetstack.io >/dev/null
-  helm repo add harbor https://helm.goharbor.io >/dev/null
+  helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null
+  helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
+  helm repo add harbor https://helm.goharbor.io --force-update >/dev/null
   helm repo update >/dev/null
 
   # --- 4. Traefik ingress controller --------------------------------------
@@ -129,6 +129,10 @@ main() {
   # --- 7. Harbor ------------------------------------------------------------
   info "Installing Harbor..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
+  cat > "$RENDERED_DIR/harbor-secret-values.yaml" <<EOF
+harborAdminPassword: ${HARBOR_ADMIN_PASSWORD}
+EOF
+  chmod 600 "$RENDERED_DIR/harbor-secret-values.yaml"
   rm -rf "$RENDERED_DIR/harbor"
   helm pull harbor/harbor \
     --version "$HARBOR_CHART_VERSION" \
@@ -138,12 +142,12 @@ main() {
   helm lint "$RENDERED_DIR/harbor" \
     --namespace harbor \
     -f "$RENDERED_DIR/harbor-values.yaml" \
-    --set-string harborAdminPassword="$HARBOR_ADMIN_PASSWORD"
+    -f "$RENDERED_DIR/harbor-secret-values.yaml"
   helm upgrade --install harbor harbor/harbor \
     --version "$HARBOR_CHART_VERSION" \
     --namespace harbor \
     -f "$RENDERED_DIR/harbor-values.yaml" \
-    --set-string harborAdminPassword="$HARBOR_ADMIN_PASSWORD" \
+    -f "$RENDERED_DIR/harbor-secret-values.yaml" \
     --wait --timeout 10m
 
   info "Applying Harbor TLS Certificate and Traefik routes..."

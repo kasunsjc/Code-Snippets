@@ -183,6 +183,12 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   monitor_metrics {}
+
+  lifecycle {
+    ignore_changes = [
+      default_node_pool[0].node_count
+    ]
+  }
 }
 
 # --- Harbor admin password (generated, never committed) -----------------------
