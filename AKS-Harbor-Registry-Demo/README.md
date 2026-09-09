@@ -109,7 +109,7 @@ cd ..
 6. Runs `helm lint` against the pinned Harbor chart and rendered values, then installs/upgrades Harbor as an internal `ClusterIP` service with Harbor-side TLS disabled, metrics enabled, and audit forwarding configured.
 7. Creates the standalone `harbor-tls` Certificate and applies Traefik `IngressRoute` resources for HTTPS, HTTP-to-HTTPS redirect, HSTS, and `X-Forwarded-Proto`.
 8. Applies the Azure-native `ServiceMonitor` for Harbor's metrics.
-9. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP.
+9. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP (60s TTL, so a future LoadBalancer IP change propagates quickly).
 
 ### Terraform only
 
@@ -179,6 +179,8 @@ against a shared or production cluster without reviewing the confirmation prompt
 | cert-manager gets 403 from Azure DNS | RBAC propagation delay (30–90s) or missing `DNS Zone Contributor` on the existing zone | Re-check after a minute; confirm the zone-scoped role assignment in `terraform/main.tf` exists |
 | No audit events in `ContainerLogV2` | Container Insights excludes the `harbor` namespace, or `stdout` collection disabled | Check the cluster's Container Insights `exclude_namespaces` and `containerlog_schema_version` settings |
 | `harbor_up` missing in Grafana | ServiceMonitor not discovered | `kubectl describe servicemonitor.azmonitoring.coreos.com harbor-azure-monitor -n harbor`; confirm the `http-metrics` port name and `release`/`app` labels match the Harbor Services |
+| `helm lint`/`upgrade` fails parsing `harbor-secret-values.yaml` | `harbor_admin_password` (`random_password`, `special = true`) contains YAML-breaking characters (`[`, `]`, `&`, `*`, `:`, `#`, etc.) | Already handled in `deploy.sh` — the password is written as a single-quoted YAML scalar with embedded quotes escaped |
+| Harbor still shows the local login form, not "LOGIN VIA OIDC PROVIDER" | `enable_oidc_auth = false`, or `terraform apply` hasn't been re-run after enabling it | Set `enable_oidc_auth = true`, re-run `terraform apply` then `./deploy.sh` |
 
 The monitoring ConfigMaps are applied by `deploy.sh`. If the cluster was
 already running and you apply a changed configuration manually, restart the
