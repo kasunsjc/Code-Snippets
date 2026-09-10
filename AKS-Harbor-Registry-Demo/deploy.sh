@@ -93,7 +93,7 @@ main() {
   HARBOR_OIDC_CLIENT_ID=""
   HARBOR_USES_OIDC_AUTH="false"
   if kubectl get secret harbor-core -n harbor >/dev/null 2>&1; then
-    if helm get values harbor -n harbor -o yaml 2>/dev/null | grep -q '"auth_mode":[[:space:]]*"oidc_auth"'; then
+    if kubectl get secret harbor-core -n harbor -o jsonpath='{.data.CONFIG_OVERWRITE_JSON}' 2>/dev/null | base64 --decode 2>/dev/null | grep -q '"auth_mode":[[:space:]]*"oidc_auth"'; then
       HARBOR_USES_OIDC_AUTH="true"
     fi
   fi
