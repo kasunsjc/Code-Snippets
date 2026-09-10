@@ -16,6 +16,20 @@ harbor_subdomain = "harbor-demo"
 # Optional: your Entra ID object ID, to grant yourself the Grafana Admin role.
 # user_object_id = ""
 
+# OIDC SSO for Harbor (Entra ID). Set to false to fall back to local admin/password auth.
+# enable_oidc_auth = true
+
+# UPNs added to the harbor-admins Entra ID group (global Harbor system admin).
+# harbor_admin_group_member_upns = ["you@example.com"]
+
+# Optional: override the default Harbor role group names.
+# harbor_admin_group_name         = "harbor-admins"
+# harbor_projectadmin_group_name  = "harbor-projectadmins"
+# harbor_maintainer_group_name    = "harbor-maintainers"
+# harbor_developer_group_name     = "harbor-developers"
+# harbor_guest_group_name         = "harbor-guests"
+# harbor_limited_guest_group_name = "harbor-limited-guests"
+
 project     = "harbor"
 environment = "demo"
 location    = "northeurope"

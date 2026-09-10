@@ -22,6 +22,16 @@ info()  { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
+json_escape() {
+  local input="$1"
+  input="${input//\\/\\\\}"
+  input="${input//\"/\\\"}"
+  input="${input//$'\n'/\\n}"
+  input="${input//$'\r'/\\r}"
+  input="${input//$'\t'/\\t}"
+  printf '%s' "$input"
+}
+
 check_prerequisites() {
   info "Checking prerequisites..."
   local missing=0
@@ -76,8 +86,45 @@ main() {
   HARBOR_ADMIN_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_password)"
   LOG_ANALYTICS_WORKSPACE_NAME="$(terraform -chdir="$TF_DIR" output -raw log_analytics_workspace_name)"
   GRAFANA_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw grafana_endpoint)"
+  ENABLE_OIDC_AUTH="$(terraform -chdir="$TF_DIR" output -raw enable_oidc_auth)"
 
-  export SUBSCRIPTION_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN CERT_MANAGER_CLIENT_ID ACME_EMAIL
+  HARBOR_OIDC_SETTINGS_JSON=""
+  HARBOR_ADMIN_GROUP_OBJECT_ID=""
+  HARBOR_OIDC_CLIENT_ID=""
+  HARBOR_USES_OIDC_AUTH="false"
+  if kubectl get secret harbor-core -n harbor >/dev/null 2>&1; then
+    if kubectl get secret harbor-core -n harbor -o jsonpath='{.data.CONFIG_OVERWRITE_JSON}' 2>/dev/null | base64 --decode 2>/dev/null | grep -q '"auth_mode":[[:space:]]*"oidc_auth"'; then
+      HARBOR_USES_OIDC_AUTH="true"
+    fi
+  fi
+  if [[ "$ENABLE_OIDC_AUTH" == "true" ]]; then
+    HARBOR_OIDC_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_id)"
+    HARBOR_OIDC_CLIENT_SECRET="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_secret)"
+    HARBOR_OIDC_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_endpoint)"
+    HARBOR_ADMIN_GROUP_OBJECT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_group_object_id)"
+    # shellcheck disable=SC2089 # consumed only via envsubst below, never re-parsed by the shell
+    # Single-line value (no embedded newlines) - envsubst also expands this
+    # token inside harbor-values.yaml.tpl's header comment, and a multi-line
+    # value there corrupts the rest of the YAML document.
+    HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\
+\"oidc_name\": \"entra-id\",\
+\"oidc_endpoint\": \"$(json_escape "$HARBOR_OIDC_ENDPOINT")\",\
+\"oidc_client_id\": \"$(json_escape "$HARBOR_OIDC_CLIENT_ID")\",\
+\"oidc_client_secret\": \"$(json_escape "$HARBOR_OIDC_CLIENT_SECRET")\",\
+\"oidc_scope\": \"openid,profile,email,offline_access\",\
+\"oidc_verify_cert\": true,\
+\"oidc_auto_onboard\": true,\
+\"oidc_user_claim\": \"preferred_username\",\
+\"oidc_groups_claim\": \"groups\",\
+\"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\""
+  elif [[ "$HARBOR_USES_OIDC_AUTH" == "true" ]]; then
+    error "Disabling OIDC on an existing OIDC-enabled Harbor is not automated because Harbor may reject auth_mode changes after users exist."
+    error "Run the documented migration/reset flow first, then rerun deploy.sh with enable_oidc_auth=false."
+    exit 1
+  fi
+
+  # shellcheck disable=SC2090 # HARBOR_OIDC_SETTINGS_JSON's quoting is intentional JSON content for envsubst, not shell syntax
+  export SUBSCRIPTION_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN CERT_MANAGER_CLIENT_ID ACME_EMAIL HARBOR_OIDC_SETTINGS_JSON
 
   info "Fetching AKS credentials..."
   az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
@@ -129,8 +176,12 @@ main() {
   # --- 7. Harbor ------------------------------------------------------------
   info "Installing Harbor..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
+  # Contains the OIDC client secret (embedded in configureUserSettings JSON) when SSO is enabled.
+  chmod 600 "$RENDERED_DIR/harbor-values.yaml"
+  # Single-quoted YAML scalar so special characters from random_password (":", "#", etc.) don't break parsing.
+  HARBOR_ADMIN_PASSWORD_YAML="$(printf '%s' "$HARBOR_ADMIN_PASSWORD" | sed "s/'/''/g")"
   cat > "$RENDERED_DIR/harbor-secret-values.yaml" <<EOF
-harborAdminPassword: ${HARBOR_ADMIN_PASSWORD}
+harborAdminPassword: '${HARBOR_ADMIN_PASSWORD_YAML}'
 EOF
   chmod 600 "$RENDERED_DIR/harbor-secret-values.yaml"
   rm -rf "$RENDERED_DIR/harbor"
@@ -148,7 +199,19 @@ EOF
     --namespace harbor \
     -f "$RENDERED_DIR/harbor-values.yaml" \
     -f "$RENDERED_DIR/harbor-secret-values.yaml" \
-    --wait --timeout 10m
+    --wait --timeout 10m \
+    2>&1 | tee "$RENDERED_DIR/harbor-upgrade.log" || {
+      # PVC/StatefulSet fields (storageClassName, etc.) are immutable after creation. Do NOT
+      # auto-delete PVCs here: managed-csi's reclaimPolicy is Delete, so removing a PVC destroys
+      # the underlying Azure Disk (and any pushed images) permanently. See README Troubleshooting
+      # for the manual, informed-consent recovery steps.
+      if grep -q "immutable after creation" "$RENDERED_DIR/harbor-upgrade.log"; then
+        error "Harbor upgrade failed: an existing PVC/StatefulSet has a field (e.g. storageClassName) that no longer matches the chart values and can't be patched in place."
+        error "This will NOT auto-delete PVCs (managed-csi reclaimPolicy is Delete, so that would destroy registry data). See README Troubleshooting for manual recovery steps."
+      fi
+      exit 1
+    }
+
 
   info "Applying Harbor TLS Certificate and Traefik routes..."
   envsubst < "$MANIFESTS_DIR/harbor-certificate.yaml.tpl" > "$RENDERED_DIR/harbor-certificate.yaml"
@@ -165,7 +228,12 @@ EOF
     --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
     --zone-name "$DNS_ZONE_NAME" \
     --name "$HARBOR_SUBDOMAIN" \
-    --ttl 300 &>/dev/null || true
+    --ttl 60 &>/dev/null || true
+  az network dns record-set a update \
+    --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
+    --zone-name "$DNS_ZONE_NAME" \
+    --name "$HARBOR_SUBDOMAIN" \
+    --set ttl=60 &>/dev/null || true
   # Remove any stale IPs (e.g. from a previous deploy) before adding the current one.
   EXISTING_IPS="$(az network dns record-set a show \
     --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
@@ -210,6 +278,26 @@ ${GREEN}Harbor demo deployed.${NC}
   Verify Prometheus metrics:
     kubectl get servicemonitor.azmonitoring.coreos.com -n harbor
 EOF
+
+  if [[ "$ENABLE_OIDC_AUTH" == "true" ]]; then
+    cat <<EOF
+
+${GREEN}OIDC SSO enabled.${NC}
+
+  Entra app (client ID):    ${HARBOR_OIDC_CLIENT_ID}
+  harbor-admins group ID:   ${HARBOR_ADMIN_GROUP_OBJECT_ID}
+
+  Maintainer/Developer/Guest/Limited Guest/ProjectAdmin groups were created
+  but are NOT auto-assigned to any project (Harbor has no global mapping for
+  those roles). For each project: Harbor UI -> Project -> Members -> + User
+  Group -> paste the group's object ID from:
+    terraform -chdir=${TF_DIR} output -raw harbor_projectadmin_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_maintainer_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_developer_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_guest_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_limited_guest_group_object_id
+EOF
+  fi
 }
 
 main "$@"

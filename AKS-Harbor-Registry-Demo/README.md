@@ -22,6 +22,7 @@ record for Harbor's hostname is created in an existing Azure DNS zone.
 | DNS | Existing Azure DNS zone (not created by this demo) — an A record for Harbor's hostname is created/updated by `deploy.sh` |
 | Audit logs | Fluent Bit sidecar re-emits Harbor's audit syslog stream to stdout → Container Insights (`ama-logs`) → Log Analytics `ContainerLogV2` |
 | Metrics | Harbor Prometheus metrics + an Azure-native `ServiceMonitor` (`azmonitoring.coreos.com/v1`) → Azure Monitor managed Prometheus → Azure Managed Grafana |
+| SSO | Microsoft Entra ID OIDC login for Harbor — app registration/SPN + client secret + 6 role groups, all Terraform-managed (see [Microsoft Entra ID OIDC SSO](#-microsoft-entra-id-oidc-sso) below) |
 
 ## 🏗️ Architecture
 
@@ -81,6 +82,7 @@ AKS-Harbor-Registry-Demo/
 
 - An **existing** Azure DNS zone already delegated to Azure DNS (this demo does not create or delegate a zone — only adds an A record to one you already own)
 - Azure CLI (`az`) logged in (`az login`) with Contributor + User Access Administrator (or equivalent) on the target subscription
+- Microsoft Entra ID permissions to create app registrations, create/manage security groups (for example, Groups Administrator), and grant admin consent (e.g. Application Administrator or Cloud Application Administrator), plus Entra ID P1/P2 licensing for users assigned to the app through groups — only required while `enable_oidc_auth = true` (the default)
 - Terraform >= 1.6.0
 - `kubectl`, `helm` (>= 3.8), `envsubst` (part of `gettext`)
 
@@ -99,7 +101,7 @@ cd ..
 ```
 
 `deploy.sh` runs, in order:
-1. `terraform apply` — resource group, AKS (workload identity + OIDC issuer enabled, Container Insights, managed Prometheus), Log Analytics, Azure Monitor workspace, Azure Managed Grafana, the cert-manager managed identity + federated credential + DNS role assignments.
+1. `terraform apply` — resource group, AKS (workload identity + OIDC issuer enabled, Container Insights, managed Prometheus), Log Analytics, Azure Monitor workspace, Azure Managed Grafana, the cert-manager managed identity + federated credential + DNS role assignments, and (if `enable_oidc_auth = true`) the Entra ID app/SPN, client secret, and Harbor role groups.
 2. Applies the Azure Monitor ConfigMaps: Container Insights stdout collection with `harbor` included and ContainerLogV2 schema v2, plus the AMA managed Prometheus collection profile.
 3. Installs Traefik and waits for its `LoadBalancer` external IP.
 4. Installs cert-manager (with CRDs, wired to the workload identity) and applies the `letsencrypt-prod` `ClusterIssuer` (Azure DNS DNS-01).
@@ -107,7 +109,7 @@ cd ..
 6. Runs `helm lint` against the pinned Harbor chart and rendered values, then installs/upgrades Harbor as an internal `ClusterIP` service with Harbor-side TLS disabled, metrics enabled, and audit forwarding configured.
 7. Creates the standalone `harbor-tls` Certificate and applies Traefik `IngressRoute` resources for HTTPS, HTTP-to-HTTPS redirect, HSTS, and `X-Forwarded-Proto`.
 8. Applies the Azure-native `ServiceMonitor` for Harbor's metrics.
-9. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP.
+9. Creates/updates the Azure DNS A record for Harbor's hostname pointing at the Traefik LoadBalancer IP (60s TTL, so a future LoadBalancer IP change propagates quickly).
 
 ### Terraform only
 
@@ -128,6 +130,7 @@ demo:
 - One Azure Managed Grafana workspace with its managed Prometheus integration
 - One cert-manager user-assigned identity, federated credential, and zone-scoped `DNS Zone Contributor` role
 - One generated Harbor admin password
+- (if `enable_oidc_auth = true`, the default) one Entra ID app registration/SPN + client secret + pre-consented Graph permissions (`openid`/`profile`/`email`/`offline_access`), and 6 Entra ID security groups (one per Harbor role)
 
 The existing Azure DNS zone is read as a data source. Terraform does not create,
 delegate, or delete that shared zone; `deploy.sh` manages only the Harbor A record.
@@ -176,27 +179,57 @@ against a shared or production cluster without reviewing the confirmation prompt
 | cert-manager gets 403 from Azure DNS | RBAC propagation delay (30–90s) or missing `DNS Zone Contributor` on the existing zone | Re-check after a minute; confirm the zone-scoped role assignment in `terraform/main.tf` exists |
 | No audit events in `ContainerLogV2` | Container Insights excludes the `harbor` namespace, or `stdout` collection disabled | Check the cluster's Container Insights `exclude_namespaces` and `containerlog_schema_version` settings |
 | `harbor_up` missing in Grafana | ServiceMonitor not discovered | `kubectl describe servicemonitor.azmonitoring.coreos.com harbor-azure-monitor -n harbor`; confirm the `http-metrics` port name and `release`/`app` labels match the Harbor Services |
+| `helm lint`/`upgrade` fails parsing `harbor-secret-values.yaml` | `harbor_admin_password` (`random_password`, `special = true`) contains YAML-breaking characters (`[`, `]`, `&`, `*`, `:`, `#`, etc.) | Already handled in `deploy.sh` — the password is written as a single-quoted YAML scalar with embedded quotes escaped |
+| Harbor still shows the local login form, not "LOGIN VIA OIDC PROVIDER" | `enable_oidc_auth = false`, or `terraform apply` hasn't been re-run after enabling it | Set `enable_oidc_auth = true`, re-run `terraform apply` then `./deploy.sh` |
+| `helm upgrade` fails with `... is invalid: spec: Forbidden: ... is immutable after creation` (PVC `storageClassName`, StatefulSet fields) | An earlier install left PVCs/StatefulSets with a different `storageClassName` (e.g. AKS's `default` alias) than the current values | **Data loss warning:** `managed-csi`'s reclaim policy is `Delete`, so removing a PVC deletes the underlying Azure Disk (and any pushed images) permanently — `deploy.sh` will NOT do this automatically. If you're OK losing the current registry data (e.g. a demo/test install), run `helm uninstall harbor -n harbor`, `kubectl delete pvc -l release=harbor,heritage=Helm -n harbor`, then re-run `./deploy.sh`. To preserve data instead, patch the PV(s)' `persistentVolumeReclaimPolicy` to `Retain` first (`kubectl patch pv <pv-name> -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'`), then manually re-bind after recreating. |
 
 The monitoring ConfigMaps are applied by `deploy.sh`. If the cluster was
 already running and you apply a changed configuration manually, restart the
 corresponding `ama-logs` or `ama-metrics` pods only when the agent does not
 reload the ConfigMap automatically.
 
+## 🔐 Microsoft Entra ID OIDC SSO
+
+Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_auth = true` (the default):
+
+- An app registration/SPN (`azuread_application` + `azuread_service_principal`) with a Terraform-generated client secret (`azuread_application_password`, 1-year expiry), the `https://<harbor_fqdn>/c/oidc/callback` redirect URI, and delegated Graph scopes `openid`/`profile`/`email`/`offline_access`, pre-consented tenant-wide via `azuread_service_principal_delegated_permission_grant` (equivalent to clicking "Grant admin consent") so users skip the consent prompt. `user_object_id` only controls optional app/group ownership. `offline_access` lets Harbor silently refresh the session instead of forcing re-login.
+- Six Entra ID security groups, one per Harbor role (override names via `harbor_admin_group_name` etc.), each assigned to the app's default role so they appear in the OIDC `groups` claim (`group_membership_claims = ["ApplicationGroup"]`):
+
+  | Harbor role | Variable | Default group name | Scope |
+  |---|---|---|---|
+  | System Admin | `harbor_admin_group_name` | `harbor-admins` | Global (`oidc_admin_group`) |
+  | ProjectAdmin | `harbor_projectadmin_group_name` | `harbor-projectadmins` | Per-project |
+  | Maintainer | `harbor_maintainer_group_name` | `harbor-maintainers` | Per-project |
+  | Developer | `harbor_developer_group_name` | `harbor-developers` | Per-project |
+  | Guest (read-only) | `harbor_guest_group_name` | `harbor-guests` | Per-project |
+  | Limited Guest (pull-only, no logs/members) | `harbor_limited_guest_group_name` | `harbor-limited-guests` | Per-project |
+
+- Initial members of `harbor-admins` come from `harbor_admin_group_member_upns` (a list of UPNs in `terraform.tfvars`) — the other 5 groups start empty.
+- `deploy.sh` reads the app's client ID/secret, tenant, and the `harbor-admins` group object ID from Terraform outputs and folds them into Harbor's `core.configureUserSettings` JSON (`auth_mode: oidc_auth`, `oidc_groups_claim: "groups"`, `oidc_admin_group`, etc.) before installing the chart. `oidc_groups_claim` tells Harbor which ID token claim carries group membership — it must match the `optional_claims.id_token` claim name (`groups`) configured on the Entra app.
+
+**Important — group matching is by object ID, not name.** Entra emits group **object IDs** (GUIDs) in the `groups` claim by default (no claims-mapping policy is configured here), so Harbor's `oidc_admin_group` setting is set to the admin group's object ID, not its display name.
+
+**ProjectAdmin/Maintainer/Developer/Guest/Limited Guest roles are per-project.** Harbor only has a single global admin-group mapping (`oidc_admin_group`) — System Admin is the only role assigned tenant-wide. After a project exists, assign each group to it manually: Harbor UI → *Project* → *Members* → *+ User Group* → paste the group's object ID from:
+
+```bash
+terraform output -raw harbor_projectadmin_group_object_id
+terraform output -raw harbor_maintainer_group_object_id
+terraform output -raw harbor_developer_group_object_id
+terraform output -raw harbor_guest_group_object_id
+terraform output -raw harbor_limited_guest_group_object_id
+```
+
+**Disabling SSO:** do **not** switch an already OIDC-enabled Harbor directly to `enable_oidc_auth = false`. Harbor can reject `auth_mode` changes after users exist, and destroying the Entra app/groups first can leave login pointing at a deleted provider. Use an explicit migration/reset flow (validate on a non-production backup first): (1) keep `enable_oidc_auth = true`; (2) take a Harbor DB backup/snapshot; (3) if you need local auth, reset Harbor state per Harbor guidance so `auth_mode` can be changed safely; (4) redeploy Harbor with local-auth settings; then (5) set `enable_oidc_auth = false` and apply Terraform to remove Entra resources.
+
+**Secret rotation:** the client secret (`azuread_application_password`) expires after 1 year; because `lifecycle.ignore_changes = [end_date]` is set, rotate it by tainting/recreating the password resource (for example `terraform taint azuread_application_password.harbor[0]`) and then running `terraform apply`, followed by `./deploy.sh` (or an equivalent Helm upgrade) so Harbor receives the new secret.
+
 ## 🔒 Security notes
 
 - The Harbor admin password is generated by Terraform (`random_password`), marked `sensitive`, and never written to a committed file — retrieve it with `terraform output -raw harbor_admin_password`.
 - cert-manager uses Azure Workload Identity (federated credential), not a client secret, and is scoped to `DNS Zone Contributor` on the single DNS zone — not subscription-wide access.
+- The Harbor OIDC client secret is a real secret (Harbor's chart has no separate secret field — it lives in the `configureUserSettings` JSON blob); it's marked `sensitive` in Terraform outputs, and the rendered `.rendered/harbor-values.yaml` (gitignored) is `chmod 600`.
 - `terraform.tfvars` is gitignored; only `terraform.tfvars.example` (placeholder values) is committed.
-
-## 🔮 Future Enhancement: Azure AD (Microsoft Entra ID) OIDC SSO
-
-This demo reserves — but does not enable — Azure AD OIDC login for Harbor, for a follow-up demo:
-
-- `terraform output -raw harbor_oidc_redirect_uri` already gives the exact redirect URI (`https://<harbor_fqdn>/c/oidc/callback`) needed to register an Entra ID app registration.
-- `variables.tf` already has disabled placeholders: `enable_oidc_auth`, `oidc_client_id`, `oidc_client_secret`.
-- To enable it later: register an Entra ID app with that redirect URI, then add `auth_mode`, `oidc_name`, `oidc_endpoint`, `oidc_client_id`, `oidc_client_secret`, `oidc_scope`, `oidc_verify_cert`, `oidc_auto_onboard`, `oidc_user_claim` to the `core.configureUserSettings` JSON block in `kubernetes-manifests/harbor-values.yaml.tpl` (a commented template is already there) and re-run `helm upgrade`.
 - **Caveat:** once `configureUserSettings` (`CONFIG_OVERWRITE_JSON`) is set, *all* Harbor user-scope settings — including `auth_mode` — become read-only in the Harbor UI. Changing auth after this point means editing values and redeploying, not using Administration → Configuration.
-- Harbor's local `admin` account always stays DB-authenticated, so it remains a break-glass login even after OIDC is enabled.
 
 ## 📚 Further Reading
 

@@ -1,5 +1,8 @@
 # Rendered by deploy.sh via `envsubst` before `helm upgrade --install harbor`.
 # Placeholders: ${HARBOR_FQDN}
+# A separate HARBOR_OIDC_SETTINGS_JSON token (built in deploy.sh, not listed
+# here to avoid envsubst expanding it into this comment) is appended inside
+# core.configureUserSettings below when OIDC SSO is enabled.
 #
 # This is a "basic" Harbor install: bundled/internal database, redis and
 # trivy (no external Postgres/Redis/object storage), persistence on the AKS
@@ -99,19 +102,8 @@ core:
       "audit_log_forward_endpoint": "harbor-audit-forwarder.harbor.svc.cluster.local:10514",
       "disabled_audit_log_event_types": "",
       "skip_audit_log_database": false
+      ${HARBOR_OIDC_SETTINGS_JSON}
     }
-  # Future demo placeholder (Azure AD / Entra ID OIDC SSO for Harbor) - add these
-  # keys to the JSON block above and re-run `helm upgrade` to enable it, do not
-  # uncomment as-is:
-  #   "auth_mode": "oidc_auth",
-  #   "oidc_name": "entra-id",
-  #   "oidc_endpoint": "https://login.microsoftonline.com/<tenant-id>/v2.0",
-  #   "oidc_client_id": "<entra-app-client-id>",
-  #   "oidc_client_secret": "<entra-app-client-secret>",
-  #   "oidc_scope": "openid,profile,email",
-  #   "oidc_verify_cert": true,
-  #   "oidc_auto_onboard": true,
-  #   "oidc_user_claim": "preferred_username"
   # Harbor's local `admin` account always stays DB-authenticated, so it
   # remains a break-glass login after OIDC is enabled.
 
