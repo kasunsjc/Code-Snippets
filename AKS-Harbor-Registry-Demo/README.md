@@ -191,7 +191,7 @@ reload the ConfigMap automatically.
 
 Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_auth = true` (the default):
 
-- An app registration/SPN (`azuread_application` + `azuread_service_principal`) with a Terraform-generated client secret (`azuread_application_password`, 1-year expiry), the `https://<harbor_fqdn>/c/oidc/callback` redirect URI, and delegated Graph scopes `openid`/`profile`/`email`/`offline_access`/`User.Read`, pre-consented tenant-wide via `azuread_service_principal_delegated_permission_grant` (no `user_object_id` set = grants all users, equivalent to clicking "Grant admin consent") so users skip the consent prompt. `offline_access` lets Harbor silently refresh the session instead of forcing re-login.
+- An app registration/SPN (`azuread_application` + `azuread_service_principal`) with a Terraform-generated client secret (`azuread_application_password`, 1-year expiry), the `https://<harbor_fqdn>/c/oidc/callback` redirect URI, and delegated Graph scopes `openid`/`profile`/`email`/`offline_access`/`User.Read`, pre-consented tenant-wide via `azuread_service_principal_delegated_permission_grant` (equivalent to clicking "Grant admin consent") so users skip the consent prompt. `user_object_id` only controls optional app/group ownership. `offline_access` lets Harbor silently refresh the session instead of forcing re-login.
 - Six Entra ID security groups, one per Harbor role (override names via `harbor_admin_group_name` etc.), each assigned to the app's default role so they appear in the OIDC `groups` claim (`group_membership_claims = ["ApplicationGroup"]`):
 
   | Harbor role | Variable | Default group name | Scope |

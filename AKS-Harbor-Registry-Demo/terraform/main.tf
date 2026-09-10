@@ -233,7 +233,7 @@ resource "azuread_application" "harbor" {
   }
 
   required_resource_access {
-    resource_app_id = "00000003-0000-0000-c000-000000000000" # Microsoft Graph
+    resource_app_id = data.azuread_application_published_app_ids.well_known.result["MicrosoftGraph"]
 
     resource_access {
       id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["openid"]
@@ -277,8 +277,8 @@ resource "azuread_service_principal" "harbor" {
   owners    = var.user_object_id == "" ? null : [var.user_object_id]
 }
 
-# Pre-consent (tenant-wide admin consent - user_object_id left unset) so users
-# won't see a consent prompt at login.
+# Pre-consent the delegated Graph scopes tenant-wide so users won't see a
+# consent prompt at login. user_object_id only affects app/group ownership.
 resource "azuread_service_principal_delegated_permission_grant" "harbor" {
   count = var.enable_oidc_auth ? 1 : 0
 
