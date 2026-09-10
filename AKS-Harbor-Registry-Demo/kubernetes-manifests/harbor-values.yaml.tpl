@@ -1,5 +1,8 @@
 # Rendered by deploy.sh via `envsubst` before `helm upgrade --install harbor`.
-# Placeholders: ${HARBOR_FQDN}, ${HARBOR_OIDC_SETTINGS_JSON}
+# Placeholders: ${HARBOR_FQDN}
+# A separate HARBOR_OIDC_SETTINGS_JSON token (built in deploy.sh, not listed
+# here to avoid envsubst expanding it into this comment) is appended inside
+# core.configureUserSettings below when OIDC SSO is enabled.
 #
 # This is a "basic" Harbor install: bundled/internal database, redis and
 # trivy (no external Postgres/Redis/object storage), persistence on the AKS

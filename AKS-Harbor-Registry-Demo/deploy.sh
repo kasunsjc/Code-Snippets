@@ -97,21 +97,20 @@ main() {
     HARBOR_OIDC_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_endpoint)"
     HARBOR_ADMIN_GROUP_OBJECT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_group_object_id)"
     # shellcheck disable=SC2089 # consumed only via envsubst below, never re-parsed by the shell
-    HARBOR_OIDC_SETTINGS_JSON="$(cat <<EOF
-,
-      \"auth_mode\": \"oidc_auth\",
-      \"oidc_name\": \"entra-id\",
-      \"oidc_endpoint\": \"$(json_escape "$HARBOR_OIDC_ENDPOINT")\",
-      \"oidc_client_id\": \"$(json_escape "$HARBOR_OIDC_CLIENT_ID")\",
-      \"oidc_client_secret\": \"$(json_escape "$HARBOR_OIDC_CLIENT_SECRET")\",
-      \"oidc_scope\": \"openid,profile,email,offline_access\",
-      \"oidc_verify_cert\": true,
-      \"oidc_auto_onboard\": true,
-      \"oidc_user_claim\": \"preferred_username\",
-      \"oidc_groups_claim\": \"groups\",
-      \"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\"
-EOF
-)"
+    # Single-line value (no embedded newlines) - envsubst also expands this
+    # token inside harbor-values.yaml.tpl's header comment, and a multi-line
+    # value there corrupts the rest of the YAML document.
+    HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\
+\"oidc_name\": \"entra-id\",\
+\"oidc_endpoint\": \"$(json_escape "$HARBOR_OIDC_ENDPOINT")\",\
+\"oidc_client_id\": \"$(json_escape "$HARBOR_OIDC_CLIENT_ID")\",\
+\"oidc_client_secret\": \"$(json_escape "$HARBOR_OIDC_CLIENT_SECRET")\",\
+\"oidc_scope\": \"openid,profile,email,offline_access\",\
+\"oidc_verify_cert\": true,\
+\"oidc_auto_onboard\": true,\
+\"oidc_user_claim\": \"preferred_username\",\
+\"oidc_groups_claim\": \"groups\",\
+\"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\""
   fi
 
   # shellcheck disable=SC2090 # HARBOR_OIDC_SETTINGS_JSON's quoting is intentional JSON content for envsubst, not shell syntax
@@ -190,7 +189,19 @@ EOF
     --namespace harbor \
     -f "$RENDERED_DIR/harbor-values.yaml" \
     -f "$RENDERED_DIR/harbor-secret-values.yaml" \
-    --wait --timeout 10m
+    --wait --timeout 10m \
+    2>&1 | tee "$RENDERED_DIR/harbor-upgrade.log" || {
+      # PVC/StatefulSet fields (storageClassName, etc.) are immutable after creation. Do NOT
+      # auto-delete PVCs here: managed-csi's reclaimPolicy is Delete, so removing a PVC destroys
+      # the underlying Azure Disk (and any pushed images) permanently. See README Troubleshooting
+      # for the manual, informed-consent recovery steps.
+      if grep -q "immutable after creation" "$RENDERED_DIR/harbor-upgrade.log"; then
+        error "Harbor upgrade failed: an existing PVC/StatefulSet has a field (e.g. storageClassName) that no longer matches the chart values and can't be patched in place."
+        error "This will NOT auto-delete PVCs (managed-csi reclaimPolicy is Delete, so that would destroy registry data). See README Troubleshooting for manual recovery steps."
+      fi
+      exit 1
+    }
+
 
   info "Applying Harbor TLS Certificate and Traefik routes..."
   envsubst < "$MANIFESTS_DIR/harbor-certificate.yaml.tpl" > "$RENDERED_DIR/harbor-certificate.yaml"
