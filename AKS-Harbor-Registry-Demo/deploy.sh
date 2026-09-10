@@ -97,7 +97,21 @@ main() {
     HARBOR_OIDC_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_endpoint)"
     HARBOR_ADMIN_GROUP_OBJECT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_group_object_id)"
     # shellcheck disable=SC2089 # consumed only via envsubst below, never re-parsed by the shell
-    HARBOR_OIDC_SETTINGS_JSON=",\"auth_mode\": \"oidc_auth\",\"oidc_name\": \"entra-id\",\"oidc_endpoint\": \"$(json_escape "$HARBOR_OIDC_ENDPOINT")\",\"oidc_client_id\": \"$(json_escape "$HARBOR_OIDC_CLIENT_ID")\",\"oidc_client_secret\": \"$(json_escape "$HARBOR_OIDC_CLIENT_SECRET")\",\"oidc_scope\": \"openid,profile,email,offline_access\",\"oidc_verify_cert\": true,\"oidc_auto_onboard\": true,\"oidc_user_claim\": \"preferred_username\",\"oidc_groups_claim\": \"groups\",\"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\""
+    HARBOR_OIDC_SETTINGS_JSON="$(cat <<EOF
+,
+      \"auth_mode\": \"oidc_auth\",
+      \"oidc_name\": \"entra-id\",
+      \"oidc_endpoint\": \"$(json_escape "$HARBOR_OIDC_ENDPOINT")\",
+      \"oidc_client_id\": \"$(json_escape "$HARBOR_OIDC_CLIENT_ID")\",
+      \"oidc_client_secret\": \"$(json_escape "$HARBOR_OIDC_CLIENT_SECRET")\",
+      \"oidc_scope\": \"openid,profile,email,offline_access\",
+      \"oidc_verify_cert\": true,
+      \"oidc_auto_onboard\": true,
+      \"oidc_user_claim\": \"preferred_username\",
+      \"oidc_groups_claim\": \"groups\",
+      \"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\"
+EOF
+)"
   fi
 
   # shellcheck disable=SC2090 # HARBOR_OIDC_SETTINGS_JSON's quoting is intentional JSON content for envsubst, not shell syntax

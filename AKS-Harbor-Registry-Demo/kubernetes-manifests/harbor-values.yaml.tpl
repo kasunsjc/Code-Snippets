@@ -98,7 +98,8 @@ core:
       "scanner_skip_update_pulltime": true,
       "audit_log_forward_endpoint": "harbor-audit-forwarder.harbor.svc.cluster.local:10514",
       "disabled_audit_log_event_types": "",
-      "skip_audit_log_database": false${HARBOR_OIDC_SETTINGS_JSON}
+      "skip_audit_log_database": false
+      ${HARBOR_OIDC_SETTINGS_JSON}
     }
   # Harbor's local `admin` account always stays DB-authenticated, so it
   # remains a break-glass login after OIDC is enabled.
