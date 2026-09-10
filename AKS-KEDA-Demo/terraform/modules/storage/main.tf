@@ -19,14 +19,14 @@ resource "time_sleep" "wait_for_storage_dns" {
 }
 
 resource "azurerm_storage_queue" "this" {
-  name                 = var.queue_name
-  storage_account_name = azurerm_storage_account.this.name
-  depends_on           = [time_sleep.wait_for_storage_dns]
+  name               = var.queue_name
+  storage_account_id = azurerm_storage_account.this.id
+  depends_on         = [time_sleep.wait_for_storage_dns]
 }
 
 resource "azurerm_storage_container" "checkpoint" {
   name                  = var.checkpoint_container_name
-  storage_account_name  = azurerm_storage_account.this.name
+  storage_account_id    = azurerm_storage_account.this.id
   container_access_type = "private"
   depends_on            = [time_sleep.wait_for_storage_dns]
 }
