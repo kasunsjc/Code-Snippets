@@ -91,6 +91,12 @@ main() {
   HARBOR_OIDC_SETTINGS_JSON=""
   HARBOR_ADMIN_GROUP_OBJECT_ID=""
   HARBOR_OIDC_CLIENT_ID=""
+  HARBOR_USES_OIDC_AUTH="false"
+  if kubectl get secret harbor-core -n harbor >/dev/null 2>&1; then
+    if helm get values harbor -n harbor -o yaml 2>/dev/null | grep -q '"auth_mode":[[:space:]]*"oidc_auth"'; then
+      HARBOR_USES_OIDC_AUTH="true"
+    fi
+  fi
   if [[ "$ENABLE_OIDC_AUTH" == "true" ]]; then
     HARBOR_OIDC_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_id)"
     HARBOR_OIDC_CLIENT_SECRET="$(terraform -chdir="$TF_DIR" output -raw harbor_oidc_client_secret)"
@@ -111,6 +117,10 @@ main() {
 \"oidc_user_claim\": \"preferred_username\",\
 \"oidc_groups_claim\": \"groups\",\
 \"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\""
+  elif [[ "$HARBOR_USES_OIDC_AUTH" == "true" ]]; then
+    error "Disabling OIDC on an existing OIDC-enabled Harbor is not automated because Harbor may reject auth_mode changes after users exist."
+    error "Run the documented migration/reset flow first, then rerun deploy.sh with enable_oidc_auth=false."
+    exit 1
   fi
 
   # shellcheck disable=SC2090 # HARBOR_OIDC_SETTINGS_JSON's quoting is intentional JSON content for envsubst, not shell syntax
@@ -219,6 +229,11 @@ EOF
     --zone-name "$DNS_ZONE_NAME" \
     --name "$HARBOR_SUBDOMAIN" \
     --ttl 60 &>/dev/null || true
+  az network dns record-set a update \
+    --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
+    --zone-name "$DNS_ZONE_NAME" \
+    --name "$HARBOR_SUBDOMAIN" \
+    --set ttl=60 &>/dev/null || true
   # Remove any stale IPs (e.g. from a previous deploy) before adding the current one.
   EXISTING_IPS="$(az network dns record-set a show \
     --resource-group "$DNS_ZONE_RESOURCE_GROUP" \
@@ -276,11 +291,11 @@ ${GREEN}OIDC SSO enabled.${NC}
   but are NOT auto-assigned to any project (Harbor has no global mapping for
   those roles). For each project: Harbor UI -> Project -> Members -> + User
   Group -> paste the group's object ID from:
-    terraform -chdir=${TF_DIR} output harbor_projectadmin_group_object_id
-    terraform -chdir=${TF_DIR} output harbor_maintainer_group_object_id
-    terraform -chdir=${TF_DIR} output harbor_developer_group_object_id
-    terraform -chdir=${TF_DIR} output harbor_guest_group_object_id
-    terraform -chdir=${TF_DIR} output harbor_limited_guest_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_projectadmin_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_maintainer_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_developer_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_guest_group_object_id
+    terraform -chdir=${TF_DIR} output -raw harbor_limited_guest_group_object_id
 EOF
   fi
 }

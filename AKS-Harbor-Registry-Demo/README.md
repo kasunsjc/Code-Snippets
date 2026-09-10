@@ -82,7 +82,7 @@ AKS-Harbor-Registry-Demo/
 
 - An **existing** Azure DNS zone already delegated to Azure DNS (this demo does not create or delegate a zone — only adds an A record to one you already own)
 - Azure CLI (`az`) logged in (`az login`) with Contributor + User Access Administrator (or equivalent) on the target subscription
-- Microsoft Entra ID permissions to create app registrations and grant admin consent (e.g. Application Administrator or Cloud Application Administrator) — only required while `enable_oidc_auth = true` (the default)
+- Microsoft Entra ID permissions to create app registrations, create/manage security groups (for example, Groups Administrator), and grant admin consent (e.g. Application Administrator or Cloud Application Administrator), plus Entra ID P1/P2 licensing for users assigned to the app through groups — only required while `enable_oidc_auth = true` (the default)
 - Terraform >= 1.6.0
 - `kubectl`, `helm` (>= 3.8), `envsubst` (part of `gettext`)
 
@@ -130,7 +130,7 @@ demo:
 - One Azure Managed Grafana workspace with its managed Prometheus integration
 - One cert-manager user-assigned identity, federated credential, and zone-scoped `DNS Zone Contributor` role
 - One generated Harbor admin password
-- (if `enable_oidc_auth = true`, the default) one Entra ID app registration/SPN + client secret + pre-consented Graph permissions, and 6 Entra ID security groups (one per Harbor role)
+- (if `enable_oidc_auth = true`, the default) one Entra ID app registration/SPN + client secret + pre-consented Graph permissions (`openid`/`profile`/`email`/`offline_access`), and 6 Entra ID security groups (one per Harbor role)
 
 The existing Azure DNS zone is read as a data source. Terraform does not create,
 delegate, or delete that shared zone; `deploy.sh` manages only the Harbor A record.
@@ -192,7 +192,7 @@ reload the ConfigMap automatically.
 
 Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_auth = true` (the default):
 
-- An app registration/SPN (`azuread_application` + `azuread_service_principal`) with a Terraform-generated client secret (`azuread_application_password`, 1-year expiry), the `https://<harbor_fqdn>/c/oidc/callback` redirect URI, and delegated Graph scopes `openid`/`profile`/`email`/`offline_access`/`User.Read`, pre-consented tenant-wide via `azuread_service_principal_delegated_permission_grant` (equivalent to clicking "Grant admin consent") so users skip the consent prompt. `user_object_id` only controls optional app/group ownership. `offline_access` lets Harbor silently refresh the session instead of forcing re-login.
+- An app registration/SPN (`azuread_application` + `azuread_service_principal`) with a Terraform-generated client secret (`azuread_application_password`, 1-year expiry), the `https://<harbor_fqdn>/c/oidc/callback` redirect URI, and delegated Graph scopes `openid`/`profile`/`email`/`offline_access`, pre-consented tenant-wide via `azuread_service_principal_delegated_permission_grant` (equivalent to clicking "Grant admin consent") so users skip the consent prompt. `user_object_id` only controls optional app/group ownership. `offline_access` lets Harbor silently refresh the session instead of forcing re-login.
 - Six Entra ID security groups, one per Harbor role (override names via `harbor_admin_group_name` etc.), each assigned to the app's default role so they appear in the OIDC `groups` claim (`group_membership_claims = ["ApplicationGroup"]`):
 
   | Harbor role | Variable | Default group name | Scope |
@@ -209,11 +209,19 @@ Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_
 
 **Important — group matching is by object ID, not name.** Entra emits group **object IDs** (GUIDs) in the `groups` claim by default (no claims-mapping policy is configured here), so Harbor's `oidc_admin_group` setting is set to the admin group's object ID, not its display name.
 
-**ProjectAdmin/Maintainer/Developer/Guest/Limited Guest roles are per-project.** Harbor only has a single global admin-group mapping (`oidc_admin_group`) — System Admin is the only role assigned tenant-wide. After a project exists, assign each group to it manually: Harbor UI → *Project* → *Members* → *+ User Group* → paste the group's object ID (`terraform output harbor_projectadmin_group_object_id`, `harbor_maintainer_group_object_id`, `harbor_developer_group_object_id`, `harbor_guest_group_object_id`, `harbor_limited_guest_group_object_id`).
+**ProjectAdmin/Maintainer/Developer/Guest/Limited Guest roles are per-project.** Harbor only has a single global admin-group mapping (`oidc_admin_group`) — System Admin is the only role assigned tenant-wide. After a project exists, assign each group to it manually: Harbor UI → *Project* → *Members* → *+ User Group* → paste the group's object ID from:
 
-**Disabling SSO:** set `enable_oidc_auth = false` and re-apply — this destroys the Entra app/groups and Harbor falls back to local admin/password auth (the `admin` account always stays DB-authenticated as a break-glass login, even with SSO enabled).
+```bash
+terraform output -raw harbor_projectadmin_group_object_id
+terraform output -raw harbor_maintainer_group_object_id
+terraform output -raw harbor_developer_group_object_id
+terraform output -raw harbor_guest_group_object_id
+terraform output -raw harbor_limited_guest_group_object_id
+```
 
-**Secret rotation:** the client secret (`azuread_application_password`) expires after 1 year; because `lifecycle.ignore_changes = [end_date]` is set, rotate it by tainting/recreating the password resource (for example `terraform taint azuread_application_password.harbor[0]`) and then running `terraform apply`.
+**Disabling SSO:** do **not** switch an already OIDC-enabled Harbor directly to `enable_oidc_auth = false`. Harbor can reject `auth_mode` changes after users exist, and destroying the Entra app/groups first can leave login pointing at a deleted provider. Use an explicit migration/reset flow (validate on a non-production backup first): (1) keep `enable_oidc_auth = true`; (2) take a Harbor DB backup/snapshot; (3) if you need local auth, reset Harbor state per Harbor guidance so `auth_mode` can be changed safely; (4) redeploy Harbor with local-auth settings; then (5) set `enable_oidc_auth = false` and apply Terraform to remove Entra resources.
+
+**Secret rotation:** the client secret (`azuread_application_password`) expires after 1 year; because `lifecycle.ignore_changes = [end_date]` is set, rotate it by tainting/recreating the password resource (for example `terraform taint azuread_application_password.harbor[0]`) and then running `terraform apply`, followed by `./deploy.sh` (or an equivalent Helm upgrade) so Harbor receives the new secret.
 
 ## 🔒 Security notes
 

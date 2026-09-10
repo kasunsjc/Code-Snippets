@@ -207,6 +207,8 @@ resource "random_password" "harbor_admin" {
 data "azuread_application_published_app_ids" "well_known" {}
 
 data "azuread_service_principal" "msgraph" {
+  count = var.enable_oidc_auth ? 1 : 0
+
   client_id = data.azuread_application_published_app_ids.well_known.result["MicrosoftGraph"]
 }
 
@@ -236,23 +238,19 @@ resource "azuread_application" "harbor" {
     resource_app_id = data.azuread_application_published_app_ids.well_known.result["MicrosoftGraph"]
 
     resource_access {
-      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["openid"]
+      id   = data.azuread_service_principal.msgraph[0].oauth2_permission_scope_ids["openid"]
       type = "Scope"
     }
     resource_access {
-      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["profile"]
+      id   = data.azuread_service_principal.msgraph[0].oauth2_permission_scope_ids["profile"]
       type = "Scope"
     }
     resource_access {
-      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["email"]
+      id   = data.azuread_service_principal.msgraph[0].oauth2_permission_scope_ids["email"]
       type = "Scope"
     }
     resource_access {
-      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["offline_access"]
-      type = "Scope"
-    }
-    resource_access {
-      id   = data.azuread_service_principal.msgraph.oauth2_permission_scope_ids["User.Read"]
+      id   = data.azuread_service_principal.msgraph[0].oauth2_permission_scope_ids["offline_access"]
       type = "Scope"
     }
   }
@@ -283,8 +281,8 @@ resource "azuread_service_principal_delegated_permission_grant" "harbor" {
   count = var.enable_oidc_auth ? 1 : 0
 
   service_principal_object_id          = azuread_service_principal.harbor[0].object_id
-  resource_service_principal_object_id = data.azuread_service_principal.msgraph.object_id
-  claim_values                         = ["openid", "profile", "email", "offline_access", "User.Read"]
+  resource_service_principal_object_id = data.azuread_service_principal.msgraph[0].object_id
+  claim_values                         = ["openid", "profile", "email", "offline_access"]
 }
 
 # --- Harbor role groups --------------------------------------------------------
