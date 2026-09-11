@@ -61,7 +61,7 @@ import xml.etree.ElementTree as ET
 from html import escape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(os.environ["REPO_ROOT"])
@@ -115,6 +115,12 @@ FEED_URLS = [
     "https://kasunrajapakse.me/feed",
 ]
 
+SOURCE_PRIORITIES = {
+    "seeded": 0,
+    "readme": 1,
+    "discovery": 2,
+}
+
 
 def normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
@@ -124,9 +130,9 @@ def canonicalize_url(url: str) -> str:
     url = url.strip()
     if not url.startswith("https://kasunrajapakse.me/"):
         return url
-    if "?" in url or "#" in url:
-        return url.rstrip("/")
-    return url.rstrip("/") + "/"
+    parts = urlsplit(url)
+    normalized_path = parts.path.rstrip("/") + "/"
+    return urlunsplit((parts.scheme, parts.netloc, normalized_path, "", ""))
 
 
 def iter_examples():
@@ -251,27 +257,27 @@ def discover_matches(example_name: str, feed_posts):
     return discovered
 
 
-def add_links(bucket, seen_urls, links):
+def add_links(bucket, links, source):
+    priority = SOURCE_PRIORITIES[source]
     for title, url in links:
         url = canonicalize_url(url)
         key = url.rstrip("/")
-        if key in seen_urls:
+        current = bucket.get(key)
+        if current is not None and current["priority"] <= priority:
             continue
-        seen_urls.add(key)
-        bucket.append((title, url))
+        bucket[key] = {"priority": priority, "title": title.strip(), "url": url}
 
 
 feed_posts = fetch_feed_posts()
 rows = []
 for example_name, example_title, readme_path in iter_examples():
-    links = []
-    seen_urls = set()
-    add_links(links, seen_urls, SEEDED_BLOG_MAPPINGS.get(example_name, []))
-    add_links(links, seen_urls, extract_blog_links(readme_path))
-    add_links(links, seen_urls, discover_matches(example_name, feed_posts))
+    links = {}
+    add_links(links, SEEDED_BLOG_MAPPINGS.get(example_name, []), "seeded")
+    add_links(links, extract_blog_links(readme_path), "readme")
+    add_links(links, discover_matches(example_name, feed_posts), "discovery")
 
-    for blog_title, blog_url in links:
-        rows.append((example_name, example_title, blog_title, blog_url))
+    for link in links.values():
+        rows.append((example_name, example_title, link["title"], link["url"]))
 
 if not rows:
     sys.exit(0)

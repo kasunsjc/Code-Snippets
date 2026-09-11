@@ -31,7 +31,7 @@ cat > "$TEST_REPO/AKS-Harbor-Registry-Demo/README.md" <<'EOF'
 
 - [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/)
 - [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/)
-- [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/)
+- [Harbor Audit Logs duplicate](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/?utm=test#section)
 EOF
 
 bash "$TEST_REPO/scripts/generate-readme.sh"
@@ -54,11 +54,17 @@ cat > "$TMP_DIR/feed.xml" <<'EOF'
       <link>https://kasunrajapakse.me/blog/harbor-oidc-azure-monitor-grafana/</link>
       <description>Harbor with oidc, azure monitor, grafana, and log analytics on AKS.</description>
     </item>
+    <item>
+      <title>Different Harbor Audit Title</title>
+      <link>https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/?ref=feed</link>
+      <description>Harbor log analytics duplicate.</description>
+    </item>
   </channel>
 </rss>
 EOF
 
 ENABLE_BLOG_DISCOVERY=1 BLOG_FEED_FIXTURE="$TMP_DIR/feed.xml" bash "$TEST_REPO/scripts/generate-readme.sh"
 grep -Fq "https://kasunrajapakse.me/blog/harbor-oidc-azure-monitor-grafana/" "$TEST_REPO/README.md"
+grep -Fq "[Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/)" "$TEST_REPO/README.md"
 
 echo "README generator tests passed"
