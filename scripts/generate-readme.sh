@@ -204,7 +204,7 @@ def fetch_feed_posts():
             request = Request(feed_url, headers={"User-Agent": "Code-Snippets README Generator"})
             with urlopen(request, timeout=10) as response:
                 payload = response.read()
-        except (HTTPError, URLError, socket.timeout, TimeoutError, ValueError):
+        except (HTTPError, URLError, socket.timeout, TimeoutError, OSError, ValueError):
             continue
 
         posts = parse_feed_payload(payload)
