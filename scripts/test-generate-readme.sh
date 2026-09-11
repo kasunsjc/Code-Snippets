@@ -37,7 +37,7 @@ bash "$TEST_REPO/scripts/generate-readme.sh"
 grep -Fq "Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO" "$TEST_REPO/README.md"
 grep -Fq "[BYO-CNI-AKS](./BYO-CNI-AKS/)" "$TEST_REPO/README.md"
 
-harbor_count="$(grep -Fc "harbor-audit-logs-azure-log-analytics" "$TEST_REPO/README.md")"
+harbor_count="$(grep -Fc "| [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |" "$TEST_REPO/README.md")"
 if [[ "$harbor_count" -ne 1 ]]; then
   echo "Expected Harbor audit log blog to appear once, found $harbor_count" >&2
   exit 1
