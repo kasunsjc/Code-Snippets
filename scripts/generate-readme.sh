@@ -52,26 +52,198 @@ get_description() {
 
 # Emit personal blog mappings for demos that have a matching walkthrough
 emit_blog_mappings() {
-  cat <<'EOF'
-## 📝 Related Blog Posts
+  REPO_ROOT="$REPO_ROOT" python3 <<'PY'
+import os
+import re
+import sys
+import xml.etree.ElementTree as ET
+from html import escape
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-Looking for the full walkthroughs behind some of these samples? Visit the
-[Kasun Rajapakse blog](https://kasunrajapakse.me/blog/) for the companion
-articles linked below.
+REPO_ROOT = Path(os.environ["REPO_ROOT"])
+BLOG_HOME = "https://kasunrajapakse.me/blog/"
+SKIP_DIRS = {".git", ".github", "scripts", "node_modules", ".DS_Store"}
+BLOG_URL_RE = re.compile(r"\[([^\]]+)\]\((https://kasunrajapakse\.me/[^)\s]+)\)")
+HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
+NON_POST_PATHS = ("/tags/", "/page/", "/categories/", "/authors/")
 
-| Blog Post | Code Sample |
-|---|---|
-| [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [AKS-ACNS-Cilium-Terraform](./AKS-ACNS-Cilium-Terraform/) |
-| [Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO](https://kasunrajapakse.me/blog/aks-argo-cd-extension-app-routing-entra-id-sso) | [AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/) |
-| [Migrating AKS Ingress to Istio-Based Gateway API: Moving Beyond NGINX](https://kasunrajapakse.me/blog/aks-istio-gateway-api/) | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) |
-| [Scaling AKS Workloads on Custom Metrics with KEDA and Azure Managed Prometheus](https://kasunrajapakse.me/blog/aks-keda-managed-prometheus-scaler/) | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) |
-| [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [BYO-CNI-AKS](./BYO-CNI-AKS/) |
-| [How to store Harbor audit logs in Azure Log Analytics](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |
-| [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |
-| [Runtime Threat Detection on AKS with Falco and Microsoft Sentinel](https://kasunrajapakse.me/blog/falco-aks-sentinel-runtime-security/) | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) |
-| [Why You Should Never Lock AKS-Managed Resources: A Volume Outage Story](https://kasunrajapakse.me/blog/aks-resource-locks-managed-disks-incident/) | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) |
+SEEDED_BLOG_MAPPINGS = {
+    "AKS-ACNS-Cilium-Terraform": [
+        ("Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network", "https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/"),
+    ],
+    "AKS-ArgoCD-Extension": [
+        ("Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO", "https://kasunrajapakse.me/blog/aks-argo-cd-extension-app-routing-entra-id-sso"),
+    ],
+    "AKS-Istio-Gateway-API": [
+        ("Migrating AKS Ingress to Istio-Based Gateway API: Moving Beyond NGINX", "https://kasunrajapakse.me/blog/aks-istio-gateway-api/"),
+    ],
+    "AKS-KEDA-Demo": [
+        ("Scaling AKS Workloads on Custom Metrics with KEDA and Azure Managed Prometheus", "https://kasunrajapakse.me/blog/aks-keda-managed-prometheus-scaler/"),
+    ],
+    "BYO-CNI-AKS": [
+        ("Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network", "https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/"),
+    ],
+    "Falco-AKS-Sentinel": [
+        ("Runtime Threat Detection on AKS with Falco and Microsoft Sentinel", "https://kasunrajapakse.me/blog/falco-aks-sentinel-runtime-security/"),
+    ],
+    "AKS-NodeRG-Lockdown": [
+        ("Why You Should Never Lock AKS-Managed Resources: A Volume Outage Story", "https://kasunrajapakse.me/blog/aks-resource-locks-managed-disks-incident/"),
+    ],
+}
 
-EOF
+DISCOVERY_HINTS = {
+    "AKS-ACNS-Cilium-Terraform": ["advanced container networking services", "aks", "cilium"],
+    "AKS-ArgoCD-Extension": ["argo cd extension", "app routing", "entra id", "sso"],
+    "AKS-Harbor-Registry-Demo": ["harbor", "azure monitor", "grafana", "log analytics", "oidc"],
+    "AKS-Istio-Gateway-API": ["istio", "gateway api", "ingress"],
+    "AKS-KEDA-Demo": ["keda", "managed prometheus", "autoscaling"],
+    "BYO-CNI-AKS": ["byo cni", "cilium", "bring your own cni"],
+    "Falco-AKS-Sentinel": ["falco", "sentinel", "runtime threat"],
+    "AKS-NodeRG-Lockdown": ["aks-managed resources", "resource locks", "volume outage"],
+}
+
+FEED_URLS = [
+    "https://kasunrajapakse.me/blog/index.xml",
+    "https://kasunrajapakse.me/index.xml",
+    "https://kasunrajapakse.me/feed/",
+    "https://kasunrajapakse.me/feed",
+]
+
+
+def normalize(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+
+
+def iter_examples():
+    for path in sorted(REPO_ROOT.iterdir(), key=lambda p: p.name.lower()):
+        if not path.is_dir() or path.name in SKIP_DIRS:
+            continue
+        readme_path = path / "README.md"
+        title = path.name
+        if readme_path.exists():
+            text = readme_path.read_text(encoding="utf-8", errors="ignore")
+            match = HEADING_RE.search(text)
+            if match:
+                title = match.group(1).strip()
+        yield path.name, title, readme_path
+
+
+def is_blog_post_url(url: str) -> bool:
+    if not url.startswith("https://kasunrajapakse.me/"):
+        return False
+    if url.rstrip("/") == BLOG_HOME.rstrip("/"):
+        return False
+    return not any(marker in url for marker in NON_POST_PATHS)
+
+
+def extract_blog_links(readme_path: Path):
+    if not readme_path.exists():
+        return []
+    text = readme_path.read_text(encoding="utf-8", errors="ignore")
+    links = []
+    seen = set()
+    for title, url in BLOG_URL_RE.findall(text):
+        if not is_blog_post_url(url):
+            continue
+        key = url.rstrip("/")
+        if key in seen:
+            continue
+        seen.add(key)
+        links.append((title.strip(), url.strip()))
+    return links
+
+
+def fetch_feed_posts():
+    for feed_url in FEED_URLS:
+        try:
+            request = Request(feed_url, headers={"User-Agent": "Code-Snippets README Generator"})
+            with urlopen(request, timeout=10) as response:
+                payload = response.read()
+        except (HTTPError, URLError, TimeoutError, ValueError):
+            continue
+
+        try:
+            root = ET.fromstring(payload)
+        except ET.ParseError:
+            continue
+
+        posts = []
+        for item in root.findall(".//item") + root.findall(".//{*}entry"):
+            title = (item.findtext("title") or item.findtext("{*}title") or "").strip()
+            link = (item.findtext("link") or item.findtext("{*}link") or "").strip()
+            if not link:
+                link_element = item.find("{*}link")
+                if link_element is not None:
+                    link = (link_element.attrib.get("href") or link_element.attrib.get("url") or "").strip()
+            summary = " ".join(
+                part.strip()
+                for part in [
+                    item.findtext("description"),
+                    item.findtext("{*}description"),
+                    item.findtext("{http://purl.org/rss/1.0/modules/content/}encoded"),
+                    item.findtext("{*}content"),
+                    item.findtext("{*}summary"),
+                ]
+                if part and part.strip()
+            )
+            if title and is_blog_post_url(link):
+                posts.append({"title": title, "url": link, "text": normalize(f"{title} {link} {summary}")})
+
+        if posts:
+            return posts
+
+    return []
+
+
+def discover_matches(example_name: str, feed_posts):
+    hints = [normalize(hint) for hint in DISCOVERY_HINTS.get(example_name, []) if hint.strip()]
+    if not hints:
+        return []
+
+    discovered = []
+    for post in feed_posts:
+        matches = sum(1 for hint in hints if hint in post["text"])
+        if matches >= 2 or (matches >= 1 and len(hints) == 1):
+            discovered.append((post["title"], post["url"]))
+    return discovered
+
+
+def add_links(bucket, seen_urls, links):
+    for title, url in links:
+        key = url.rstrip("/")
+        if key in seen_urls:
+            continue
+        seen_urls.add(key)
+        bucket.append((title, url))
+
+
+feed_posts = fetch_feed_posts()
+rows = []
+for example_name, _title, readme_path in iter_examples():
+    links = []
+    seen_urls = set()
+    add_links(links, seen_urls, SEEDED_BLOG_MAPPINGS.get(example_name, []))
+    add_links(links, seen_urls, extract_blog_links(readme_path))
+    add_links(links, seen_urls, discover_matches(example_name, feed_posts))
+
+    for blog_title, blog_url in links:
+        rows.append((example_name, blog_title, blog_url))
+
+if not rows:
+    sys.exit(0)
+
+print("## 📝 Related Blog Posts\n")
+print("Looking for the full walkthroughs behind some of these samples? Visit the")
+print(f"[Kasun Rajapakse blog]({BLOG_HOME}) for the companion")
+print("articles linked below.\n")
+print("| Blog Post | Code Sample |")
+print("|---|---|")
+for example_name, blog_title, blog_url in sorted(rows, key=lambda row: (row[0].lower(), row[1].lower())):
+    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_name)}](./{example_name}/) |")
+print()
+PY
 }
 
 # Collect all example directories
