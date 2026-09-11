@@ -50,6 +50,12 @@ get_description() {
   fi
 }
 
+# Emit personal blog mappings for demos that have a matching walkthrough
+emit_blog_mappings() {
+  local repo_root="$REPO_ROOT"
+  REPO_ROOT="$repo_root" python3 "$repo_root/scripts/generate_blog_mappings.py"
+}
+
 # Collect all example directories
 declare -a EXAMPLES=()
 for dir in "$REPO_ROOT"/*/; do
@@ -102,6 +108,11 @@ current_date=$(date +"%B %Y")
 cat >> "$README" << EOF
 > **${total} examples** | Kubernetes: ${k8s_count} | Docker: ${docker_count} | Azure: ${azure_count} | *Last Updated: ${current_date}*
 
+EOF
+
+emit_blog_mappings >> "$README"
+
+cat >> "$README" << EOF
 ## 📋 Table of Contents
 
 | # | Demo | Description | Category |
