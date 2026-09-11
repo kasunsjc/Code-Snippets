@@ -25,8 +25,12 @@ jobs:
           fetch-depth: 0
 
       - name: Generate updated README
+        env:
+          ENABLE_BLOG_DISCOVERY: "1"
         run: |
+          chmod +x scripts/test-generate-readme.sh
           chmod +x scripts/generate-readme.sh
+          bash scripts/test-generate-readme.sh
           bash scripts/generate-readme.sh
 
       - name: Check for changes

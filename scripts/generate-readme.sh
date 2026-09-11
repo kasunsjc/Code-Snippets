@@ -64,6 +64,8 @@ from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(os.environ["REPO_ROOT"])
 BLOG_HOME = "https://kasunrajapakse.me/blog/"
+ENABLE_BLOG_DISCOVERY = os.environ.get("ENABLE_BLOG_DISCOVERY", "0") == "1"
+BLOG_FEED_FIXTURE = os.environ.get("BLOG_FEED_FIXTURE", "").strip()
 SKIP_DIRS = {".git", ".github", "scripts", "node_modules", ".DS_Store"}
 BLOG_URL_RE = re.compile(r"\[([^\]]+)\]\((https://kasunrajapakse\.me/[^)\s]+)\)")
 HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
@@ -155,7 +157,46 @@ def extract_blog_links(readme_path: Path):
     return links
 
 
+def parse_feed_payload(payload):
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError:
+        return []
+
+    posts = []
+    for item in root.findall(".//item") + root.findall(".//{*}entry"):
+        title = (item.findtext("title") or item.findtext("{*}title") or "").strip()
+        link = (item.findtext("link") or item.findtext("{*}link") or "").strip()
+        if not link:
+            link_element = item.find("{*}link")
+            if link_element is not None:
+                link = (link_element.attrib.get("href") or link_element.attrib.get("url") or "").strip()
+        summary = " ".join(
+            part.strip()
+            for part in [
+                item.findtext("description"),
+                item.findtext("{*}description"),
+                item.findtext("{http://purl.org/rss/1.0/modules/content/}encoded"),
+                item.findtext("{*}content"),
+                item.findtext("{*}summary"),
+            ]
+            if part and part.strip()
+        )
+        if title and is_blog_post_url(link):
+            posts.append({"title": title, "url": link, "text": normalize(f"{title} {link} {summary}")})
+    return posts
+
+
 def fetch_feed_posts():
+    if BLOG_FEED_FIXTURE:
+        try:
+            return parse_feed_payload(Path(BLOG_FEED_FIXTURE).read_bytes())
+        except OSError:
+            return []
+
+    if not ENABLE_BLOG_DISCOVERY:
+        return []
+
     for feed_url in FEED_URLS:
         try:
             request = Request(feed_url, headers={"User-Agent": "Code-Snippets README Generator"})
@@ -164,33 +205,7 @@ def fetch_feed_posts():
         except (HTTPError, URLError, TimeoutError, ValueError):
             continue
 
-        try:
-            root = ET.fromstring(payload)
-        except ET.ParseError:
-            continue
-
-        posts = []
-        for item in root.findall(".//item") + root.findall(".//{*}entry"):
-            title = (item.findtext("title") or item.findtext("{*}title") or "").strip()
-            link = (item.findtext("link") or item.findtext("{*}link") or "").strip()
-            if not link:
-                link_element = item.find("{*}link")
-                if link_element is not None:
-                    link = (link_element.attrib.get("href") or link_element.attrib.get("url") or "").strip()
-            summary = " ".join(
-                part.strip()
-                for part in [
-                    item.findtext("description"),
-                    item.findtext("{*}description"),
-                    item.findtext("{http://purl.org/rss/1.0/modules/content/}encoded"),
-                    item.findtext("{*}content"),
-                    item.findtext("{*}summary"),
-                ]
-                if part and part.strip()
-            )
-            if title and is_blog_post_url(link):
-                posts.append({"title": title, "url": link, "text": normalize(f"{title} {link} {summary}")})
-
+        posts = parse_feed_payload(payload)
         if posts:
             return posts
 

@@ -1,0 +1,62 @@
+#!/bin/bash
+
+set -euo pipefail
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+TEST_REPO="$TMP_DIR/repo"
+mkdir -p "$TEST_REPO/scripts" \
+         "$TEST_REPO/AKS-ArgoCD-Extension" \
+         "$TEST_REPO/AKS-Harbor-Registry-Demo" \
+         "$TEST_REPO/BYO-CNI-AKS"
+
+cp /home/runner/work/Code-Snippets/Code-Snippets/scripts/generate-readme.sh "$TEST_REPO/scripts/generate-readme.sh"
+chmod +x "$TEST_REPO/scripts/generate-readme.sh"
+
+cat > "$TEST_REPO/AKS-ArgoCD-Extension/README.md" <<'EOF'
+# AKS Argo CD Extension with Microsoft Entra SSO
+Sample Argo CD extension demo.
+EOF
+
+cat > "$TEST_REPO/BYO-CNI-AKS/README.md" <<'EOF'
+# BYO CNI on AKS with Cilium
+Sample BYO CNI demo.
+EOF
+
+cat > "$TEST_REPO/AKS-Harbor-Registry-Demo/README.md" <<'EOF'
+# Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS
+
+- [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/)
+- [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/)
+- [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/)
+EOF
+
+bash "$TEST_REPO/scripts/generate-readme.sh"
+
+grep -Fq "Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO" "$TEST_REPO/README.md"
+grep -Fq "[BYO-CNI-AKS](./BYO-CNI-AKS/)" "$TEST_REPO/README.md"
+
+harbor_count="$(grep -Fc "harbor-audit-logs-azure-log-analytics" "$TEST_REPO/README.md")"
+if [[ "$harbor_count" -ne 1 ]]; then
+  echo "Expected Harbor audit log blog to appear once, found $harbor_count" >&2
+  exit 1
+fi
+
+cat > "$TMP_DIR/feed.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Harbor OIDC with Azure Monitor and Grafana</title>
+      <link>https://kasunrajapakse.me/blog/harbor-oidc-azure-monitor-grafana/</link>
+      <description>Harbor with oidc, azure monitor, grafana, and log analytics on AKS.</description>
+    </item>
+  </channel>
+</rss>
+EOF
+
+ENABLE_BLOG_DISCOVERY=1 BLOG_FEED_FIXTURE="$TMP_DIR/feed.xml" bash "$TEST_REPO/scripts/generate-readme.sh"
+grep -Fq "https://kasunrajapakse.me/blog/harbor-oidc-azure-monitor-grafana/" "$TEST_REPO/README.md"
+
+echo "README generator tests passed"
