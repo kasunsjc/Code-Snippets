@@ -17,13 +17,13 @@ articles linked below.
 |---|---|
 | [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [AKS Advanced Container Networking Services (ACNS) with Cilium — Terraform](./AKS-ACNS-Cilium-Terraform/) |
 | [Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO](https://kasunrajapakse.me/blog/aks-argo-cd-extension-app-routing-entra-id-sso/) | [AKS Argo CD Extension with Microsoft Entra SSO](./AKS-ArgoCD-Extension/) |
+| [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |
+| [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |
 | [Migrating AKS Ingress to Istio-Based Gateway API: Moving Beyond NGINX](https://kasunrajapakse.me/blog/aks-istio-gateway-api/) | [AKS Istio Gateway API Demo](./AKS-Istio-Gateway-API/) |
 | [Scaling AKS Workloads on Custom Metrics with KEDA and Azure Managed Prometheus](https://kasunrajapakse.me/blog/aks-keda-managed-prometheus-scaler/) | [AKS KEDA Demo](./AKS-KEDA-Demo/) |
 | [Why You Should Never Lock AKS-Managed Resources: A Volume Outage Story](https://kasunrajapakse.me/blog/aks-resource-locks-managed-disks-incident/) | [AKS Node Resource Group Lockdown](./AKS-NodeRG-Lockdown/) |
 | [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [BYO CNI on AKS with Cilium](./BYO-CNI-AKS/) |
 | [Runtime Threat Detection on AKS with Falco and Microsoft Sentinel](https://kasunrajapakse.me/blog/falco-aks-sentinel-runtime-security/) | [Falco on AKS with Azure Sentinel Integration Demo](./Falco-AKS-Sentinel/) |
-| [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |
-| [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |
 
 ## 📋 Table of Contents
 
