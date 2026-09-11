@@ -7,6 +7,22 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 
 > **22 examples** | Kubernetes: 15 | Docker: 4 | Azure: 1 | *Last Updated: September 2026*
 
+## 📝 Related Blog Posts
+
+Looking for the full walkthroughs behind some of these samples? Visit the
+[Kasun Rajapakse blog](https://kasunrajapakse.me/blog/) for the companion
+articles linked below.
+
+| Blog Post | Code Sample |
+|---|---|
+| [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [AKS-ACNS-Cilium-Terraform](./AKS-ACNS-Cilium-Terraform/) |
+| [Migrating AKS Ingress to Istio-Based Gateway API: Moving Beyond NGINX](https://kasunrajapakse.me/blog/aks-istio-gateway-api/) | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) |
+| [Scaling AKS Workloads on Custom Metrics with KEDA and Azure Managed Prometheus](https://kasunrajapakse.me/blog/aks-keda-managed-prometheus-scaler/) | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) |
+| [How to store Harbor audit logs in Azure Log Analytics](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |
+| [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |
+| [Runtime Threat Detection on AKS with Falco and Microsoft Sentinel](https://kasunrajapakse.me/blog/falco-aks-sentinel-runtime-security/) | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) |
+| [Why You Should Never Lock AKS-Managed Resources: A Volume Outage Story](https://kasunrajapakse.me/blog/aks-resource-locks-managed-disks-incident/) | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) |
+
 ## 📋 Table of Contents
 
 | # | Demo | Description | Category |
