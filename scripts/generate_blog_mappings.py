@@ -178,6 +178,7 @@ def fetch_feed_posts():
     if not ENABLE_BLOG_DISCOVERY:
         return []
 
+    had_successful_fetch = False
     for feed_url in FEED_URLS:
         try:
             request = Request(feed_url, headers={"User-Agent": "Code-Snippets README Generator"})
@@ -186,9 +187,13 @@ def fetch_feed_posts():
         except (HTTPError, URLError, socket.timeout, TimeoutError, OSError, ValueError):
             continue
 
+        had_successful_fetch = True
         posts = parse_feed_payload(payload)
         if posts:
             return posts
+
+    if not had_successful_fetch:
+        raise RuntimeError("Blog discovery failed for all configured feed URLs.")
 
     return []
 
@@ -217,8 +222,21 @@ def add_links(bucket, links, source):
         bucket[key] = {"priority": priority, "title": title.strip(), "url": url}
 
 
+def sanitize_markdown_cell(value: str) -> str:
+    value = " ".join(value.split())
+    value = escape(value)
+    for character in ("\\", "|", "[", "]"):
+        value = value.replace(character, f"\\{character}")
+    return value
+
+
 def main():
-    feed_posts = fetch_feed_posts()
+    try:
+        feed_posts = fetch_feed_posts()
+    except RuntimeError as error:
+        print(error, file=sys.stderr)
+        return 1
+
     rows = []
     for example_name, example_title, readme_path in iter_examples():
         links = {}
@@ -239,7 +257,10 @@ def main():
     print("| Blog Post | Code Sample |")
     print("|---|---|")
     for example_name, example_title, blog_title, blog_url in sorted(rows, key=lambda row: (row[0].lower(), row[3].lower(), row[2].lower())):
-        print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_title)}](./{example_name}/) |")
+        print(
+            f"| [{sanitize_markdown_cell(blog_title)}]({blog_url}) | "
+            f"[{sanitize_markdown_cell(example_title)}](./{example_name}/) |"
+        )
     print()
     return 0
 

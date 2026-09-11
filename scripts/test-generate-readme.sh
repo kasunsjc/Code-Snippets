@@ -23,7 +23,7 @@ Sample Argo CD extension demo.
 EOF
 
 cat > "$TEST_REPO/BYO-CNI-AKS/README.md" <<'EOF'
-# BYO CNI on AKS with Cilium
+# BYO CNI on AKS | with Cilium
 Sample BYO CNI demo.
 EOF
 
@@ -38,7 +38,7 @@ EOF
 bash "$TEST_REPO/scripts/generate-readme.sh"
 
 grep -Fq "Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO" "$TEST_REPO/README.md"
-grep -Fq "[BYO CNI on AKS with Cilium](./BYO-CNI-AKS/)" "$TEST_REPO/README.md"
+grep -Fq "[BYO CNI on AKS \\| with Cilium](./BYO-CNI-AKS/)" "$TEST_REPO/README.md"
 
 harbor_count="$(grep -Fc "| [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |" "$TEST_REPO/README.md")"
 if [[ "$harbor_count" -ne 1 ]]; then
