@@ -78,7 +78,7 @@ def canonicalize_url(url: str) -> str:
     if not url.startswith("https://kasunrajapakse.me/"):
         return url
     parts = urlsplit(url)
-    normalized_path = parts.path.rstrip("/") + "/"
+    normalized_path = "/" if parts.path in ("", "/") else parts.path.rstrip("/") + "/"
     return urlunsplit((parts.scheme, parts.netloc, normalized_path, "", ""))
 
 
@@ -99,6 +99,8 @@ def iter_examples():
 def is_blog_post_url(url: str) -> bool:
     url = canonicalize_url(url)
     if not url.startswith("https://kasunrajapakse.me/"):
+        return False
+    if url.rstrip("/") == "https://kasunrajapakse.me":
         return False
     if url.rstrip("/") == BLOG_HOME.rstrip("/"):
         return False
@@ -224,7 +226,7 @@ def main():
         add_links(links, extract_blog_links(readme_path), "readme")
         add_links(links, discover_matches(example_name, feed_posts), "discovery")
 
-        for link in links.values():
+        for link in sorted(links.values(), key=lambda item: (item["url"].lower(), item["title"].lower())):
             rows.append((example_name, example_title, link["title"], link["url"]))
 
     if not rows:
