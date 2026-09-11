@@ -289,7 +289,7 @@ print("articles linked below.\n")
 print("| Blog Post | Code Sample |")
 print("|---|---|")
 for example_name, example_title, blog_title, blog_url in sorted(rows, key=lambda row: (row[0].lower(), row[2].lower())):
-    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_title)}](./{quote(example_name)}/) |")
+    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_title)}](./{quote(example_name, safe='/')}/) |")
 print()
 PY
 }
