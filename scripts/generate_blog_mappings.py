@@ -5,7 +5,6 @@ import re
 import socket
 import sys
 import xml.etree.ElementTree as ET
-from html import escape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
@@ -224,7 +223,6 @@ def add_links(bucket, links, source):
 
 def sanitize_markdown_cell(value: str) -> str:
     value = " ".join(value.split())
-    value = escape(value)
     for character in ("\\", "|", "[", "]"):
         value = value.replace(character, f"\\{character}")
     return value
