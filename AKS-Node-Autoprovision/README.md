@@ -21,6 +21,8 @@ of `NodePool` manifests and sample workloads that showcase common patterns:
 | `spot-optimized`      | Spot capacity, highest weight for cost savings    | `03-spot-workload.yaml`              |
 | `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
 | `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
+| `general-purpose`     | Node/pod affinity + required pod anti-affinity    | `05-affinity-antiaffinity-workload.yaml` |
+| any matching pool     | `PriorityClass` provisioning order + preemption   | `06-priorityclass-workload.yaml`     |
 
 ## 📁 Contents
 
@@ -68,7 +70,7 @@ This runs `terraform init`/`apply` to create:
 ### 2. Apply NodePools and a sample workload
 
 ```bash
-./deploy.sh --demo general   # or: memory | spot | arm64 | static | all
+./deploy.sh --demo general   # or: memory | spot | arm64 | static | affinity | priority | all
 ```
 
 Or apply everything manually:
@@ -119,6 +121,67 @@ runs `terraform destroy`.
   consolidated; scale explicitly with `kubectl scale nodepool <name> --replicas=<n>`.
 - **Disruption/consolidation** — `consolidationPolicy: WhenEmptyOrUnderutilized` lets NAP
   delete/right-size underutilized nodes automatically.
+
+## 🧲 Affinity, anti-affinity, and PriorityClass in NAP
+
+NAP (Karpenter) simulates the Kubernetes scheduler when deciding *what* node to provision
+for a pending pod, so it honors the same affinity and priority rules as the built-in
+scheduler — with a few NAP-specific consequences worth calling out.
+
+### Node affinity
+
+`spec.affinity.nodeAffinity` terms are combined (logical AND) with each `NodePool`'s own
+`spec.template.spec.requirements`. NAP only considers `NodePools` whose requirements can
+still be satisfied after intersecting with the pod's required node affinity — if none can,
+the pod stays `Pending` even though `NodePools` exist. Try it:
+
+```bash
+kubectl apply -f kubernetes-manifests/workloads/05-affinity-antiaffinity-workload.yaml
+kubectl get pods -l app=affinity-web-demo -o wide
+```
+
+### Pod affinity / anti-affinity
+
+- **`podAntiAffinity` (required, `topologyKey: kubernetes.io/hostname`)** forces one pod
+  per node. In `05-affinity-antiaffinity-workload.yaml`, the 3 `affinity-web-demo` replicas
+  each need requests that would easily fit on one node — but the anti-affinity rule makes
+  NAP provision **3 separate nodes** instead of consolidating them.
+- **`podAffinity` (required, same topology key)** does the opposite: the
+  `affinity-cache-demo` pods must land on a node that already hosts (or is being
+  provisioned for) a matching `affinity-web-demo` pod. NAP has to reason about the *other*
+  pod's node affinity too, since both pods must end up co-located.
+- Required pod (anti-)affinity is more expensive for the scheduler/Karpenter to evaluate
+  than node affinity — prefer `preferredDuringSchedulingIgnoredDuringExecution` where a
+  strict guarantee isn't necessary, and avoid it on the hot path for very large clusters.
+- Consolidation respects these rules too: NAP won't merge/delete a node if doing so would
+  violate a still-running pod's required anti-affinity.
+
+### PriorityClass
+
+`06-priorityclass-workload.yaml` defines `nap-demo-high-priority` (1000000) and
+`nap-demo-low-priority` (100) and deploys low-priority "filler" pods before high-priority
+"critical" pods:
+
+1. **Preemption happens before provisioning.** If the low-priority pods already occupy
+   capacity, kube-scheduler preempts (evicts) them to make room for pending high-priority
+   pods on *existing* nodes first. NAP only provisions a new node if preemption alone can't
+   free enough capacity.
+2. **Provisioning order.** When multiple pods across priorities are simultaneously
+   pending, Karpenter services higher-priority pods first, so critical workloads get
+   nodes sooner during a burst of scheduling pressure.
+3. **Consolidation bias.** NAP prefers to consolidate/delete nodes that only run
+   low-priority, easily-rescheduled pods, and is more conservative about disrupting nodes
+   that host high-priority pods.
+
+```bash
+kubectl apply -f kubernetes-manifests/workloads/06-priorityclass-workload.yaml
+kubectl get pods -l app=priority-low-demo -o wide
+kubectl get pods -l app=priority-high-demo -o wide
+kubectl get events --field-selector reason=Preempted
+```
+
+> Don't reuse the reserved `system-cluster-critical` / `system-node-critical`
+> `PriorityClasses` for application workloads — they're meant for cluster components only.
 
 ## ⚠️ Limitations (NAP, current as of AKS GA)
 

@@ -1,0 +1,79 @@
+# Demonstrates how NAP/Karpenter honors nodeAffinity, podAffinity, and podAntiAffinity
+# when deciding whether to reuse existing nodes or provision new ones.
+#
+# 1) "web" pods use REQUIRED podAntiAffinity on kubernetes.io/hostname — Karpenter must
+#    provision one node per replica, even though all 3 would easily fit on a single node.
+#    Watch it happen with: kubectl get nodeclaims -w
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: affinity-web-demo
+  labels:
+    app: affinity-web-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: affinity-web-demo
+  template:
+    metadata:
+      labels:
+        app: affinity-web-demo
+    spec:
+      # Node-level constraint: only consider on-demand D-family nodes. NAP intersects this
+      # with each NodePool's own spec.requirements — pools that can't satisfy it are skipped.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: karpenter.azure.com/sku-family
+                    operator: In
+                    values: ["D"]
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: affinity-web-demo
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: nginx
+          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+---
+# 2) "cache" pods use REQUIRED podAffinity to co-locate with "web" pods on the same node.
+#    Karpenter must provision (or reuse) a node that already/also satisfies the "web"
+#    pod's node affinity, since the affinity term is transitive through the shared node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: affinity-cache-demo
+  labels:
+    app: affinity-cache-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: affinity-cache-demo
+  template:
+    metadata:
+      labels:
+        app: affinity-cache-demo
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: affinity-web-demo
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi

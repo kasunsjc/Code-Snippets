@@ -1,0 +1,84 @@
+# Demonstrates PriorityClass-driven behavior in NAP:
+#   1. Provisioning order — when several pods are pending at once, Karpenter provisions
+#      nodes for higher-priority pods first.
+#   2. Preemption — the kube-scheduler can evict lower-priority pods to free up existing
+#      capacity for higher-priority pods *before* NAP provisions anything new.
+#   3. Consolidation bias — NAP prefers to consolidate/deprovision nodes whose pods are
+#      all low priority (cheap to reschedule) over nodes running high-priority pods.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: nap-demo-high-priority
+value: 1000000
+globalDefault: false
+description: "High-priority workloads for the NAP demo — provisioned/preserved first."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: nap-demo-low-priority
+value: 100
+globalDefault: false
+description: "Low-priority, preemptible/batch workloads for the NAP demo."
+---
+# Low-priority filler that consumes most of the capacity on whatever node(s) NAP
+# provisions for it. Deploy this first to occupy capacity, then deploy the high-priority
+# workload below to see preemption/priority-aware provisioning in action.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: priority-low-demo
+  labels:
+    app: priority-low-demo
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: priority-low-demo
+  template:
+    metadata:
+      labels:
+        app: priority-low-demo
+    spec:
+      priorityClassName: nap-demo-low-priority
+      containers:
+        - name: filler
+          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+# High-priority workload. If the cluster/NodePool limits are exhausted, kube-scheduler
+# preempts nap-demo-low-priority pods first; if there's still no room, NAP provisions
+# a new node ahead of any still-pending low-priority pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: priority-high-demo
+  labels:
+    app: priority-high-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: priority-high-demo
+  template:
+    metadata:
+      labels:
+        app: priority-high-demo
+    spec:
+      priorityClassName: nap-demo-high-priority
+      containers:
+        - name: critical
+          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 1Gi
