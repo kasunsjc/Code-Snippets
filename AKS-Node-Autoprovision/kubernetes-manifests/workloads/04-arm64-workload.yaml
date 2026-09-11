@@ -1,0 +1,29 @@
+# Multi-arch image scheduled explicitly onto Arm64 (Ampere Altra) nodes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arm64-demo
+  labels:
+    app: arm64-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: arm64-demo
+  template:
+    metadata:
+      labels:
+        app: arm64-demo
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+        - name: nginx
+          image: mcr.microsoft.com/oss/nginx/nginx:1.25 # multi-arch manifest (amd64 + arm64)
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

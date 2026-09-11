@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and adjust as needed.
+
+resource_group_name             = "rg-aks-node-autoprovision"
+location                        = "northeurope"
+cluster_name                    = "aks-node-autoprovision"
+system_node_vm_size             = "Standard_D4s_v5"
+system_node_count               = 1
+node_provisioning_default_pools = "Auto"
+log_retention_days              = 30
+
+# Optional: set to your Entra ID object id (az ad signed-in-user show --query id -o tsv)
+# to get the "Azure Kubernetes Service RBAC Cluster Admin" role on the cluster.
+user_object_id = ""
+
+tags = {
+  project     = "aks-node-autoprovision"
+  environment = "demo"
+  managed_by  = "terraform"
+}

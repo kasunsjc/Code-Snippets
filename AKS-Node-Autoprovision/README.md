@@ -1,107 +1,143 @@
-# AKS Node Autoprovisioning
+# AKS Node Auto-Provisioning (NAP) Demo
 
-Automatically provision AKS nodes based on workload requirements without managing node pools manually.
+Automatically provision right-sized AKS nodes for pending pods — no manual node pool
+sizing required. NAP deploys and manages [Karpenter](https://karpenter.sh) on your
+behalf and is **generally available** in AKS (no longer a preview feature).
 
 ## 📋 Overview
 
-AKS Node Autoprovisioning (NAP) automatically creates nodes with the right specifications based on pending pods' resource requirements. This eliminates the need to manually configure node pools for different workload types.
+Node Auto-Provisioning (NAP) watches for pods that can't be scheduled due to
+insufficient capacity, then automatically creates nodes with the VM size, family,
+architecture, and capacity type (on-demand/Spot) that best fit those pods — based on
+`NodePool` and `AKSNodeClass` custom resources you define.
 
-> **Note**: This is a preview feature and requires feature registration.
+This demo provisions an AKS cluster with NAP enabled via Terraform, then applies a set
+of `NodePool` manifests and sample workloads that showcase common patterns:
+
+| NodePool             | Purpose                                         | Sample workload                     |
+| --------------------- | ------------------------------------------------ | ------------------------------------ |
+| `general-purpose`     | Default landing zone, D-family, on-demand        | `01-general-purpose-workload.yaml`   |
+| `memory-optimized`    | E-family, tainted for memory-heavy workloads      | `02-memory-intensive-workload.yaml`  |
+| `spot-optimized`      | Spot capacity, highest weight for cost savings    | `03-spot-workload.yaml`              |
+| `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
+| `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
 
 ## 📁 Contents
 
 ```
 AKS-Node-Autoprovision/
-├── README.md                      # This documentation
-├── commands.azcli                 # Azure CLI deployment commands
-├── nodepool-auto-provision.yaml   # Node pool configuration
-└── sample-deployment.yaml         # Sample deployment for testing
+├── README.md
+├── deploy.sh                          # Terraform deploy + apply NodePools/workloads
+├── cleanup.sh                         # Graceful teardown + terraform destroy
+├── terraform/
+│   ├── versions.tf                    # azurerm ~> 5.0 (required for node_provisioning_profile)
+│   ├── variables.tf
+│   ├── main.tf                        # AKS cluster with NAP + Cilium overlay + Log Analytics
+│   ├── outputs.tf
+│   └── terraform.tfvars.example
+└── kubernetes-manifests/
+    ├── nodepools/                     # NodePool CRDs (Karpenter, managed by NAP)
+    └── workloads/                     # Sample Deployments that trigger each NodePool
 ```
 
 ## 🚀 Quick Start
 
-### 1. Register the Preview Feature
+### Prerequisites
+
+- Azure CLI `2.76.0` or later (`az --version`)
+- Terraform `>= 1.6`
+- `kubectl`
+- An Azure subscription with `Microsoft.ContainerService` registered
+
+### 1. Deploy the cluster
 
 ```bash
-# Add/update AKS preview extension
-az extension add --name aks-preview
-az extension update --name aks-preview
-
-# Register the feature
-az feature register --namespace "Microsoft.ContainerService" --name "NodeAutoProvisioningPreview"
-
-# Check registration status
-az feature show --namespace "Microsoft.ContainerService" --name "NodeAutoProvisioningPreview"
-
-# Register the provider
-az provider register --namespace Microsoft.ContainerService
+./deploy.sh
 ```
 
-### 2. Create AKS Cluster with Autoprovisioning
+This runs `terraform init`/`apply` to create:
+
+- A resource group and a custom, readable node resource group (`rg-<cluster>-nodes`)
+- An AKS cluster with:
+  - `node_provisioning_profile { mode = "Auto" }` (NAP enabled)
+  - Azure CNI Overlay + Cilium dataplane + Standard Load Balancer (required by NAP)
+  - A small `system` node pool tainted `CriticalAddonsOnly` — NAP provisions everything else
+- A Log Analytics workspace + diagnostic setting capturing the `node-auto-provisioning`
+  control plane log category (Karpenter events)
+
+### 2. Apply NodePools and a sample workload
 
 ```bash
-export RESOURCE_GROUP_NAME="aks-node-autoprovision"
-export CLUSTER_NAME="aks-node-autoprovision"
-export LOCATION="northeurope"
-
-# Create resource group
-az group create --name $RESOURCE_GROUP_NAME --location $LOCATION
-
-# Create AKS cluster with autoprovisioning
-az aks create \
-  --name $CLUSTER_NAME \
-  --resource-group $RESOURCE_GROUP_NAME \
-  --node-provisioning-mode Auto \
-  --network-plugin azure \
-  --network-plugin-mode overlay \
-  --network-dataplane cilium \
-  --generate-ssh-keys \
-  --location $LOCATION
+./deploy.sh --demo general   # or: memory | spot | arm64 | static | all
 ```
 
-### 3. Test Autoprovisioning
+Or apply everything manually:
 
 ```bash
-# Apply node pool configuration
-kubectl apply -f nodepool-auto-provision.yaml
-
-# Deploy sample workload
-kubectl apply -f sample-deployment.yaml
+kubectl apply -f kubernetes-manifests/nodepools
+kubectl apply -f kubernetes-manifests/workloads
 ```
 
-## 🔧 Key Features
+### 3. Watch NAP provision nodes
 
-- **Automatic Node Selection**: Chooses optimal VM sizes based on pod requirements
-- **Cost Optimization**: Provisions right-sized nodes to minimize waste
-- **Reduced Management**: No manual node pool configuration needed
-- **Workload Flexibility**: Handles diverse resource requirements automatically
+```bash
+kubectl get nodepools
+kubectl get nodeclaims -o wide -w
+kubectl get nodes -L karpenter.sh/nodepool,karpenter.azure.com/sku-family,kubernetes.io/arch
+kubectl get events --field-selector source=karpenter-events
+```
 
-## 📋 Requirements
+Query the control plane logs in Log Analytics:
 
-- Azure CLI with aks-preview extension
-- Registered NodeAutoProvisioningPreview feature
-- Network configuration:
-  - Azure CNI with overlay mode
-  - Cilium dataplane
+```kusto
+AKSControlPlane
+| where Category == "karpenter-events"
+```
 
-## 💡 How It Works
+### 4. Clean up
 
-1. **Pod Scheduling**: Kubernetes scheduler attempts to place pods
-2. **Resource Analysis**: If pods can't be scheduled due to insufficient resources, NAP analyzes their requirements
-3. **Node Provisioning**: NAP automatically creates nodes with appropriate specifications
-4. **Pod Placement**: Pods are scheduled on newly provisioned nodes
+```bash
+./cleanup.sh
+```
 
-## ⚠️ Considerations
+Removes workloads and `NodePools` first (so NAP can gracefully drain its nodes), then
+runs `terraform destroy`.
 
-- Preview features may have limitations
-- Requires specific network configuration
-- Node provisioning takes time (typically 2-5 minutes)
-- Consider cost implications of automatic scaling
+## 🔧 Key Concepts
+
+- **`NodePool`** — defines provisioning policy: VM requirements (`karpenter.azure.com/sku-family`,
+  `karpenter.sh/capacity-type`, `kubernetes.io/arch`, zones, etc.), resource `limits`, and a
+  `weight` used when multiple pools match a pod.
+- **`AKSNodeClass`** — VM-level configuration (image family, OS disk size, etc.). NAP
+  auto-creates a `default` AKSNodeClass that every `NodePool` in this demo reuses via
+  `nodeClassRef`.
+- **`NodeClaim`** — represents an in-flight or provisioned NAP-managed node; inspect with
+  `kubectl get nodeclaims`.
+- **Weights** — NAP evaluates every `NodePool` whose requirements a pod tolerates and
+  schedules onto the one with the highest `weight` (higher wins; omitted = `0`).
+- **Static NodePools** — set `spec.replicas` for fixed-size capacity that isn't
+  consolidated; scale explicitly with `kubectl scale nodepool <name> --replicas=<n>`.
+- **Disruption/consolidation** — `consolidationPolicy: WhenEmptyOrUnderutilized` lets NAP
+  delete/right-size underutilized nodes automatically.
+
+## ⚠️ Limitations (NAP, current as of AKS GA)
+
+- Windows node pools and IPv6 clusters aren't supported.
+- Service principals aren't supported — use a system- or user-assigned managed identity.
+- You can't stop a NAP-enabled cluster, and the cluster egress `outboundType` can't be
+  changed after creation.
+- Custom VNet deployments require a Standard Load Balancer (Basic isn't supported).
+- For most production workloads, Microsoft recommends starting from
+  [AKS Automatic](https://learn.microsoft.com/azure/aks/intro-aks-automatic) (NAP
+  preconfigured, SLA-backed pod readiness). This demo uses AKS Standard so every NAP
+  setting is explicit and easy to inspect/modify.
 
 ## 📚 Learn More
 
-- [AKS Node Autoprovisioning Overview](https://learn.microsoft.com/azure/aks/node-autoprovision)
-- [Node Pool Management](https://learn.microsoft.com/azure/aks/manage-node-pools)
+- [Overview of node auto-provisioning (NAP) in AKS](https://learn.microsoft.com/azure/aks/node-auto-provisioning)
+- [Enable or disable NAP](https://learn.microsoft.com/azure/aks/use-node-auto-provisioning)
+- [Configure NodePools for NAP](https://learn.microsoft.com/azure/aks/node-auto-provisioning-node-pools)
+- [Karpenter concepts](https://karpenter.sh/docs/concepts/)
 
 ## 📄 License
 

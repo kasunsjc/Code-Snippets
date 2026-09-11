@@ -1,0 +1,43 @@
+# Spot NodePool: cheapest capacity for interruption-tolerant, stateless workloads.
+# NAP prioritizes Spot over On-demand whenever both are listed as acceptable, so give
+# it the highest weight to demonstrate cost-driven placement.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: spot-optimized
+spec:
+  weight: 20
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+  limits:
+    cpu: "100"
+    memory: 400Gi
+  template:
+    metadata:
+      labels:
+        workload-type: spot-optimized
+    spec:
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      expireAfter: 720h
+      # AKS taints Spot nodes automatically; workloads must tolerate this taint to schedule.
+      taints:
+        - key: kubernetes.azure.com/scalesetpriority
+          value: spot
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["spot"]
+        - key: karpenter.azure.com/sku-family
+          operator: In
+          values: ["D", "F"]

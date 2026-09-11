@@ -1,0 +1,34 @@
+# Stateless, interruption-tolerant workload placed on Spot capacity for cost savings.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spot-demo
+  labels:
+    app: spot-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: spot-demo
+  template:
+    metadata:
+      labels:
+        app: spot-demo
+    spec:
+      tolerations:
+        - key: kubernetes.azure.com/scalesetpriority
+          operator: Equal
+          value: spot
+          effect: NoSchedule
+      nodeSelector:
+        karpenter.sh/capacity-type: spot
+      containers:
+        - name: nginx
+          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
