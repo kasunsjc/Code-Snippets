@@ -120,6 +120,15 @@ def normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
+def canonicalize_url(url: str) -> str:
+    url = url.strip()
+    if not url.startswith("https://kasunrajapakse.me/"):
+        return url
+    if "?" in url or "#" in url:
+        return url.rstrip("/")
+    return url.rstrip("/") + "/"
+
+
 def iter_examples():
     for path in sorted(REPO_ROOT.iterdir(), key=lambda p: p.name.lower()):
         if not path.is_dir() or path.name in SKIP_DIRS:
@@ -135,6 +144,7 @@ def iter_examples():
 
 
 def is_blog_post_url(url: str) -> bool:
+    url = canonicalize_url(url)
     if not url.startswith("https://kasunrajapakse.me/"):
         return False
     if url.rstrip("/") == BLOG_HOME.rstrip("/"):
@@ -149,6 +159,7 @@ def extract_blog_links(readme_path: Path):
     links = []
     seen = set()
     for title, url in BLOG_URL_RE.findall(text):
+        url = canonicalize_url(url)
         if not is_blog_post_url(url):
             continue
         key = url.rstrip("/")
@@ -196,6 +207,7 @@ def parse_feed_payload(payload):
             ]
             if part and part.strip()
         )
+        link = canonicalize_url(link)
         if title and is_blog_post_url(link):
             posts.append({"title": title, "url": link, "text": normalize(f"{title} {link} {summary}")})
     return posts
@@ -241,6 +253,7 @@ def discover_matches(example_name: str, feed_posts):
 
 def add_links(bucket, seen_urls, links):
     for title, url in links:
+        url = canonicalize_url(url)
         key = url.rstrip("/")
         if key in seen_urls:
             continue

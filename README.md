@@ -16,7 +16,7 @@ articles linked below.
 | Blog Post | Code Sample |
 |---|---|
 | [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [AKS-ACNS-Cilium-Terraform](./AKS-ACNS-Cilium-Terraform/) |
-| [Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO](https://kasunrajapakse.me/blog/aks-argo-cd-extension-app-routing-entra-id-sso) | [AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/) |
+| [Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO](https://kasunrajapakse.me/blog/aks-argo-cd-extension-app-routing-entra-id-sso/) | [AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/) |
 | [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |
 | [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/) | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) |
 | [Migrating AKS Ingress to Istio-Based Gateway API: Moving Beyond NGINX](https://kasunrajapakse.me/blog/aks-istio-gateway-api/) | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) |
