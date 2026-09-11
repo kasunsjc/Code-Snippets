@@ -32,6 +32,7 @@ jobs:
           chmod +x scripts/generate-readme.sh
           bash -n scripts/generate-readme.sh
           bash -n scripts/test-generate-readme.sh
+          python3 -m py_compile scripts/generate_blog_mappings.py
           bash scripts/test-generate-readme.sh
           bash scripts/generate-readme.sh
 

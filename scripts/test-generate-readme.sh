@@ -14,6 +14,7 @@ mkdir -p "$TEST_REPO/scripts" \
          "$TEST_REPO/BYO-CNI-AKS"
 
 cp "$REPO_ROOT/scripts/generate-readme.sh" "$TEST_REPO/scripts/generate-readme.sh"
+cp "$REPO_ROOT/scripts/generate_blog_mappings.py" "$TEST_REPO/scripts/generate_blog_mappings.py"
 chmod +x "$TEST_REPO/scripts/generate-readme.sh"
 
 cat > "$TEST_REPO/AKS-ArgoCD-Extension/README.md" <<'EOF'
