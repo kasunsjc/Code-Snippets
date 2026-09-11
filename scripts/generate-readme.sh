@@ -263,7 +263,7 @@ def add_links(bucket, seen_urls, links):
 
 feed_posts = fetch_feed_posts()
 rows = []
-for example_name, _title, readme_path in iter_examples():
+for example_name, example_title, readme_path in iter_examples():
     links = []
     seen_urls = set()
     add_links(links, seen_urls, SEEDED_BLOG_MAPPINGS.get(example_name, []))
@@ -271,7 +271,7 @@ for example_name, _title, readme_path in iter_examples():
     add_links(links, seen_urls, discover_matches(example_name, feed_posts))
 
     for blog_title, blog_url in links:
-        rows.append((example_name, blog_title, blog_url))
+        rows.append((example_name, example_title, blog_title, blog_url))
 
 if not rows:
     sys.exit(0)
@@ -282,8 +282,8 @@ print(f"[Kasun Rajapakse blog]({BLOG_HOME}) for the companion")
 print("articles linked below.\n")
 print("| Blog Post | Code Sample |")
 print("|---|---|")
-for example_name, blog_title, blog_url in sorted(rows, key=lambda row: (row[0].lower(), row[1].lower())):
-    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_name)}](./{quote(example_name)}/) |")
+for example_name, example_title, blog_title, blog_url in sorted(rows, key=lambda row: (row[0].lower(), row[2].lower())):
+    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_title)}](./{quote(example_name)}/) |")
 print()
 PY
 }
