@@ -169,10 +169,22 @@ def parse_feed_payload(payload):
     for item in root.findall(".//item") + root.findall(".//{*}entry"):
         title = (item.findtext("title") or item.findtext("{*}title") or "").strip()
         link = (item.findtext("link") or item.findtext("{*}link") or "").strip()
-        if not link:
-            link_element = item.find("{*}link")
-            if link_element is not None:
-                link = (link_element.attrib.get("href") or link_element.attrib.get("url") or "").strip()
+        if not is_blog_post_url(link):
+            alternate_links = []
+            fallback_links = []
+            for link_element in item.findall("{*}link"):
+                href = (link_element.attrib.get("href") or link_element.attrib.get("url") or "").strip()
+                rel = (link_element.attrib.get("rel") or "").strip().lower()
+                if not href:
+                    continue
+                if rel in ("", "alternate"):
+                    alternate_links.append(href)
+                else:
+                    fallback_links.append(href)
+            for candidate in alternate_links + fallback_links:
+                if is_blog_post_url(candidate):
+                    link = candidate
+                    break
         summary = " ".join(
             part.strip()
             for part in [
