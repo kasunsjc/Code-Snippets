@@ -5,13 +5,16 @@
 #      capacity for higher-priority pods *before* NAP provisions anything new.
 #   3. Consolidation bias — NAP prefers to consolidate/deprovision nodes whose pods are
 #      all low priority (cheap to reschedule) over nodes running high-priority pods.
+#   4. Region/zone selection — high-priority pods are pinned (via nodeAffinity + a
+#      toleration) to the priority-zone-restricted NodePool, so only they land in that
+#      specific zone; low-priority pods are free to land anywhere else.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: nap-demo-high-priority
 value: 1000000
 globalDefault: false
-description: "High-priority workloads for the NAP demo — provisioned/preserved first."
+description: "High-priority workloads for the NAP demo — provisioned/preserved first, pinned to a specific zone."
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
@@ -53,8 +56,9 @@ spec:
               memory: 1Gi
 ---
 # High-priority workload. If the cluster/NodePool limits are exhausted, kube-scheduler
-# preempts nap-demo-low-priority pods first; if there's still no room, NAP provisions
-# a new node ahead of any still-pending low-priority pods.
+# preempts nap-demo-low-priority pods first; if there's still no room, NAP provisions a
+# new node ahead of any still-pending low-priority pods. The nodeAffinity + toleration
+# below pin these pods to the priority-zone-restricted NodePool's zone.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -72,6 +76,19 @@ spec:
         app: priority-high-demo
     spec:
       priorityClassName: nap-demo-high-priority
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: priority-zone
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values: ["northeurope-1"] # must match the priority-zone-restricted NodePool
       containers:
         - name: critical
           image: mcr.microsoft.com/oss/nginx/nginx:1.25

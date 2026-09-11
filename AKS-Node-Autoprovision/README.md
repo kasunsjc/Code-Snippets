@@ -22,7 +22,7 @@ of `NodePool` manifests and sample workloads that showcase common patterns:
 | `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
 | `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
 | `general-purpose`     | Node/pod affinity + required pod anti-affinity    | `05-affinity-antiaffinity-workload.yaml` |
-| any matching pool     | `PriorityClass` provisioning order + preemption   | `06-priorityclass-workload.yaml`     |
+| `priority-zone-restricted` | Zone-pinned, tainted pool reserved for high-priority pods | `06-priorityclass-workload.yaml` |
 
 ## 📁 Contents
 
@@ -172,11 +172,25 @@ kubectl get pods -l app=affinity-web-demo -o wide
 3. **Consolidation bias.** NAP prefers to consolidate/delete nodes that only run
    low-priority, easily-rescheduled pods, and is more conservative about disrupting nodes
    that host high-priority pods.
+4. **Region/zone selection.** The high-priority `critical` pods carry a `nodeAffinity` on
+   `topology.kubernetes.io/zone` plus a toleration for the `dedicated=priority-zone:NoSchedule`
+   taint, so NAP only provisions them onto the `priority-zone-restricted` NodePool
+   ([06-priority-zone-nodepool.yaml](kubernetes-manifests/nodepools/06-priority-zone-nodepool.yaml)) —
+   a NodePool that's itself restricted to a single availability zone. Low-priority pods
+   have no such constraint and can land on any other NodePool/zone. This is the pattern to
+   use when a priority tier of workloads must stay in a specific region/zone (e.g. for
+   latency or data-residency reasons) instead of wherever NAP would otherwise place them.
+
+   > Update the `topology.kubernetes.io/zone` value in both the NodePool and the
+   > Deployment's `nodeAffinity` to a zone that exists in your region — list them with
+   > `az vm list-skus --location <region> --zone --output table`.
 
 ```bash
+kubectl apply -f kubernetes-manifests/nodepools/06-priority-zone-nodepool.yaml
 kubectl apply -f kubernetes-manifests/workloads/06-priorityclass-workload.yaml
 kubectl get pods -l app=priority-low-demo -o wide
 kubectl get pods -l app=priority-high-demo -o wide
+kubectl get nodes -L topology.kubernetes.io/zone,karpenter.sh/nodepool
 kubectl get events --field-selector reason=Preempted
 ```
 
