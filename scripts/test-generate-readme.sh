@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -11,7 +13,7 @@ mkdir -p "$TEST_REPO/scripts" \
          "$TEST_REPO/AKS-Harbor-Registry-Demo" \
          "$TEST_REPO/BYO-CNI-AKS"
 
-cp /home/runner/work/Code-Snippets/Code-Snippets/scripts/generate-readme.sh "$TEST_REPO/scripts/generate-readme.sh"
+cp "$REPO_ROOT/scripts/generate-readme.sh" "$TEST_REPO/scripts/generate-readme.sh"
 chmod +x "$TEST_REPO/scripts/generate-readme.sh"
 
 cat > "$TEST_REPO/AKS-ArgoCD-Extension/README.md" <<'EOF'

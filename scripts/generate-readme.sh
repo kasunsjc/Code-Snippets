@@ -60,6 +60,7 @@ import xml.etree.ElementTree as ET
 from html import escape
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(os.environ["REPO_ROOT"])
@@ -256,7 +257,7 @@ print("articles linked below.\n")
 print("| Blog Post | Code Sample |")
 print("|---|---|")
 for example_name, blog_title, blog_url in sorted(rows, key=lambda row: (row[0].lower(), row[1].lower())):
-    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_name)}](./{example_name}/) |")
+    print(f"| [{escape(blog_title)}]({blog_url}) | [{escape(example_name)}](./{quote(example_name)}/) |")
 print()
 PY
 }
