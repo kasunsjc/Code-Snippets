@@ -136,7 +136,7 @@ def parse_feed_payload(payload):
         if not is_blog_post_url(link):
             alternate_links = []
             fallback_links = []
-            for link_element in item.findall("{*}link"):
+            for link_element in item.findall("link") + item.findall("{*}link"):
                 href = (link_element.attrib.get("href") or link_element.attrib.get("url") or "").strip()
                 rel = (link_element.attrib.get("rel") or "").strip().lower()
                 if not href:
