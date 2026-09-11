@@ -52,7 +52,8 @@ get_description() {
 
 # Emit personal blog mappings for demos that have a matching walkthrough
 emit_blog_mappings() {
-  REPO_ROOT="$REPO_ROOT" python3 "$REPO_ROOT/scripts/generate_blog_mappings.py"
+  local repo_root="$REPO_ROOT"
+  REPO_ROOT="$repo_root" python3 "$repo_root/scripts/generate_blog_mappings.py"
 }
 
 # Collect all example directories
