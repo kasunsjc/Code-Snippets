@@ -10,6 +10,7 @@ on:
       - '**/*.bicepparam'
       - '.github/workflows/update-readme.yml'
       - 'scripts/generate-readme.sh'
+      - 'scripts/generate_blog_mappings.py'
 
 permissions:
   contents: write
@@ -25,8 +26,6 @@ jobs:
           fetch-depth: 0
 
       - name: Generate updated README
-        env:
-          ENABLE_BLOG_DISCOVERY: "1"
         run: |
           chmod +x scripts/test-generate-readme.sh
           chmod +x scripts/generate-readme.sh
@@ -34,7 +33,7 @@ jobs:
           bash -n scripts/test-generate-readme.sh
           python3 -m py_compile scripts/generate_blog_mappings.py
           bash scripts/test-generate-readme.sh
-          bash scripts/generate-readme.sh
+          ENABLE_BLOG_DISCOVERY=1 bash scripts/generate-readme.sh
 
       - name: Check for changes
         id: changes
