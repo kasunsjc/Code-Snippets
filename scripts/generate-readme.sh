@@ -55,6 +55,7 @@ emit_blog_mappings() {
   REPO_ROOT="$REPO_ROOT" python3 <<'PY'
 import os
 import re
+import socket
 import sys
 import xml.etree.ElementTree as ET
 from html import escape
@@ -203,7 +204,7 @@ def fetch_feed_posts():
             request = Request(feed_url, headers={"User-Agent": "Code-Snippets README Generator"})
             with urlopen(request, timeout=10) as response:
                 payload = response.read()
-        except (HTTPError, URLError, TimeoutError, ValueError):
+        except (HTTPError, URLError, socket.timeout, TimeoutError, ValueError):
             continue
 
         posts = parse_feed_payload(payload)

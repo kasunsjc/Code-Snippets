@@ -30,6 +30,8 @@ jobs:
         run: |
           chmod +x scripts/test-generate-readme.sh
           chmod +x scripts/generate-readme.sh
+          bash -n scripts/generate-readme.sh
+          bash -n scripts/test-generate-readme.sh
           bash scripts/test-generate-readme.sh
           bash scripts/generate-readme.sh
 
