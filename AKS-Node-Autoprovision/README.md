@@ -21,7 +21,7 @@ of `NodePool` manifests and sample workloads that showcase common patterns:
 | `spot-optimized`      | Spot capacity, highest weight for cost savings    | `03-spot-workload.yaml`              |
 | `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
 | `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
-| `general-purpose`     | Node/pod affinity + required pod anti-affinity    | `05-affinity-antiaffinity-workload.yaml` |
+| `general-purpose`     | Required pod anti-affinity/affinity — spread vs. co-locate | `05-affinity-antiaffinity-workload.yaml` |
 | `priority-zone-restricted` | Zone-pinned, tainted pool reserved for high-priority pods | `06-priorityclass-workload.yaml` |
 
 ## 📁 Contents
@@ -128,28 +128,37 @@ NAP (Karpenter) simulates the Kubernetes scheduler when deciding *what* node to 
 for a pending pod, so it honors the same affinity and priority rules as the built-in
 scheduler — with a few NAP-specific consequences worth calling out.
 
-### Node affinity
+### Node affinity (SKU/NodePool selection)
 
 `spec.affinity.nodeAffinity` terms are combined (logical AND) with each `NodePool`'s own
 `spec.template.spec.requirements`. NAP only considers `NodePools` whose requirements can
 still be satisfied after intersecting with the pod's required node affinity — if none can,
-the pod stays `Pending` even though `NodePools` exist. Try it:
+the pod stays `Pending` even though `NodePools` exist. This is how the `memory-optimized`,
+`spot-optimized`, and `arm64-pool` workloads steer NAP toward a specific SKU family/capacity
+type via `nodeSelector`/`nodeAffinity` — see
+[02-memory-intensive-workload.yaml](kubernetes-manifests/workloads/02-memory-intensive-workload.yaml).
+
+### Pod affinity / anti-affinity (distributing workloads across nodes)
+
+`05-affinity-antiaffinity-workload.yaml` isolates pod (anti-)affinity from any SKU/NodePool
+selection, so it purely demonstrates node **distribution**:
+
+- **`spread-demo`** uses REQUIRED `podAntiAffinity` (`topologyKey: kubernetes.io/hostname`)
+  against its own label. The 3 replicas would easily fit on a single node, but the
+  anti-affinity rule forces NAP to provision **3 separate nodes** — one per replica — so a
+  single node failure only ever takes out one replica.
+- **`affinity-cache-demo`** uses REQUIRED `podAffinity` against `spread-demo`'s label
+  (same topology key) — the opposite behavior. Each `cache` replica must land on the same
+  node as one of the (already spread-out) `spread-demo` pods, so NAP ends up provisioning
+  a cache pod onto each of those 3 nodes too.
 
 ```bash
 kubectl apply -f kubernetes-manifests/workloads/05-affinity-antiaffinity-workload.yaml
-kubectl get pods -l app=affinity-web-demo -o wide
+kubectl get pods -l app=spread-demo -o wide
+kubectl get pods -l app=affinity-cache-demo -o wide
+kubectl get nodes -L karpenter.sh/nodepool
 ```
 
-### Pod affinity / anti-affinity
-
-- **`podAntiAffinity` (required, `topologyKey: kubernetes.io/hostname`)** forces one pod
-  per node. In `05-affinity-antiaffinity-workload.yaml`, the 3 `affinity-web-demo` replicas
-  each need requests that would easily fit on one node — but the anti-affinity rule makes
-  NAP provision **3 separate nodes** instead of consolidating them.
-- **`podAffinity` (required, same topology key)** does the opposite: the
-  `affinity-cache-demo` pods must land on a node that already hosts (or is being
-  provisioned for) a matching `affinity-web-demo` pod. NAP has to reason about the *other*
-  pod's node affinity too, since both pods must end up co-located.
 - Required pod (anti-)affinity is more expensive for the scheduler/Karpenter to evaluate
   than node affinity — prefer `preferredDuringSchedulingIgnoredDuringExecution` where a
   strict guarantee isn't necessary, and avoid it on the hot path for very large clusters.

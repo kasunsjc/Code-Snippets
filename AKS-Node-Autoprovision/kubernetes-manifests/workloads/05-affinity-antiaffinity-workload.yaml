@@ -1,40 +1,34 @@
-# Demonstrates how NAP/Karpenter honors nodeAffinity, podAffinity, and podAntiAffinity
-# when deciding whether to reuse existing nodes or provision new ones.
+# Demonstrates using podAntiAffinity/podAffinity purely to control how NAP *distributes*
+# replicas across nodes — not to influence which SKU/NodePool is picked (that's the
+# nodeAffinity/NodePool requirements demo in the other workload manifests).
 #
-# 1) "web" pods use REQUIRED podAntiAffinity on kubernetes.io/hostname — Karpenter must
-#    provision one node per replica, even though all 3 would easily fit on a single node.
-#    Watch it happen with: kubectl get nodeclaims -w
+# 1) "spread" pods use REQUIRED podAntiAffinity on their own label — Karpenter must
+#    provision/use a DIFFERENT node for each replica, even though all 3 would easily fit
+#    on a single node. This is the "never co-locate the same workload" pattern for
+#    availability (e.g. so one node failure only takes out one replica).
+#    Watch it happen with: kubectl get pods -l app=spread-demo -o wide
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: affinity-web-demo
+  name: spread-demo
   labels:
-    app: affinity-web-demo
+    app: spread-demo
 spec:
   replicas: 3
   selector:
     matchLabels:
-      app: affinity-web-demo
+      app: spread-demo
   template:
     metadata:
       labels:
-        app: affinity-web-demo
+        app: spread-demo
     spec:
-      # Node-level constraint: only consider on-demand D-family nodes. NAP intersects this
-      # with each NodePool's own spec.requirements — pools that can't satisfy it are skipped.
       affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: karpenter.azure.com/sku-family
-                    operator: In
-                    values: ["D"]
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app: affinity-web-demo
+                  app: spread-demo
               topologyKey: kubernetes.io/hostname
       containers:
         - name: nginx
@@ -44,9 +38,10 @@ spec:
               cpu: 250m
               memory: 256Mi
 ---
-# 2) "cache" pods use REQUIRED podAffinity to co-locate with "web" pods on the same node.
-#    Karpenter must provision (or reuse) a node that already/also satisfies the "web"
-#    pod's node affinity, since the affinity term is transitive through the shared node.
+# 2) "cache" pods use REQUIRED podAffinity to always land on the SAME node as a
+#    "spread-demo" pod — the opposite behavior. Since spread-demo is already forced onto
+#    3 separate nodes, NAP must also provision/reuse a node per cache replica that
+#    co-locates with one of those specific pods.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -68,7 +63,7 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
                 matchLabels:
-                  app: affinity-web-demo
+                  app: spread-demo
               topologyKey: kubernetes.io/hostname
       containers:
         - name: redis
