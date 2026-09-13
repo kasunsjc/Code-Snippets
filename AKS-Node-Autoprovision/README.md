@@ -18,7 +18,6 @@ of `NodePool` manifests and sample workloads that showcase common patterns:
 | --------------------- | ------------------------------------------------ | ------------------------------------ |
 | `general-purpose`     | Default landing zone, D-family, on-demand        | `01-general-purpose-workload.yaml`   |
 | `memory-optimized`    | E-family, tainted for memory-heavy workloads      | `02-memory-intensive-workload.yaml`  |
-| `spot-optimized`      | Spot capacity, highest weight for cost savings    | `03-spot-workload.yaml`              |
 | `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
 | `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
 | `general-purpose`     | Required pod anti-affinity/affinity — spread vs. co-locate | `05-affinity-antiaffinity-workload.yaml` |
@@ -70,7 +69,7 @@ This runs `terraform init`/`apply` to create:
 ### 2. Apply NodePools and a sample workload
 
 ```bash
-./deploy.sh --demo general   # or: memory | spot | arm64 | static | affinity | priority | all
+./deploy.sh --demo general   # or: memory | arm64 | static | affinity | priority | all
 ```
 
 Or apply everything manually:
@@ -133,8 +132,8 @@ scheduler — with a few NAP-specific consequences worth calling out.
 `spec.affinity.nodeAffinity` terms are combined (logical AND) with each `NodePool`'s own
 `spec.template.spec.requirements`. NAP only considers `NodePools` whose requirements can
 still be satisfied after intersecting with the pod's required node affinity — if none can,
-the pod stays `Pending` even though `NodePools` exist. This is how the `memory-optimized`,
-`spot-optimized`, and `arm64-pool` workloads steer NAP toward a specific SKU family/capacity
+the pod stays `Pending` even though `NodePools` exist. This is how the `memory-optimized`
+and `arm64-pool` workloads steer NAP toward a specific SKU family/capacity
 type via `nodeSelector`/`nodeAffinity` — see
 [02-memory-intensive-workload.yaml](kubernetes-manifests/workloads/02-memory-intensive-workload.yaml).
 
@@ -205,6 +204,27 @@ kubectl get events --field-selector reason=Preempted
 
 > Don't reuse the reserved `system-cluster-critical` / `system-node-critical`
 > `PriorityClasses` for application workloads — they're meant for cluster components only.
+
+## 🩺 Troubleshooting
+
+- **Pods stuck `Pending` on a NodePool that never gets a node (no `FailedCreateNodeClaim`
+  events, `kubectl get nodepools` shows `NODES: 0`).** This usually means every candidate
+  VM SKU for that pool exceeds an Azure quota, so Karpenter has nothing it can launch —
+  common on trial/sponsorship subscriptions with low regional vCPU quotas (including Spot,
+  if you add a Spot NodePool of your own). Check quota with:
+
+  ```bash
+  az vm list-usage --location <region> -o table
+  ```
+
+  Either request a quota increase, or narrow the NodePool's `requirements` to smaller SKUs
+  (e.g. add `karpenter.azure.com/sku-cpu` with operator `Lt` to bias toward 2-vCPU
+  instances).
+- **`ImagePullBackOff` / `ErrImagePull`.** Double-check the image reference actually
+  exists (`docker manifest inspect <image>` or `crane manifest <image>`) — this bit us
+  during development with a mistyped `mcr.microsoft.com/oss/nginx/nginx` reference; all
+  sample workloads now use the official, multi-arch `nginx:1.27-alpine` and
+  `redis:7.2-alpine` Docker Hub images.
 
 ## ⚠️ Limitations (NAP, current as of AKS GA)
 

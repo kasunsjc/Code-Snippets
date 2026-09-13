@@ -24,7 +24,7 @@ usage() {
 Usage: ./deploy.sh [options]
 
 Options:
-  --demo <none|general|memory|spot|arm64|static|affinity|priority|all>  Apply NodePools + a
+  --demo <none|general|memory|arm64|static|affinity|priority|all>  Apply NodePools + a
                                                         matching sample workload after the
                                                         cluster is ready.
   --help                                                Show this help.
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-VALID_DEMOS=(none general memory spot arm64 static affinity priority all)
+VALID_DEMOS=(none general memory arm64 static affinity priority all)
 if [[ ! " ${VALID_DEMOS[*]} " =~ " $DEMO " ]]; then
   echo -e "${RED}ERROR: Invalid --demo value '$DEMO'.${NC} Expected one of: ${VALID_DEMOS[*]}."
   exit 1
@@ -137,7 +137,6 @@ apply_workload() {
 case "$DEMO" in
   general)  apply_workload "01-general-purpose-workload.yaml" ;;
   memory)   apply_workload "02-memory-intensive-workload.yaml" ;;
-  spot)     apply_workload "03-spot-workload.yaml" ;;
   arm64)    apply_workload "04-arm64-workload.yaml" ;;
   static)   echo "  Static NodePool 'static-critical' already applied with fixed replicas: 2" ;;
   affinity) apply_workload "05-affinity-antiaffinity-workload.yaml" ;;
@@ -145,7 +144,6 @@ case "$DEMO" in
   all)
     apply_workload "01-general-purpose-workload.yaml"
     apply_workload "02-memory-intensive-workload.yaml"
-    apply_workload "03-spot-workload.yaml"
     apply_workload "04-arm64-workload.yaml"
     apply_workload "05-affinity-antiaffinity-workload.yaml"
     apply_workload "06-priorityclass-workload.yaml"

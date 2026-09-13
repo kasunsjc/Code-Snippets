@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: nginx
-          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          image: nginx:1.27-alpine
           resources:
             requests:
               cpu: "1"

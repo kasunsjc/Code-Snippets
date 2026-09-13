@@ -32,7 +32,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: nginx
-          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          image: nginx:1.27-alpine
           resources:
             requests:
               cpu: 250m

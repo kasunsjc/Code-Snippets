@@ -46,7 +46,7 @@ spec:
       priorityClassName: nap-demo-low-priority
       containers:
         - name: filler
-          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          image: nginx:1.27-alpine
           resources:
             requests:
               cpu: "1"
@@ -91,7 +91,7 @@ spec:
                     values: ["northeurope-1"] # must match the priority-zone-restricted NodePool
       containers:
         - name: critical
-          image: mcr.microsoft.com/oss/nginx/nginx:1.25
+          image: nginx:1.27-alpine
           resources:
             requests:
               cpu: "1"
