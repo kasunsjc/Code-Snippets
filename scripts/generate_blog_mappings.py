@@ -232,8 +232,8 @@ def main():
     try:
         feed_posts = fetch_feed_posts()
     except RuntimeError as error:
-        print(error, file=sys.stderr)
-        return 1
+        print(f"Warning: {error}", file=sys.stderr)
+        feed_posts = []
 
     rows = []
     for example_name, example_title, readme_path in iter_examples():
