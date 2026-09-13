@@ -68,4 +68,21 @@ ENABLE_BLOG_DISCOVERY=1 BLOG_FEED_FIXTURE="$TMP_DIR/feed.xml" bash "$TEST_REPO/s
 grep -Fq "https://kasunrajapakse.me/blog/harbor-oidc-azure-monitor-grafana/" "$TEST_REPO/README.md"
 grep -Fq "[Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/)" "$TEST_REPO/README.md"
 
+REPO_ROOT="$TEST_REPO" ENABLE_BLOG_DISCOVERY=1 python3 - <<'PY'
+import importlib.util
+import os
+import pathlib
+import sys
+
+repo_root = pathlib.Path(os.environ["REPO_ROOT"])
+script_path = repo_root / "scripts" / "generate_blog_mappings.py"
+spec = importlib.util.spec_from_file_location("generate_blog_mappings", script_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+module.ENABLE_BLOG_DISCOVERY = True
+module.FEED_URLS = ["http://127.0.0.1:9/unreachable-feed"]
+sys.exit(module.main())
+PY
+
 echo "README generator tests passed"
