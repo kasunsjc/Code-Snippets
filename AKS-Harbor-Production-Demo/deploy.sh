@@ -52,7 +52,20 @@ main() {
   info "Fetching AKS credentials..."
   CLUSTER_NAME="$(terraform -chdir="$TF_DIR" output -raw cluster_name)"
   RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw resource_group_name)"
+  SUBSCRIPTION_ID="$(terraform -chdir="$TF_DIR" output -raw subscription_id)"
+  TENANT_ID="$(terraform -chdir="$TF_DIR" output -raw tenant_id)"
+  DNS_ZONE_NAME="$(terraform -chdir="$TF_DIR" output -raw dns_zone_name)"
+  DNS_ZONE_RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw dns_zone_resource_group)"
   HARBOR_FQDN="$(terraform -chdir="$TF_DIR" output -raw harbor_fqdn)"
+  ACME_EMAIL="$(terraform -chdir="$TF_DIR" output -raw acme_email)"
+  CERT_MANAGER_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw cert_manager_client_id)"
+  KEY_VAULT_NAME="$(terraform -chdir="$TF_DIR" output -raw key_vault_name)"
+  KV_CSI_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw kv_csi_client_id)"
+  HARBOR_ADMIN_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_password)"
+  POSTGRES_HOST="$(terraform -chdir="$TF_DIR" output -raw postgres_host)"
+  POSTGRES_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw postgres_password)"
+  REDIS_HOST="$(terraform -chdir="$TF_DIR" output -raw redis_host)"
+  REDIS_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw redis_password)"
   ENABLE_OIDC_AUTH="$(terraform -chdir="$TF_DIR" output -raw enable_oidc_auth)"
 
   HARBOR_OIDC_SETTINGS_JSON='"auth_mode": "db_auth",'
@@ -71,10 +84,13 @@ main() {
 \"oidc_auto_onboard\": true,\
 \"oidc_user_claim\": \"preferred_username\",\
 \"oidc_groups_claim\": \"groups\",\
-\"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\"," 
+\"oidc_admin_group\": \"$(json_escape "$HARBOR_ADMIN_GROUP_OBJECT_ID")\","
   fi
 
-  export HARBOR_FQDN HARBOR_OIDC_SETTINGS_JSON
+  export SUBSCRIPTION_ID TENANT_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN \
+    ACME_EMAIL CERT_MANAGER_CLIENT_ID KEY_VAULT_NAME KV_CSI_CLIENT_ID HARBOR_ADMIN_PASSWORD \
+    POSTGRES_HOST POSTGRES_PASSWORD REDIS_HOST REDIS_PASSWORD HARBOR_OIDC_SETTINGS_JSON
+
   az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
 
   info "Installing Helm repositories..."
@@ -106,6 +122,10 @@ main() {
   envsubst < "$MANIFESTS_DIR/secretproviderclass.yaml.tpl" > "$RENDERED_DIR/secretproviderclass.yaml"
   kubectl apply -f "$RENDERED_DIR/secretproviderclass.yaml"
   kubectl apply -f "$MANIFESTS_DIR/keyvault-secret-sync.yaml"
+
+  info "Applying Harbor audit-log forwarder (must be Ready before Harbor installs)..."
+  kubectl apply -f "$MANIFESTS_DIR/audit-log-forwarder.yaml"
+  kubectl rollout status deployment/harbor-audit-forwarder -n harbor --timeout=120s
 
   info "Applying Harbor values template..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
