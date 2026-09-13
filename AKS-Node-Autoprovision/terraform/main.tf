@@ -63,7 +63,7 @@ resource "azurerm_kubernetes_cluster" "main" {
   tags = var.tags
 }
 
-# Surface NAP/Karpenter control plane activity (category "node-auto-provisioning") in Log Analytics
+# Surface NAP/Karpenter control plane activity (category "karpenter-events") in Log Analytics
 # so the "AKSControlPlane | where Category == 'karpenter-events'" sample query works out of the box.
 resource "azurerm_monitor_diagnostic_setting" "nap" {
   name                       = "diag-node-auto-provisioning"
@@ -71,7 +71,7 @@ resource "azurerm_monitor_diagnostic_setting" "nap" {
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   enabled_log {
-    category = "node-auto-provisioning"
+    category = "karpenter-events"
   }
 }
 

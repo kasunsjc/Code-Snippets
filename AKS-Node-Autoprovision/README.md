@@ -64,8 +64,8 @@ This runs `terraform init`/`apply` to create:
   - `node_provisioning_profile { mode = "Auto" }` (NAP enabled)
   - Azure CNI Overlay + Cilium dataplane + Standard Load Balancer (required by NAP)
   - A small `system` node pool tainted `CriticalAddonsOnly` — NAP provisions everything else
-- A Log Analytics workspace + diagnostic setting capturing the `node-auto-provisioning`
-  control plane log category (Karpenter events)
+- A Log Analytics workspace + diagnostic setting capturing the `karpenter-events`
+  control plane log category (NAP/Karpenter events)
 
 ### 2. Apply NodePools and a sample workload
 
