@@ -1,0 +1,11 @@
+location = "northeurope"
+project = "harborprod"
+environment = "demo"
+dns_zone_name = "example.com"
+dns_zone_resource_group = "rg-dns-shared"
+harbor_subdomain = "harbor"
+acme_email = "you@example.com"
+user_object_id = ""
+enable_oidc_auth = true
+harbor_oidc_app_display_name = "harbor-oidc-sso"
+harbor_admin_group_member_upns = []

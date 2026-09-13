@@ -1,0 +1,72 @@
+resource "azurerm_kubernetes_cluster" "this" {
+  name                = var.cluster_name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  dns_prefix          = var.cluster_name
+  kubernetes_version  = var.kubernetes_version
+  node_resource_group = var.node_resource_group_name
+  tags                = var.tags
+
+  oidc_issuer_enabled       = true
+  workload_identity_enabled = true
+
+  default_node_pool {
+    name                         = "system"
+    vm_size                      = "Standard_D4s_v5"
+    node_count                   = 3
+    os_disk_size_gb              = 128
+    auto_scaling_enabled         = true
+    min_count                    = 3
+    max_count                    = 6
+    zones                        = ["1", "2", "3"]
+    only_critical_addons_enabled = true
+
+    upgrade_settings {
+      max_surge = "10%"
+    }
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  network_profile {
+    network_plugin      = "azure"
+    network_plugin_mode = "overlay"
+    load_balancer_sku   = "standard"
+  }
+
+  oms_agent {
+    log_analytics_workspace_id = var.log_analytics_workspace_id
+  }
+
+  monitor_metrics {}
+
+  key_vault_secrets_provider {
+    secret_rotation_enabled  = true
+    secret_rotation_interval = "2m"
+  }
+}
+
+resource "azurerm_kubernetes_cluster_node_pool" "harbor" {
+  name                  = "harbor"
+  kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
+  vm_size               = "Standard_D4s_v5"
+  node_count            = 3
+  auto_scaling_enabled  = true
+  min_count             = 3
+  max_count             = 6
+  zones                 = ["1", "2", "3"]
+  os_disk_size_gb       = 128
+
+  upgrade_settings {
+    max_surge = "10%"
+  }
+}
+
+resource "azurerm_role_assignment" "cluster_admin" {
+  count                = var.user_object_id == "" ? 0 : 1
+  scope                = azurerm_kubernetes_cluster.this.id
+  role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
+  principal_id         = var.user_object_id
+}

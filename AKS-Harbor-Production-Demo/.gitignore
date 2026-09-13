@@ -1,0 +1,22 @@
+# Local Terraform state
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Rendered manifests
+.rendered/
+
+# Local env
+.env
+.env.*
+
+# Editor
+.vscode/
+.DS_Store
+
+# Secrets
+*.pem
+*.key
+*.crt

@@ -5,7 +5,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **22 examples** | Kubernetes: 15 | Docker: 4 | Azure: 1 | *Last Updated: September 2026*
+> **23 examples** | Kubernetes: 16 | Docker: 4 | Azure: 1 | Other: 2 | *Last Updated: September 2026*
 
 ## 📝 Related Blog Posts
 
@@ -36,12 +36,13 @@ articles linked below.
 | 5 | [AKS-Desktop](./AKS-Desktop/) | This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and... | Kubernetes |
 | 6 | [AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/) | A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showc... | Kubernetes |
 | 7 | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) | A basic Harbor container registry install on AKS via Helm, with Terraform provisioning | Kubernetes |
-| 8 | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) | > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March... | Kubernetes |
-| 9 | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) | A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on | Kubernetes |
-| 10 | [AKS-Monitoring](./AKS-Monitoring/) | This guide provides an overview of how to monitor Azure Kubernetes Service (AKS) using Azure Moni... | Kubernetes |
-| 11 | [AKS-Nginx-Add-on](./AKS-Nginx-Add-on/) | Deploy the NGINX Ingress Controller as a native AKS add-on with SSL/TLS termination support. | Kubernetes |
-| 12 | [AKS-Node-Autoprovision](./AKS-Node-Autoprovision/) | Automatically provision AKS nodes based on workload requirements without managing node pools manu... | Kubernetes |
-| 13 | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) | Enhance AKS security by restricting access to node resource group resources. | Kubernetes |
+| 8 | [AKS-Harbor-Production-Demo](./AKS-Harbor-Production-Demo/) | Production-grade Harbor on AKS with managed PostgreSQL, Redis, Key Vault, and cert-manager TLS | Kubernetes |
+| 9 | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) | > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March... | Kubernetes |
+| 10 | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) | A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on | Kubernetes |
+| 11 | [AKS-Monitoring](./AKS-Monitoring/) | This guide provides an overview of how to monitor Azure Kubernetes Service (AKS) using Azure Moni... | Kubernetes |
+| 12 | [AKS-Nginx-Add-on](./AKS-Nginx-Add-on/) | Deploy the NGINX Ingress Controller as a native AKS add-on with SSL/TLS termination support. | Kubernetes |
+| 13 | [AKS-Node-Autoprovision](./AKS-Node-Autoprovision/) | Automatically provision AKS nodes based on workload requirements without managing node pools manu... | Kubernetes |
+| 14 | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) | Enhance AKS security by restricting access to node resource group resources. | Kubernetes |
 | 14 | [Agentic-CLI-AKS](./Agentic-CLI-AKS/) | > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not ... | Kubernetes |
 | 15 | [Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/) | This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot ... | Other |
 | 16 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
@@ -69,6 +70,8 @@ articles linked below.
 - **[AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/)** — A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showcasing multi-cluster orchestration, resource propagation, and centralized management.
   - 📄 README: Yes | 📁 Files: 21
 - **[AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/)** — A basic Harbor container registry install on AKS via Helm, with Terraform provisioning
+  - 📄 README: Yes | 📁 Files: 18
+- **[AKS-Harbor-Production-Demo](./AKS-Harbor-Production-Demo/)** — Production-grade Harbor deployment on AKS with **managed PostgreSQL** Flexible Server, **Azure Cache for Redis** Premium, **Azure Files** NFS ZRS storage, **cert-manager** TLS automation, **Traefik** ingress, **Key Vault** secret sync, and **Grafana** monitoring integration — shaped as a reference architecture for production use.
   - 📄 README: Yes | 📁 Files: 18
 - **[AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/)** — > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March 2026](https://blog.aks.azure.com/2026/03/18/app-routing-gateway-api)
   - 📄 README: Yes | 📁 Files: 10

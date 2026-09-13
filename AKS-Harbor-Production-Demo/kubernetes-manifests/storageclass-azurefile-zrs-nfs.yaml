@@ -1,0 +1,15 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: azurefile-premium-zrs-nfs
+provisioner: file.csi.azure.com
+allowVolumeExpansion: true
+reclaimPolicy: Retain
+volumeBindingMode: Immediate
+parameters:
+  skuName: Premium_ZRS
+  protocol: nfs
+  networkEndpointType: privateEndpoint
+mountOptions:
+  - nconnect=16
+  - vers=4.1

@@ -67,3 +67,6 @@ azuredeploy.parameters.local.json
 *.pub
 id_rsa
 id_ed25519
+
+# Local planning docs
+/plan/
