@@ -1,0 +1,74 @@
+# Demonstrates using podAntiAffinity/podAffinity purely to control how NAP *distributes*
+# replicas across nodes — not to influence which SKU/NodePool is picked (that's the
+# nodeAffinity/NodePool requirements demo in the other workload manifests).
+#
+# 1) "spread" pods use REQUIRED podAntiAffinity on their own label — Karpenter must
+#    provision/use a DIFFERENT node for each replica, even though all 3 would easily fit
+#    on a single node. This is the "never co-locate the same workload" pattern for
+#    availability (e.g. so one node failure only takes out one replica).
+#    Watch it happen with: kubectl get pods -l app=spread-demo -o wide
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spread-demo
+  labels:
+    app: spread-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: spread-demo
+  template:
+    metadata:
+      labels:
+        app: spread-demo
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: spread-demo
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+---
+# 2) "cache" pods use REQUIRED podAffinity to always land on the SAME node as a
+#    "spread-demo" pod — the opposite behavior. Since spread-demo is already forced onto
+#    3 separate nodes, NAP must also provision/reuse a node per cache replica that
+#    co-locates with one of those specific pods.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: affinity-cache-demo
+  labels:
+    app: affinity-cache-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: affinity-cache-demo
+  template:
+    metadata:
+      labels:
+        app: affinity-cache-demo
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: spread-demo
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: redis
+          image: redis:7.2-alpine
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi

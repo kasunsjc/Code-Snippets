@@ -1,0 +1,27 @@
+# Static NodePool: fixed-size capacity for critical workloads that shouldn't be
+# consolidated away. Scale explicitly with:
+#   kubectl scale nodepool static-critical --replicas=3
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: static-critical
+spec:
+  replicas: 2
+  limits:
+    nodes: 5 # only "nodes" is supported as a limit for static NodePools
+  template:
+    metadata:
+      labels:
+        workload-type: static-critical
+    spec:
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      requirements:
+        - key: karpenter.azure.com/sku-name
+          operator: In
+          values: ["Standard_D4s_v5", "Standard_F8s_v2"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]

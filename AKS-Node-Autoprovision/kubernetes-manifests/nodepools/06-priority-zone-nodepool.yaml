@@ -1,0 +1,52 @@
+# Region/zone-restricted NodePool reserved for high-priority workloads.
+# Only provisions nodes in a single availability zone within the cluster's region, so
+# latency- or data-residency-sensitive, high-priority workloads land in a predictable
+# zone instead of wherever NAP would otherwise place them.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: priority-zone-restricted
+spec:
+  weight: 15
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 1m
+  limits:
+    cpu: "50"
+    memory: 200Gi
+  template:
+    metadata:
+      labels:
+        workload-type: priority-zone-restricted
+    spec:
+      nodeClassRef:
+        group: karpenter.azure.com
+        kind: AKSNodeClass
+        name: default
+      expireAfter: 720h
+      # Reserved capacity: only pods that tolerate this taint get scheduled here
+      # (see priority-high-demo in workloads/06-priorityclass-workload.yaml).
+      taints:
+        - key: dedicated
+          value: priority-zone
+          effect: NoSchedule
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: karpenter.azure.com/sku-family
+          operator: In
+          values: ["D"]
+        # Match this to a zone that exists in your cluster's region, formatted as
+        # "<location>-<zone>" (default Terraform location is "northeurope").
+        # List zones supported by a VM size with:
+        #   az vm list-skus --location <region> --zone --output table
+        - key: topology.kubernetes.io/zone
+          operator: In
+          values: ["northeurope-1"]
