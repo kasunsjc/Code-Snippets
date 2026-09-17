@@ -39,7 +39,7 @@ spec:
           c := input_containers[_]
           not is_exempt(c)
           input_read_only_root_fs(c)
-          msg := sprintf("only read-only root filesystem container is allowed: %v", [c.name])
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> does not use a read-only root filesystem; set securityContext.readOnlyRootFilesystem to true", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
         }
 
         input_read_only_root_fs(c) {

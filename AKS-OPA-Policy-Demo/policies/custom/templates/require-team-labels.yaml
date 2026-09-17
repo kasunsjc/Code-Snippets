@@ -49,7 +49,7 @@ spec:
           required := {label | label := input.parameters.labels[_].key}
           missing := required - provided
           count(missing) > 0
-          def_msg := sprintf("you must provide labels: %v", [missing])
+          def_msg := sprintf("Pod <%v> in namespace <%v> is missing required labels: %v", [input.review.object.metadata.name, input.review.object.metadata.namespace, missing])
           msg := get_message(input.parameters, def_msg)
         }
 
@@ -60,6 +60,6 @@ spec:
           # do not match if allowedRegex is not defined, or is an empty string
           expected.allowedRegex != ""
           not regex.match(expected.allowedRegex, value)
-          def_msg := sprintf("Label <%v: %v> does not satisfy allowed regex: %v", [key, value, expected.allowedRegex])
+          def_msg := sprintf("Pod <%v> in namespace <%v> has label <%v: %v> that does not satisfy allowed regex: %v", [input.review.object.metadata.name, input.review.object.metadata.namespace, key, value, expected.allowedRegex])
           msg := get_message(input.parameters, def_msg)
         }

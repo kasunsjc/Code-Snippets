@@ -39,7 +39,7 @@ spec:
           c := input_containers[_]
           not is_exempt(c)
           input_allow_privilege_escalation(c)
-          msg := sprintf("Privilege escalation container is not allowed: %v", [c.name])
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> allows privilege escalation; set securityContext.allowPrivilegeEscalation to false", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
         }
 
         input_allow_privilege_escalation(c) {

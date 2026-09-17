@@ -28,7 +28,7 @@ spec:
           not is_update(input.review)
 
           input_share_hostnamespace(input.review.object)
-          msg := sprintf("Sharing the host namespace is not allowed: %v", [input.review.object.metadata.name])
+          msg := sprintf("Pod <%v> in namespace <%v> shares a host PID or IPC namespace; set hostPID and hostIPC to false", [input.review.object.metadata.name, input.review.object.metadata.namespace])
         }
 
         input_share_hostnamespace(o) {

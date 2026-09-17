@@ -26,5 +26,5 @@ spec:
 
         violation[{"msg": msg}] {
           input.review.object.metadata.namespace == "default"
-          msg := sprintf("resources must not be deployed to the 'default' namespace: %v", [input.review.object.metadata.name])
+          msg := sprintf("Pod <%v> is in the prohibited 'default' namespace; deploy it to a dedicated namespace", [input.review.object.metadata.name])
         }

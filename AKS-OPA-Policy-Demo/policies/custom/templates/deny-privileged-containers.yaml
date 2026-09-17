@@ -39,7 +39,7 @@ spec:
           c := input_containers[_]
           not is_exempt(c)
           c.securityContext.privileged
-          msg := sprintf("Privileged container is not allowed: %v, securityContext: %v", [c.name, c.securityContext])
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> is privileged; set securityContext.privileged to false", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
         }
 
         input_containers[c] {
