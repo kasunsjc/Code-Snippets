@@ -42,7 +42,9 @@ resource "azurerm_private_dns_zone" "postgres" {
 }
 
 resource "azurerm_private_dns_zone" "redis" {
-  name                = "privatelink.redis.cache.windows.net"
+  # Azure Managed Redis (Microsoft.Cache/RedisEnterprise) uses this zone name,
+  # not privatelink.redis.cache.windows.net (that's classic Azure Cache for Redis).
+  name                = "privatelink.redis.azure.net"
   resource_group_name = var.resource_group_name
   tags                = var.tags
 }

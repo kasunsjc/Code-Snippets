@@ -6,12 +6,11 @@ resource "azurerm_user_assigned_identity" "cert_manager" {
 }
 
 resource "azurerm_federated_identity_credential" "cert_manager" {
-  name                = "cert-manager"
-  resource_group_name = var.resource_group_name
-  parent_id           = azurerm_user_assigned_identity.cert_manager.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = var.oidc_issuer_url
-  subject             = "system:serviceaccount:cert-manager:cert-manager"
+  name                      = "cert-manager"
+  user_assigned_identity_id = azurerm_user_assigned_identity.cert_manager.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = var.oidc_issuer_url
+  subject                   = "system:serviceaccount:cert-manager:cert-manager"
 }
 
 resource "azurerm_role_assignment" "dns_zone_contributor" {

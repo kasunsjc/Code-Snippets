@@ -1,5 +1,10 @@
+locals {
+  # Key Vault names are capped at 24 characters.
+  kv_name_prefix = substr(replace(lower("${var.project}${var.environment}"), "/[^a-z0-9]/", ""), 0, 10)
+}
+
 resource "azurerm_key_vault" "this" {
-  name                          = "kv-${var.project}-${var.environment}-${random_string.suffix.result}"
+  name                          = "kv-${local.kv_name_prefix}-${random_string.suffix.result}"
   location                      = var.location
   resource_group_name           = var.resource_group_name
   tenant_id                     = var.tenant_id

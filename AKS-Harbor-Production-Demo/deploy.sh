@@ -65,6 +65,7 @@ main() {
   POSTGRES_HOST="$(terraform -chdir="$TF_DIR" output -raw postgres_host)"
   POSTGRES_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw postgres_password)"
   REDIS_HOST="$(terraform -chdir="$TF_DIR" output -raw redis_host)"
+  REDIS_PORT="$(terraform -chdir="$TF_DIR" output -raw redis_port)"
   REDIS_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw redis_password)"
   ENABLE_OIDC_AUTH="$(terraform -chdir="$TF_DIR" output -raw enable_oidc_auth)"
 
@@ -89,7 +90,7 @@ main() {
 
   export SUBSCRIPTION_ID TENANT_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN \
     ACME_EMAIL CERT_MANAGER_CLIENT_ID KEY_VAULT_NAME KV_CSI_CLIENT_ID HARBOR_ADMIN_PASSWORD \
-    POSTGRES_HOST POSTGRES_PASSWORD REDIS_HOST REDIS_PASSWORD HARBOR_OIDC_SETTINGS_JSON
+    POSTGRES_HOST POSTGRES_PASSWORD REDIS_HOST REDIS_PORT REDIS_PASSWORD HARBOR_OIDC_SETTINGS_JSON
 
   az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
 

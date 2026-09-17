@@ -72,6 +72,10 @@ output "redis_host" {
   value = module.redis.host
 }
 
+output "redis_port" {
+  value = module.redis.port
+}
+
 output "redis_password" {
   value     = module.redis.redis_password
   sensitive = true

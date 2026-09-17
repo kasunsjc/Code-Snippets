@@ -17,6 +17,9 @@ resource "azurerm_postgresql_flexible_server" "this" {
     standby_availability_zone = "2"
   }
 
+  administrator_login    = "harboradmin"
+  administrator_password = random_password.postgres.result
+
   authentication {
     active_directory_auth_enabled = true
     password_auth_enabled         = true

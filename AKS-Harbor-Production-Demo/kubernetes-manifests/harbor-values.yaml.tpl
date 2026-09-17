@@ -28,7 +28,7 @@ database:
 redis:
   type: external
   external:
-    addr: "${REDIS_HOST}:6380"
+    addr: "${REDIS_HOST}:${REDIS_PORT}"
     password: "${REDIS_PASSWORD}"
     existingSecret: "harbor-redis"
     tlsOptions:
