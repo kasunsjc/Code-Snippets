@@ -22,6 +22,14 @@
         ],
         "defaultValue": "audit"
       },
+      "message": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Custom message",
+          "description": "Optional custom violation message. Leave empty to use the ConstraintTemplate's default message."
+        },
+        "defaultValue": ""
+      },
       "labels": {
         "type": "Array",
         "metadata": {
@@ -82,6 +90,7 @@
           "namespaces": "[parameters('namespaces')]",
           "excludedNamespaces": "[parameters('excludedNamespaces')]",
           "values": {
+            "message": "[parameters('message')]",
             "labels": "[parameters('labels')]"
           }
         }

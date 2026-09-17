@@ -80,7 +80,7 @@ for DEFN_FILE in policies/custom/*.definition.json; do
     --mode "Microsoft.Kubernetes.Data" \
     --rules "$RULES" \
     --params "$PARAMS_SCHEMA" \
-    --metadata category=Kubernetes version=1.0.0 \
+    --metadata "category=Kubernetes version=1.0.0" \
     --only-show-errors >/dev/null
 
   ASSIGN_PARAMS=$(jq --arg effect "$EFFECT" '.effect.value = $effect' "$PARAM_FILE")

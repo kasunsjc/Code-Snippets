@@ -18,6 +18,7 @@ spec:
       validation:
         openAPIV3Schema:
           type: object
+          properties: {}
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |

@@ -1,5 +1,6 @@
 {
   "effect": { "value": "audit" },
+  "message": { "value": "" },
   "labels": {
     "value": [
       { "key": "team" },
