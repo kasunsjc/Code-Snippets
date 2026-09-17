@@ -1,0 +1,11 @@
+{
+  "effect": { "value": "audit" },
+  "labels": {
+    "value": [
+      { "key": "team" },
+      { "key": "environment", "allowedRegex": "^(dev|staging|prod)$" }
+    ]
+  },
+  "namespaces": { "value": [] },
+  "excludedNamespaces": { "value": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"] }
+}

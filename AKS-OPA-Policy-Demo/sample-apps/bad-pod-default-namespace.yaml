@@ -1,0 +1,19 @@
+# Violates: deny-default-namespace (built-in policy 9f061a12-...) - deployed to "default"
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-default-namespace
+  namespace: default
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        readOnlyRootFilesystem: true

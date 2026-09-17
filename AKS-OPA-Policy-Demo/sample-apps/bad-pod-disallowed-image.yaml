@@ -1,0 +1,19 @@
+# Violates: allowed-container-images (built-in policy febd0533-...) - image doesn't match imageRegex
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-disallowed-image
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: app
+      image: example.io/random-registry/app:latest
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        readOnlyRootFilesystem: true

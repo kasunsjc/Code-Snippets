@@ -1,0 +1,19 @@
+# Violates: require-readonly-root-fs (built-in policy df49d893-...)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-writable-root-fs
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        readOnlyRootFilesystem: false

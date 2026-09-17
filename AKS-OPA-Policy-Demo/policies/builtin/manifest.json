@@ -1,0 +1,44 @@
+[
+  {
+    "assignmentName": "deny-privileged-containers",
+    "displayName": "Kubernetes cluster should not allow privileged containers",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/95edb821-ddaf-4404-9732-666045e056b4",
+    "parameterFile": "no-privileged-containers.parameters.json"
+  },
+  {
+    "assignmentName": "deny-host-namespaces",
+    "displayName": "Kubernetes cluster containers should not share host process ID, IPC, or network namespaces",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/47a1ee2f-2a2a-4576-bf2a-e0e36709c2b8",
+    "parameterFile": "no-host-namespaces.parameters.json"
+  },
+  {
+    "assignmentName": "deny-privilege-escalation",
+    "displayName": "Kubernetes clusters should not allow container privilege escalation",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/1c6e92c9-99f0-4e55-9cf2-0c234dc48f99",
+    "parameterFile": "no-privilege-escalation.parameters.json"
+  },
+  {
+    "assignmentName": "require-readonly-root-fs",
+    "displayName": "Kubernetes cluster containers should run with a read only root file system",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/df49d893-a74c-421d-bc95-c663042e5b80",
+    "parameterFile": "readonly-root-filesystem.parameters.json"
+  },
+  {
+    "assignmentName": "require-resource-limits",
+    "displayName": "Kubernetes cluster containers CPU and memory resource limits should not exceed the specified limits",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/e345eecc-fa47-480f-9e88-67dcc122b164",
+    "parameterFile": "resource-limits.parameters.json"
+  },
+  {
+    "assignmentName": "deny-default-namespace",
+    "displayName": "Kubernetes cluster should not use the default namespace",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/9f061a12-e40d-4183-a00e-171812443373",
+    "parameterFile": "no-default-namespace.parameters.json"
+  },
+  {
+    "assignmentName": "allowed-container-images",
+    "displayName": "Kubernetes cluster containers should only use allowed images",
+    "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/febd0533-8e55-448f-b837-bd0e06f16469",
+    "parameterFile": "allowed-images.parameters.json"
+  }
+]

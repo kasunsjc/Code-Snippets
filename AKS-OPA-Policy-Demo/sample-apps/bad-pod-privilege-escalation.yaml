@@ -1,0 +1,20 @@
+# Violates: deny-privilege-escalation (built-in policy 1c6e92c9-...)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-privilege-escalation
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        allowPrivilegeEscalation: true
+        readOnlyRootFilesystem: true

@@ -1,0 +1,5 @@
+location            = "northeurope"
+resource_group_name = "rg-aks-opa-policy-demo"
+cluster_name        = "aks-opa-policy-demo"
+node_vm_size        = "Standard_D2s_v5"
+node_count          = 3

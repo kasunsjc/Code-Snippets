@@ -1,0 +1,16 @@
+# Violates: require-team-labels (custom OPA/Rego policy) - missing required labels
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-missing-labels
+  namespace: workloads
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        readOnlyRootFilesystem: true

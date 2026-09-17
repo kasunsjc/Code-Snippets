@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: workloads
+---
+# Compliant with every policy assigned in this demo:
+# non-privileged, no privilege escalation, no host namespaces, read-only root
+# filesystem, resource limits set, required labels present, allowed image, and
+# not in the default namespace.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-nginx
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true

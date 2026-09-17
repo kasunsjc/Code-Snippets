@@ -1,0 +1,72 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes pods should have required team and environment labels",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Demonstrates authoring a custom OPA/Rego-backed Azure Policy definition for AKS. Uses the open-source Gatekeeper library's K8sRequiredLabels ConstraintTemplate (https://github.com/open-policy-agent/gatekeeper-library) to require that every Pod carries the labels supplied in the 'labels' parameter (for example 'team' and 'environment'). The Azure Policy add-on downloads the referenced ConstraintTemplate and syncs it to the cluster as a Gatekeeper CRD.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
+        },
+        "allowedValues": ["audit", "deny", "disabled"],
+        "defaultValue": "audit"
+      },
+      "labels": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Required labels",
+          "description": "A list of objects, each with a 'key' (the required label name) and an optional 'allowedRegex' the label's value must match."
+        },
+        "defaultValue": [
+          { "key": "team" },
+          { "key": "environment" }
+        ]
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "List of Kubernetes namespaces to include in policy evaluation. An empty list means all namespaces not explicitly excluded."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "List of Kubernetes namespaces to exclude from policy evaluation."
+        },
+        "defaultValue": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": ["Microsoft.Kubernetes.Data"]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "PublicURL",
+            "url": "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/requiredlabels/template.yaml"
+          },
+          "apiGroups": [""],
+          "kinds": ["Pod"],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {
+            "labels": "[parameters('labels')]"
+          }
+        }
+      }
+    }
+  }
+}

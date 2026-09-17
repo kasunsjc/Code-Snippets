@@ -1,0 +1,15 @@
+# Violates: require-resource-limits (built-in policy e345eecc-...) - no cpu/memory limits set
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-no-resource-limits
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      securityContext:
+        readOnlyRootFilesystem: true

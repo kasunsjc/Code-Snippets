@@ -1,0 +1,20 @@
+# Violates: deny-privileged-containers (built-in policy 95edb821-...)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-privileged
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        privileged: true
+        readOnlyRootFilesystem: true

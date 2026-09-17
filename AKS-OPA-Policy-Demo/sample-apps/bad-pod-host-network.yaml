@@ -1,0 +1,20 @@
+# Violates: deny-host-namespaces (built-in policy 47a1ee2f-...)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-host-network
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  hostNetwork: true
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        readOnlyRootFilesystem: true
