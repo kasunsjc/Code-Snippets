@@ -56,7 +56,8 @@
       "if": {
         "field": "type",
         "in": [
-          "Microsoft.Kubernetes.Data"
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
         ]
       },
       "then": {
