@@ -36,23 +36,32 @@ flowchart LR
 1. **Terraform** (`terraform/`) — a resource group, VNet/subnet, Log Analytics
    workspace, and an AKS cluster with `azure_policy_enabled = true` (Azure CNI
    Overlay + Azure network policy, Container Insights wired to Log Analytics).
-2. **Built-in Kubernetes policies** (`policies/builtin/`) — seven of Microsoft's
-   official, maintained Azure Policy definitions for Kubernetes, each backed by
-   an Azure-authored Gatekeeper constraint template:
-   - Deny privileged containers (CIS 5.2.1)
-   - Deny sharing of host PID/IPC/network namespaces (CIS 5.2.2/5.2.3)
-   - Deny container privilege escalation (CIS 5.2.5)
-   - Require a read-only root filesystem
-   - Require CPU/memory resource limits
-   - Deny use of the `default` namespace
-   - Allow only container images matching an approved registry pattern
-3. **One custom OPA/Rego policy** (`policies/custom/`) — a hand-authored Azure
-   Policy definition that wraps the open-source
-   [Gatekeeper library's `K8sRequiredLabels`](https://github.com/open-policy-agent/gatekeeper-library/blob/master/library/general/requiredlabels/template.yaml)
-   constraint template to require `team`/`environment` labels on every Pod —
-   showing the full workflow for writing and assigning your **own** OPA policy
-   through Azure Policy (not just built-ins).
-4. **Sample manifests** (`sample-apps/`) — one fully compliant pod and one
+2. **Eight fully custom, OPA/Rego-backed Azure Policy definitions**
+   (`policies/custom/`) — every policy in this demo is a complete, hand-authored
+   `Microsoft.Authorization/policyDefinitions` JSON body (not a reference to one
+   of Microsoft's built-in policy GUIDs), so you can see exactly how a custom
+   Kubernetes policy is put together end-to-end:
+   - `deny-privileged-containers` — blocks `securityContext.privileged: true` (CIS 5.2.1)
+   - `deny-host-namespaces` — blocks `hostPID`/`hostIPC` (CIS 5.2.2/5.2.3)
+   - `deny-privilege-escalation` — requires `allowPrivilegeEscalation: false` (CIS 5.2.5)
+   - `require-readonly-root-fs` — requires `readOnlyRootFilesystem: true`
+   - `require-resource-limits` — requires CPU/memory limits within bounds
+   - `allowed-repos` — only allows images from approved repository prefixes
+   - `deny-default-namespace` — blocks deploying into the `default` namespace
+   - `require-team-labels` — requires `team`/`environment` labels on every Pod
+
+   Each `*.definition.json` follows the same shape: `displayName`, `policyType:
+   Custom`, `mode: Microsoft.Kubernetes.Data`, a `parameters` schema (`effect`,
+   `namespaces`, `excludedNamespaces`, plus policy-specific parameters), and a
+   `policyRule` whose `details.templateInfo` points at the backing Gatekeeper
+   `ConstraintTemplate` (the actual OPA/Rego). Seven of the eight reference a
+   real, verified template from the open-source
+   [Gatekeeper library](https://github.com/open-policy-agent/gatekeeper-library)
+   via `sourceType: PublicURL`. `deny-default-namespace` has no equivalent in
+   the public library, so it demonstrates the other supported option —
+   `sourceType: Base64Encoded` — embedding a small, self-authored Rego
+   `ConstraintTemplate` directly in the JSON with no external dependency.
+3. **Sample manifests** (`sample-apps/`) — one fully compliant pod and one
    pod per policy that deliberately violates it, for testing.
 
 ## Prerequisites
@@ -109,13 +118,14 @@ az policy state list --resource-group <rg> --filter "PolicyDefinitionAction eq '
 
 ## Customizing
 
-- Edit the `imageRegex` parameter in
-  `policies/builtin/allowed-images.parameters.json` to match your own
-  container registry (for example your ACR login server).
+- Edit the `repos` parameter in `policies/custom/allowed-repos.parameters.json`
+  to match your own container registry (for example your ACR login server).
 - Edit `policies/custom/require-team-labels.parameters.json` to change which
   labels are required or their allowed values.
-- Add more policies by appending entries to `policies/builtin/manifest.json`
-  and a matching parameters file — `deploy.sh` will pick them up automatically.
+- Add a new policy by dropping a new `<name>.definition.json` +
+  `<name>.parameters.json` pair into `policies/custom/` — `deploy.sh` and
+  `cleanup.sh` both loop over every `*.definition.json` file automatically, so
+  no other script changes are needed.
 
 ## Cleanup
 
@@ -123,7 +133,7 @@ az policy state list --resource-group <rg> --filter "PolicyDefinitionAction eq '
 ./cleanup.sh
 ```
 
-Removes the policy assignments and the custom policy definition, then runs
+Removes every policy assignment and custom policy definition, then runs
 `terraform destroy` for the AKS infrastructure.
 
 ## References

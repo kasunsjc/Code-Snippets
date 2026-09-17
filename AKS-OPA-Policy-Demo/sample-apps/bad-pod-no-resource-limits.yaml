@@ -1,4 +1,4 @@
-# Violates: require-resource-limits (built-in policy e345eecc-...) - no cpu/memory limits set
+# Violates: require-resource-limits (custom policy, K8sContainerLimits) - no cpu/memory limits set
 apiVersion: v1
 kind: Pod
 metadata:

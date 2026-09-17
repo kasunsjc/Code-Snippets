@@ -1,4 +1,4 @@
-# Violates: deny-default-namespace (built-in policy 9f061a12-...) - deployed to "default"
+# Violates: deny-default-namespace (custom policy, self-authored K8sDenyDefaultNamespace) - deployed to "default"
 apiVersion: v1
 kind: Pod
 metadata:

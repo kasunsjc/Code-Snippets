@@ -1,0 +1,87 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes cluster containers should have CPU and memory limits within bounds",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA/Rego-backed Azure Policy definition. Wraps the open-source Gatekeeper library's K8sContainerLimits constraint template (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/containerlimits) to require containers set CPU/memory limits and cap them at the given maximums.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
+        },
+        "allowedValues": ["audit", "deny", "disabled"],
+        "defaultValue": "audit"
+      },
+      "cpu": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Maximum CPU limit",
+          "description": "The maximum allowed CPU limit on a container, exclusive. Set to '-1' to disable the CPU check."
+        },
+        "defaultValue": "1"
+      },
+      "memory": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Maximum memory limit",
+          "description": "The maximum allowed memory limit on a container, exclusive. Set to '-1' to disable the memory check."
+        },
+        "defaultValue": "1Gi"
+      },
+      "exemptImages": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Exempt images",
+          "description": "Container images (exact match, or prefix match ending in '*') excluded from enforcement."
+        },
+        "defaultValue": []
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "List of Kubernetes namespaces to include in policy evaluation. An empty list means all namespaces not explicitly excluded."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "List of Kubernetes namespaces to exclude from policy evaluation."
+        },
+        "defaultValue": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": ["Microsoft.Kubernetes.Data"]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "PublicURL",
+            "url": "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/containerlimits/template.yaml"
+          },
+          "apiGroups": [""],
+          "kinds": ["Pod"],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {
+            "cpu": "[parameters('cpu')]",
+            "memory": "[parameters('memory')]",
+            "exemptImages": "[parameters('exemptImages')]"
+          }
+        }
+      }
+    }
+  }
+}

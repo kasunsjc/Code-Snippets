@@ -1,4 +1,0 @@
-{
-  "effect": { "value": "audit" },
-  "imageRegex": { "value": "^(mcr\\.microsoft\\.com|docker\\.io/library)/.+$" }
-}

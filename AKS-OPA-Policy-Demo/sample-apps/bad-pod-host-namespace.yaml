@@ -1,14 +1,14 @@
-# Violates: deny-host-namespaces (built-in policy 47a1ee2f-...)
+# Violates: deny-host-namespaces (custom policy, K8sPSPHostNamespace checks hostPID/hostIPC)
 apiVersion: v1
 kind: Pod
 metadata:
-  name: bad-host-network
+  name: bad-host-namespace
   namespace: workloads
   labels:
     team: platform
     environment: dev
 spec:
-  hostNetwork: true
+  hostPID: true
   containers:
     - name: nginx
       image: docker.io/library/nginx:1.27-alpine

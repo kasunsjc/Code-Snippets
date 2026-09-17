@@ -1,4 +1,4 @@
-# Violates: deny-privileged-containers (built-in policy 95edb821-...)
+# Violates: deny-privileged-containers (custom policy, K8sPSPPrivilegedContainer)
 apiVersion: v1
 kind: Pod
 metadata:

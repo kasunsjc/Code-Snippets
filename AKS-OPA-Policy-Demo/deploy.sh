@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #
 # Deploys an AKS cluster with the Azure Policy add-on (Gatekeeper/OPA) enabled,
-# then assigns a curated set of built-in Kubernetes policies plus one custom
-# OPA/Rego-backed policy definition.
+# then creates and assigns a set of fully custom, OPA/Rego-backed Azure Policy
+# definitions (policies/custom/*.definition.json) - each one is a complete
+# Microsoft.Authorization/policyDefinitions JSON body demonstrating how to
+# author your own Kubernetes policy with Azure Policy for Kubernetes.
 #
 # Usage:
 #   ./deploy.sh            # assigns all policies with effect=audit (non-blocking)
@@ -59,50 +61,37 @@ echo -e "${GREEN}== Verifying Azure Policy add-on (azure-policy + gatekeeper pod
 kubectl get pods -n kube-system -l app=azure-policy || true
 kubectl get pods -n gatekeeper-system || true
 
-echo -e "${GREEN}== Assigning built-in Kubernetes policies (effect=${EFFECT}) ==${NC}"
-jq -c '.[]' policies/builtin/manifest.json | while read -r item; do
-  NAME=$(echo "$item" | jq -r '.assignmentName')
-  DISPLAY=$(echo "$item" | jq -r '.displayName')
-  DEFID=$(echo "$item" | jq -r '.policyDefinitionId')
-  PFILE=$(echo "$item" | jq -r '.parameterFile')
-  PARAMS=$(jq --arg effect "$EFFECT" '.effect.value = $effect' "policies/builtin/$PFILE")
+echo -e "${GREEN}== Creating and assigning custom OPA/Rego policy definitions (effect=${EFFECT}) ==${NC}"
+for DEFN_FILE in policies/custom/*.definition.json; do
+  NAME=$(basename "$DEFN_FILE" .definition.json)
+  PARAM_FILE="policies/custom/${NAME}.parameters.json"
 
-  echo -e "${YELLOW}  -> ${DISPLAY}${NC}"
+  RULES=$(jq -c '.properties.policyRule' "$DEFN_FILE")
+  PARAMS_SCHEMA=$(jq -c '.properties.parameters' "$DEFN_FILE")
+  DISPLAY_NAME=$(jq -r '.properties.displayName' "$DEFN_FILE")
+  DESCRIPTION=$(jq -r '.properties.description' "$DEFN_FILE")
+
+  echo -e "${YELLOW}  -> ${DISPLAY_NAME}${NC}"
+
+  az policy definition create \
+    --name "$NAME" \
+    --display-name "$DISPLAY_NAME" \
+    --description "$DESCRIPTION" \
+    --mode "Microsoft.Kubernetes.Data" \
+    --rules "$RULES" \
+    --params "$PARAMS_SCHEMA" \
+    --metadata category=Kubernetes version=1.0.0 \
+    --only-show-errors >/dev/null
+
+  ASSIGN_PARAMS=$(jq --arg effect "$EFFECT" '.effect.value = $effect' "$PARAM_FILE")
   az policy assignment create \
     --name "$NAME" \
-    --display-name "$DISPLAY" \
-    --policy "$DEFID" \
+    --display-name "$DISPLAY_NAME" \
+    --policy "$NAME" \
     --scope "$SCOPE" \
-    --params "$PARAMS" \
+    --params "$ASSIGN_PARAMS" \
     --only-show-errors >/dev/null
 done
-
-echo -e "${GREEN}== Creating custom OPA/Rego policy definition (require-team-labels) ==${NC}"
-DEFN_FILE="policies/custom/require-team-labels.definition.json"
-RULES=$(jq -c '.properties.policyRule' "$DEFN_FILE")
-PARAMS_SCHEMA=$(jq -c '.properties.parameters' "$DEFN_FILE")
-DISPLAY_NAME=$(jq -r '.properties.displayName' "$DEFN_FILE")
-DESCRIPTION=$(jq -r '.properties.description' "$DEFN_FILE")
-
-az policy definition create \
-  --name "require-team-labels" \
-  --display-name "$DISPLAY_NAME" \
-  --description "$DESCRIPTION" \
-  --mode "Microsoft.Kubernetes.Data" \
-  --rules "$RULES" \
-  --params "$PARAMS_SCHEMA" \
-  --metadata category=Kubernetes version=1.0.0 \
-  --only-show-errors >/dev/null
-
-echo -e "${GREEN}== Assigning custom policy (effect=${EFFECT}) ==${NC}"
-CUSTOM_PARAMS=$(jq --arg effect "$EFFECT" '.effect.value = $effect' policies/custom/require-team-labels.parameters.json)
-az policy assignment create \
-  --name "require-team-labels" \
-  --display-name "Require team/environment labels (custom OPA policy)" \
-  --policy "require-team-labels" \
-  --scope "$SCOPE" \
-  --params "$CUSTOM_PARAMS" \
-  --only-show-errors >/dev/null
 
 echo ""
 echo -e "${GREEN}== Done ==${NC}"

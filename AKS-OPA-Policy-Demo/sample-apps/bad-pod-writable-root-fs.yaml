@@ -1,4 +1,4 @@
-# Violates: require-readonly-root-fs (built-in policy df49d893-...)
+# Violates: require-readonly-root-fs (custom policy, K8sPSPReadOnlyRootFilesystem)
 apiVersion: v1
 kind: Pod
 metadata:

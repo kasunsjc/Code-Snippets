@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Removes the policy assignments, the custom policy definition, and destroys
-# the Terraform-managed AKS infrastructure created by deploy.sh.
+# Removes the custom policy assignments and definitions, and destroys the
+# Terraform-managed AKS infrastructure created by deploy.sh.
 
 set -euo pipefail
 
@@ -25,15 +25,13 @@ if az account show >/dev/null 2>&1 && [[ -d terraform/.terraform ]]; then
     SUBSCRIPTION_ID=$(az account show --query id -o tsv)
     SCOPE="/subscriptions/${SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}"
 
-    echo -e "${GREEN}== Removing built-in policy assignments ==${NC}"
-    jq -r '.[].assignmentName' policies/builtin/manifest.json | while read -r NAME; do
+    echo -e "${GREEN}== Removing custom policy assignments and definitions ==${NC}"
+    for DEFN_FILE in policies/custom/*.definition.json; do
+      NAME=$(basename "$DEFN_FILE" .definition.json)
       echo -e "${YELLOW}  -> ${NAME}${NC}"
       az policy assignment delete --name "$NAME" --scope "$SCOPE" --only-show-errors 2>/dev/null || true
+      az policy definition delete --name "$NAME" --only-show-errors 2>/dev/null || true
     done
-
-    echo -e "${GREEN}== Removing custom policy assignment and definition ==${NC}"
-    az policy assignment delete --name "require-team-labels" --scope "$SCOPE" --only-show-errors 2>/dev/null || true
-    az policy definition delete --name "require-team-labels" --only-show-errors 2>/dev/null || true
   fi
 fi
 

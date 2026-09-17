@@ -1,0 +1,5 @@
+{
+  "effect": { "value": "audit" },
+  "namespaces": { "value": [] },
+  "excludedNamespaces": { "value": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"] }
+}

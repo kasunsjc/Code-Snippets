@@ -1,4 +1,4 @@
-# Violates: deny-privilege-escalation (built-in policy 1c6e92c9-...)
+# Violates: deny-privilege-escalation (custom policy, K8sPSPAllowPrivilegeEscalationContainer)
 apiVersion: v1
 kind: Pod
 metadata:

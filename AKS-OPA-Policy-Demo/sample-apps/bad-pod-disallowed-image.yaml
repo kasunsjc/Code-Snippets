@@ -1,4 +1,4 @@
-# Violates: allowed-container-images (built-in policy febd0533-...) - image doesn't match imageRegex
+# Violates: allowed-repos (custom policy, K8sAllowedRepos) - image doesn't start with an allowed repo prefix
 apiVersion: v1
 kind: Pod
 metadata:

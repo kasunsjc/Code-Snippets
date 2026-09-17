@@ -1,5 +1,0 @@
-{
-  "effect": { "value": "audit" },
-  "cpuLimit": { "value": "500m" },
-  "memoryLimit": { "value": "512Mi" }
-}
