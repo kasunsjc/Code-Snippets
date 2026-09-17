@@ -53,14 +53,18 @@ flowchart LR
    Each `*.definition.json` follows the same shape: `displayName`, `policyType:
    Custom`, `mode: Microsoft.Kubernetes.Data`, a `parameters` schema (`effect`,
    `namespaces`, `excludedNamespaces`, plus policy-specific parameters), and a
-   `policyRule` whose `details.templateInfo` points at the backing Gatekeeper
-   `ConstraintTemplate` (the actual OPA/Rego). Seven of the eight reference a
-   real, verified template from the open-source
-   [Gatekeeper library](https://github.com/open-policy-agent/gatekeeper-library)
-   via `sourceType: PublicURL`. `deny-default-namespace` has no equivalent in
-   the public library, so it demonstrates the other supported option —
-   `sourceType: Base64Encoded` — embedding a small, self-authored Rego
-   `ConstraintTemplate` directly in the JSON with no external dependency.
+   `policyRule` whose `details.templateInfo` embeds the backing Gatekeeper
+   `ConstraintTemplate` (the actual OPA/Rego) directly via
+   `sourceType: Base64Encoded` — there is **no runtime dependency on any
+   external URL**. The human-readable source for each ConstraintTemplate lives
+   in `policies/custom/templates/*.yaml`; see
+   [`policies/custom/templates/README.md`](policies/custom/templates/README.md)
+   for a full walkthrough of the ConstraintTemplate CRD anatomy and how each
+   field maps into the Azure Policy JSON. Seven of the eight templates are
+   copied verbatim (Rego unchanged) from the official, community-maintained
+   [Gatekeeper library](https://github.com/open-policy-agent/gatekeeper-library);
+   `deny-default-namespace` has no equivalent there, so it is fully
+   self-authored to demonstrate writing your own Rego from scratch.
 3. **Sample manifests** (`sample-apps/`) — one fully compliant pod and one
    pod per policy that deliberately violates it, for testing.
 

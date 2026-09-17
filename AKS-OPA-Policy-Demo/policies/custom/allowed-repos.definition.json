@@ -3,7 +3,7 @@
     "displayName": "[Custom] Kubernetes cluster containers should only use allowed image repositories",
     "policyType": "Custom",
     "mode": "Microsoft.Kubernetes.Data",
-    "description": "Custom OPA/Rego-backed Azure Policy definition. Wraps the open-source Gatekeeper library's K8sAllowedRepos constraint template (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/allowedrepos) to require every container image start with one of the allowed repository prefixes.",
+    "description": "Custom OPA/Rego-backed Azure Policy definition. Embeds a copy of the open-source Gatekeeper library's K8sAllowedRepos ConstraintTemplate (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/allowedrepos) to require every container image start with one of the allowed repository prefixes.",
     "metadata": {
       "version": "1.0.0",
       "category": "Kubernetes"
@@ -15,7 +15,11 @@
           "displayName": "Effect",
           "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
         },
-        "allowedValues": ["audit", "deny", "disabled"],
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
         "defaultValue": "audit"
       },
       "repos": {
@@ -24,7 +28,10 @@
           "displayName": "Allowed repository prefixes",
           "description": "List of image repository prefixes a container image is allowed to start with, e.g. 'mcr.microsoft.com/' or 'docker.io/library/'."
         },
-        "defaultValue": ["mcr.microsoft.com/", "docker.io/library/"]
+        "defaultValue": [
+          "mcr.microsoft.com/",
+          "docker.io/library/"
+        ]
       },
       "namespaces": {
         "type": "Array",
@@ -40,23 +47,34 @@
           "displayName": "Namespace exclusions",
           "description": "List of Kubernetes namespaces to exclude from policy evaluation."
         },
-        "defaultValue": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"]
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
       }
     },
     "policyRule": {
       "if": {
         "field": "type",
-        "in": ["Microsoft.Kubernetes.Data"]
+        "in": [
+          "Microsoft.Kubernetes.Data"
+        ]
       },
       "then": {
         "effect": "[parameters('effect')]",
         "details": {
           "templateInfo": {
-            "sourceType": "PublicURL",
-            "url": "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/allowedrepos/template.yaml"
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2FsbG93ZWRyZXBvcwogIGFubm90YXRpb25zOgogICAgbWV0YWRhdGEuZ2F0ZWtlZXBlci5zaC90aXRsZTogIkFsbG93ZWQgUmVwb3NpdG9yaWVzIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIFJlcXVpcmVzIGNvbnRhaW5lciBpbWFnZXMgdG8gYmVnaW4gd2l0aCBhIHN0cmluZyBmcm9tIHRoZSBzcGVjaWZpZWQKICAgICAgbGlzdC4gVG8gcHJldmVudCBieXBhc3NlcywgZW5zdXJlIGEgJy8nIGlzIGFkZGVkIHdoZW4gc3BlY2lmeWluZwogICAgICBEb2NrZXJIdWIgcmVwb3NpdG9yaWVzIG9yIGN1c3RvbSByZWdpc3RyaWVzLgpzcGVjOgogIGNyZDoKICAgIHNwZWM6CiAgICAgIG5hbWVzOgogICAgICAgIGtpbmQ6IEs4c0FsbG93ZWRSZXBvcwogICAgICB2YWxpZGF0aW9uOgogICAgICAgIG9wZW5BUElWM1NjaGVtYToKICAgICAgICAgIHR5cGU6IG9iamVjdAogICAgICAgICAgcHJvcGVydGllczoKICAgICAgICAgICAgcmVwb3M6CiAgICAgICAgICAgICAgZGVzY3JpcHRpb246IFRoZSBsaXN0IG9mIHByZWZpeGVzIGEgY29udGFpbmVyIGltYWdlIGlzIGFsbG93ZWQgdG8gaGF2ZS4KICAgICAgICAgICAgICB0eXBlOiBhcnJheQogICAgICAgICAgICAgIGl0ZW1zOgogICAgICAgICAgICAgICAgdHlwZTogc3RyaW5nCiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzYWxsb3dlZHJlcG9zCgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGNvbnRhaW5lciA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuY29udGFpbmVyc1tfXQogICAgICAgICAgbm90IHN0cmluZ3MuYW55X3ByZWZpeF9tYXRjaChjb250YWluZXIuaW1hZ2UsIGlucHV0LnBhcmFtZXRlcnMucmVwb3MpCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiY29udGFpbmVyIDwldj4gaGFzIGFuIGludmFsaWQgaW1hZ2UgcmVwbyA8JXY+LCBhbGxvd2VkIHJlcG9zIGFyZSAldiIsIFtjb250YWluZXIubmFtZSwgY29udGFpbmVyLmltYWdlLCBpbnB1dC5wYXJhbWV0ZXJzLnJlcG9zXSkKICAgICAgICB9CgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGNvbnRhaW5lciA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuaW5pdENvbnRhaW5lcnNbX10KICAgICAgICAgIG5vdCBzdHJpbmdzLmFueV9wcmVmaXhfbWF0Y2goY29udGFpbmVyLmltYWdlLCBpbnB1dC5wYXJhbWV0ZXJzLnJlcG9zKQogICAgICAgICAgbXNnIDo9IHNwcmludGYoImluaXRDb250YWluZXIgPCV2PiBoYXMgYW4gaW52YWxpZCBpbWFnZSByZXBvIDwldj4sIGFsbG93ZWQgcmVwb3MgYXJlICV2IiwgW2NvbnRhaW5lci5uYW1lLCBjb250YWluZXIuaW1hZ2UsIGlucHV0LnBhcmFtZXRlcnMucmVwb3NdKQogICAgICAgIH0KCiAgICAgICAgdmlvbGF0aW9uW3sibXNnIjogbXNnfV0gewogICAgICAgICAgY29udGFpbmVyIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5lcGhlbWVyYWxDb250YWluZXJzW19dCiAgICAgICAgICBub3Qgc3RyaW5ncy5hbnlfcHJlZml4X21hdGNoKGNvbnRhaW5lci5pbWFnZSwgaW5wdXQucGFyYW1ldGVycy5yZXBvcykKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJlcGhlbWVyYWxDb250YWluZXIgPCV2PiBoYXMgYW4gaW52YWxpZCBpbWFnZSByZXBvIDwldj4sIGFsbG93ZWQgcmVwb3MgYXJlICV2IiwgW2NvbnRhaW5lci5uYW1lLCBjb250YWluZXIuaW1hZ2UsIGlucHV0LnBhcmFtZXRlcnMucmVwb3NdKQogICAgICAgIH0K"
           },
-          "apiGroups": [""],
-          "kinds": ["Pod"],
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
           "namespaces": "[parameters('namespaces')]",
           "excludedNamespaces": "[parameters('excludedNamespaces')]",
           "values": {

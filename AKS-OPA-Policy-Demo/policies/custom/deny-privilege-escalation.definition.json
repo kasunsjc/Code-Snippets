@@ -3,7 +3,7 @@
     "displayName": "[Custom] Kubernetes cluster containers should not allow privilege escalation",
     "policyType": "Custom",
     "mode": "Microsoft.Kubernetes.Data",
-    "description": "Custom OPA/Rego-backed Azure Policy definition. Wraps the open-source Gatekeeper library's K8sPSPAllowPrivilegeEscalationContainer constraint template (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/allow-privilege-escalation) to block containers that omit securityContext.allowPrivilegeEscalation=false.",
+    "description": "Custom OPA/Rego-backed Azure Policy definition. Embeds a copy of the open-source Gatekeeper library's K8sPSPAllowPrivilegeEscalationContainer ConstraintTemplate (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/allow-privilege-escalation) to block containers that omit securityContext.allowPrivilegeEscalation=false.",
     "metadata": {
       "version": "1.0.0",
       "category": "Kubernetes"
@@ -15,7 +15,11 @@
           "displayName": "Effect",
           "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
         },
-        "allowedValues": ["audit", "deny", "disabled"],
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
         "defaultValue": "audit"
       },
       "exemptImages": {
@@ -40,23 +44,34 @@
           "displayName": "Namespace exclusions",
           "description": "List of Kubernetes namespaces to exclude from policy evaluation."
         },
-        "defaultValue": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"]
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
       }
     },
     "policyRule": {
       "if": {
         "field": "type",
-        "in": ["Microsoft.Kubernetes.Data"]
+        "in": [
+          "Microsoft.Kubernetes.Data"
+        ]
       },
       "then": {
         "effect": "[parameters('effect')]",
         "details": {
           "templateInfo": {
-            "sourceType": "PublicURL",
-            "url": "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/pod-security-policy/allow-privilege-escalation/template.yaml"
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c3BzcGFsbG93cHJpdmlsZWdlZXNjYWxhdGlvbmNvbnRhaW5lcgogIGFubm90YXRpb25zOgogICAgbWV0YWRhdGEuZ2F0ZWtlZXBlci5zaC90aXRsZTogIkFsbG93IFByaXZpbGVnZSBFc2NhbGF0aW9uIGluIENvbnRhaW5lciIKICAgIGRlc2NyaXB0aW9uOiA+LQogICAgICBDb250cm9scyByZXN0cmljdGluZyBlc2NhbGF0aW9uIHRvIHJvb3QgcHJpdmlsZWdlcy4gQ29ycmVzcG9uZHMgdG8gdGhlCiAgICAgIGBhbGxvd1ByaXZpbGVnZUVzY2FsYXRpb25gIGZpZWxkIGluIGEgUG9kU2VjdXJpdHlQb2xpY3kuCnNwZWM6CiAgY3JkOgogICAgc3BlYzoKICAgICAgbmFtZXM6CiAgICAgICAga2luZDogSzhzUFNQQWxsb3dQcml2aWxlZ2VFc2NhbGF0aW9uQ29udGFpbmVyCiAgICAgIHZhbGlkYXRpb246CiAgICAgICAgb3BlbkFQSVYzU2NoZW1hOgogICAgICAgICAgdHlwZTogb2JqZWN0CiAgICAgICAgICBwcm9wZXJ0aWVzOgogICAgICAgICAgICBleGVtcHRJbWFnZXM6CiAgICAgICAgICAgICAgZGVzY3JpcHRpb246ID4tCiAgICAgICAgICAgICAgICBBbnkgY29udGFpbmVyIHRoYXQgdXNlcyBhbiBpbWFnZSB0aGF0IG1hdGNoZXMgYW4gZW50cnkgaW4KICAgICAgICAgICAgICAgIHRoaXMgbGlzdCB3aWxsIGJlIGV4Y2x1ZGVkIGZyb20gZW5mb3JjZW1lbnQuIFByZWZpeC1tYXRjaGluZwogICAgICAgICAgICAgICAgY2FuIGJlIHNpZ25pZmllZCB3aXRoICcqJywgZS5nLiAnbXktaW1hZ2UtKicuCiAgICAgICAgICAgICAgdHlwZTogYXJyYXkKICAgICAgICAgICAgICBpdGVtczoKICAgICAgICAgICAgICAgIHR5cGU6IHN0cmluZwogIHRhcmdldHM6CiAgICAtIHRhcmdldDogYWRtaXNzaW9uLms4cy5nYXRla2VlcGVyLnNoCiAgICAgIHJlZ286IHwKICAgICAgICBwYWNrYWdlIGs4c3BzcGFsbG93cHJpdmlsZWdlZXNjYWxhdGlvbmNvbnRhaW5lcgoKICAgICAgICBpbXBvcnQgZGF0YS5saWIuZXhjbHVkZV91cGRhdGUuaXNfdXBkYXRlCiAgICAgICAgaW1wb3J0IGRhdGEubGliLmV4ZW1wdF9jb250YWluZXIuaXNfZXhlbXB0CgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZywgImRldGFpbHMiOiB7fX1dIHsKICAgICAgICAgICMgc3BlYy5jb250YWluZXJzLnNlY3VyaXR5Q29udGV4dC5hbGxvd1ByaXZpbGVnZUVzY2FsYXRpb24gZmllbGQgaXMgaW1tdXRhYmxlLgogICAgICAgICAgbm90IGlzX3VwZGF0ZShpbnB1dC5yZXZpZXcpCgogICAgICAgICAgYyA6PSBpbnB1dF9jb250YWluZXJzW19dCiAgICAgICAgICBub3QgaXNfZXhlbXB0KGMpCiAgICAgICAgICBpbnB1dF9hbGxvd19wcml2aWxlZ2VfZXNjYWxhdGlvbihjKQogICAgICAgICAgbXNnIDo9IHNwcmludGYoIlByaXZpbGVnZSBlc2NhbGF0aW9uIGNvbnRhaW5lciBpcyBub3QgYWxsb3dlZDogJXYiLCBbYy5uYW1lXSkKICAgICAgICB9CgogICAgICAgIGlucHV0X2FsbG93X3ByaXZpbGVnZV9lc2NhbGF0aW9uKGMpIHsKICAgICAgICAgIG5vdCBoYXNfZmllbGQoYywgInNlY3VyaXR5Q29udGV4dCIpCiAgICAgICAgfQogICAgICAgIGlucHV0X2FsbG93X3ByaXZpbGVnZV9lc2NhbGF0aW9uKGMpIHsKICAgICAgICAgIG5vdCBjLnNlY3VyaXR5Q29udGV4dC5hbGxvd1ByaXZpbGVnZUVzY2FsYXRpb24gPT0gZmFsc2UKICAgICAgICB9CiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5jb250YWluZXJzW19dCiAgICAgICAgfQogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuaW5pdENvbnRhaW5lcnNbX10KICAgICAgICB9CiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5lcGhlbWVyYWxDb250YWluZXJzW19dCiAgICAgICAgfQogICAgICAgICMgaGFzX2ZpZWxkIHJldHVybnMgd2hldGhlciBhbiBvYmplY3QgaGFzIGEgZmllbGQKICAgICAgICBoYXNfZmllbGQob2JqZWN0LCBmaWVsZCkgPSB0cnVlIHsKICAgICAgICAgIG9iamVjdFtmaWVsZF0KICAgICAgICB9CiAgICAgIGxpYnM6CiAgICAgICAgLSB8CiAgICAgICAgICBwYWNrYWdlIGxpYi5leGNsdWRlX3VwZGF0ZQoKICAgICAgICAgIGlzX3VwZGF0ZShyZXZpZXcpIHsKICAgICAgICAgICAgcmV2aWV3Lm9wZXJhdGlvbiA9PSAiVVBEQVRFIgogICAgICAgICAgfQogICAgICAgIC0gfAogICAgICAgICAgcGFja2FnZSBsaWIuZXhlbXB0X2NvbnRhaW5lcgoKICAgICAgICAgIGlzX2V4ZW1wdChjb250YWluZXIpIHsKICAgICAgICAgICAgZXhlbXB0X2ltYWdlcyA6PSBvYmplY3QuZ2V0KG9iamVjdC5nZXQoaW5wdXQsICJwYXJhbWV0ZXJzIiwge30pLCAiZXhlbXB0SW1hZ2VzIiwgW10pCiAgICAgICAgICAgIGltZyA6PSBjb250YWluZXIuaW1hZ2UKICAgICAgICAgICAgZXhlbXB0aW9uIDo9IGV4ZW1wdF9pbWFnZXNbX10KICAgICAgICAgICAgX21hdGNoZXNfZXhlbXB0aW9uKGltZywgZXhlbXB0aW9uKQogICAgICAgICAgfQoKICAgICAgICAgIF9tYXRjaGVzX2V4ZW1wdGlvbihpbWcsIGV4ZW1wdGlvbikgewogICAgICAgICAgICBub3QgZW5kc3dpdGgoZXhlbXB0aW9uLCAiKiIpCiAgICAgICAgICAgIGV4ZW1wdGlvbiA9PSBpbWcKICAgICAgICAgIH0KCiAgICAgICAgICBfbWF0Y2hlc19leGVtcHRpb24oaW1nLCBleGVtcHRpb24pIHsKICAgICAgICAgICAgZW5kc3dpdGgoZXhlbXB0aW9uLCAiKiIpCiAgICAgICAgICAgIHByZWZpeCA6PSB0cmltX3N1ZmZpeChleGVtcHRpb24sICIqIikKICAgICAgICAgICAgc3RhcnRzd2l0aChpbWcsIHByZWZpeCkKICAgICAgICAgIH0K"
           },
-          "apiGroups": [""],
-          "kinds": ["Pod"],
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
           "namespaces": "[parameters('namespaces')]",
           "excludedNamespaces": "[parameters('excludedNamespaces')]",
           "values": {

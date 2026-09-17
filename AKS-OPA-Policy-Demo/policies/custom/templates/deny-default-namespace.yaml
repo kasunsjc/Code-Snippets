@@ -1,0 +1,29 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenydefaultnamespace
+  annotations:
+    metadata.gatekeeper.sh/title: "Deny Default Namespace"
+    description: >-
+      Disallows creating namespaced resources in the 'default' namespace.
+      Self-authored template (not from the public Gatekeeper library) to
+      demonstrate writing your own Rego from scratch and embedding it
+      directly in an Azure Policy definition via
+      templateInfo.sourceType=Base64Encoded.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyDefaultNamespace
+      validation:
+        openAPIV3Schema:
+          type: object
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenydefaultnamespace
+
+        violation[{"msg": msg}] {
+          input.review.object.metadata.namespace == "default"
+          msg := sprintf("resources must not be deployed to the 'default' namespace: %v", [input.review.object.metadata.name])
+        }

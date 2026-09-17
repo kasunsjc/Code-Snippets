@@ -3,7 +3,7 @@
     "displayName": "[Custom] Kubernetes cluster containers should not share the host PID or IPC namespace",
     "policyType": "Custom",
     "mode": "Microsoft.Kubernetes.Data",
-    "description": "Custom OPA/Rego-backed Azure Policy definition. Wraps the open-source Gatekeeper library's K8sPSPHostNamespace constraint template (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/host-namespaces) to block pods that set hostPID or hostIPC to true.",
+    "description": "Custom OPA/Rego-backed Azure Policy definition. Embeds a copy of the open-source Gatekeeper library's K8sPSPHostNamespace ConstraintTemplate (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/pod-security-policy/host-namespaces) to block pods that set hostPID or hostIPC to true.",
     "metadata": {
       "version": "1.0.0",
       "category": "Kubernetes"
@@ -15,7 +15,11 @@
           "displayName": "Effect",
           "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
         },
-        "allowedValues": ["audit", "deny", "disabled"],
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
         "defaultValue": "audit"
       },
       "namespaces": {
@@ -32,23 +36,34 @@
           "displayName": "Namespace exclusions",
           "description": "List of Kubernetes namespaces to exclude from policy evaluation."
         },
-        "defaultValue": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"]
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
       }
     },
     "policyRule": {
       "if": {
         "field": "type",
-        "in": ["Microsoft.Kubernetes.Data"]
+        "in": [
+          "Microsoft.Kubernetes.Data"
+        ]
       },
       "then": {
         "effect": "[parameters('effect')]",
         "details": {
           "templateInfo": {
-            "sourceType": "PublicURL",
-            "url": "https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/pod-security-policy/host-namespaces/template.yaml"
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c3BzcGhvc3RuYW1lc3BhY2UKICBhbm5vdGF0aW9uczoKICAgIG1ldGFkYXRhLmdhdGVrZWVwZXIuc2gvdGl0bGU6ICJIb3N0IE5hbWVzcGFjZSIKICAgIGRlc2NyaXB0aW9uOiA+LQogICAgICBEaXNhbGxvd3Mgc2hhcmluZyBvZiBob3N0IFBJRCBhbmQgSVBDIG5hbWVzcGFjZXMgYnkgcG9kIGNvbnRhaW5lcnMuCiAgICAgIENvcnJlc3BvbmRzIHRvIHRoZSBgaG9zdFBJRGAgYW5kIGBob3N0SVBDYCBmaWVsZHMgaW4gYSBQb2RTZWN1cml0eVBvbGljeS4Kc3BlYzoKICBjcmQ6CiAgICBzcGVjOgogICAgICBuYW1lczoKICAgICAgICBraW5kOiBLOHNQU1BIb3N0TmFtZXNwYWNlCiAgICAgIHZhbGlkYXRpb246CiAgICAgICAgb3BlbkFQSVYzU2NoZW1hOgogICAgICAgICAgdHlwZTogb2JqZWN0CiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzcHNwaG9zdG5hbWVzcGFjZQoKICAgICAgICBpbXBvcnQgZGF0YS5saWIuZXhjbHVkZV91cGRhdGUuaXNfdXBkYXRlCgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZywgImRldGFpbHMiOiB7fX1dIHsKICAgICAgICAgICMgc3BlYy5ob3N0UElEIGFuZCBzcGVjLmhvc3RJUEMgZmllbGRzIGFyZSBpbW11dGFibGUuCiAgICAgICAgICBub3QgaXNfdXBkYXRlKGlucHV0LnJldmlldykKCiAgICAgICAgICBpbnB1dF9zaGFyZV9ob3N0bmFtZXNwYWNlKGlucHV0LnJldmlldy5vYmplY3QpCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiU2hhcmluZyB0aGUgaG9zdCBuYW1lc3BhY2UgaXMgbm90IGFsbG93ZWQ6ICV2IiwgW2lucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZV0pCiAgICAgICAgfQoKICAgICAgICBpbnB1dF9zaGFyZV9ob3N0bmFtZXNwYWNlKG8pIHsKICAgICAgICAgIG8uc3BlYy5ob3N0UElECiAgICAgICAgfQogICAgICAgIGlucHV0X3NoYXJlX2hvc3RuYW1lc3BhY2UobykgewogICAgICAgICAgby5zcGVjLmhvc3RJUEMKICAgICAgICB9CiAgICAgIGxpYnM6CiAgICAgICAgLSB8CiAgICAgICAgICBwYWNrYWdlIGxpYi5leGNsdWRlX3VwZGF0ZQoKICAgICAgICAgIGlzX3VwZGF0ZShyZXZpZXcpIHsKICAgICAgICAgICAgcmV2aWV3Lm9wZXJhdGlvbiA9PSAiVVBEQVRFIgogICAgICAgICAgfQo="
           },
-          "apiGroups": [""],
-          "kinds": ["Pod"],
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
           "namespaces": "[parameters('namespaces')]",
           "excludedNamespaces": "[parameters('excludedNamespaces')]"
         }

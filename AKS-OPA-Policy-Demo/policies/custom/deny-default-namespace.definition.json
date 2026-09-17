@@ -15,7 +15,11 @@
           "displayName": "Effect",
           "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
         },
-        "allowedValues": ["audit", "deny", "disabled"],
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
         "defaultValue": "audit"
       },
       "namespaces": {
@@ -32,23 +36,34 @@
           "displayName": "Namespace exclusions",
           "description": "List of Kubernetes namespaces to exclude from policy evaluation. 'default' is intentionally NOT in this list, since it is the namespace this policy targets."
         },
-        "defaultValue": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"]
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
       }
     },
     "policyRule": {
       "if": {
         "field": "type",
-        "in": ["Microsoft.Kubernetes.Data"]
+        "in": [
+          "Microsoft.Kubernetes.Data"
+        ]
       },
       "then": {
         "effect": "[parameters('effect')]",
         "details": {
           "templateInfo": {
             "sourceType": "Base64Encoded",
-            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2RlbnlkZWZhdWx0bmFtZXNwYWNlCiAgYW5ub3RhdGlvbnM6CiAgICBtZXRhZGF0YS5nYXRla2VlcGVyLnNoL3RpdGxlOiAiRGVueSBEZWZhdWx0IE5hbWVzcGFjZSIKICAgIGRlc2NyaXB0aW9uOiA+LQogICAgICBEaXNhbGxvd3MgY3JlYXRpbmcgbmFtZXNwYWNlZCByZXNvdXJjZXMgaW4gdGhlICdkZWZhdWx0JyBuYW1lc3BhY2UuCiAgICAgIFNlbGYtYXV0aG9yZWQgdGVtcGxhdGUgKG5vdCBmcm9tIHRoZSBwdWJsaWMgR2F0ZWtlZXBlciBsaWJyYXJ5KSB0bwogICAgICBkZW1vbnN0cmF0ZSBlbWJlZGRpbmcgeW91ciBvd24gUmVnbyBkaXJlY3RseSBpbiBhbiBBenVyZSBQb2xpY3kKICAgICAgZGVmaW5pdGlvbiB2aWEgdGVtcGxhdGVJbmZvLnNvdXJjZVR5cGU9QmFzZTY0RW5jb2RlZC4Kc3BlYzoKICBjcmQ6CiAgICBzcGVjOgogICAgICBuYW1lczoKICAgICAgICBraW5kOiBLOHNEZW55RGVmYXVsdE5hbWVzcGFjZQogICAgICB2YWxpZGF0aW9uOgogICAgICAgIG9wZW5BUElWM1NjaGVtYToKICAgICAgICAgIHR5cGU6IG9iamVjdAogIHRhcmdldHM6CiAgICAtIHRhcmdldDogYWRtaXNzaW9uLms4cy5nYXRla2VlcGVyLnNoCiAgICAgIHJlZ286IHwKICAgICAgICBwYWNrYWdlIGs4c2RlbnlkZWZhdWx0bmFtZXNwYWNlCgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGlucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZXNwYWNlID09ICJkZWZhdWx0IgogICAgICAgICAgbXNnIDo9IHNwcmludGYoInJlc291cmNlcyBtdXN0IG5vdCBiZSBkZXBsb3llZCB0byB0aGUgJ2RlZmF1bHQnIG5hbWVzcGFjZTogJXYiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lXSkKICAgICAgICB9Cg=="
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2RlbnlkZWZhdWx0bmFtZXNwYWNlCiAgYW5ub3RhdGlvbnM6CiAgICBtZXRhZGF0YS5nYXRla2VlcGVyLnNoL3RpdGxlOiAiRGVueSBEZWZhdWx0IE5hbWVzcGFjZSIKICAgIGRlc2NyaXB0aW9uOiA+LQogICAgICBEaXNhbGxvd3MgY3JlYXRpbmcgbmFtZXNwYWNlZCByZXNvdXJjZXMgaW4gdGhlICdkZWZhdWx0JyBuYW1lc3BhY2UuCiAgICAgIFNlbGYtYXV0aG9yZWQgdGVtcGxhdGUgKG5vdCBmcm9tIHRoZSBwdWJsaWMgR2F0ZWtlZXBlciBsaWJyYXJ5KSB0bwogICAgICBkZW1vbnN0cmF0ZSB3cml0aW5nIHlvdXIgb3duIFJlZ28gZnJvbSBzY3JhdGNoIGFuZCBlbWJlZGRpbmcgaXQKICAgICAgZGlyZWN0bHkgaW4gYW4gQXp1cmUgUG9saWN5IGRlZmluaXRpb24gdmlhCiAgICAgIHRlbXBsYXRlSW5mby5zb3VyY2VUeXBlPUJhc2U2NEVuY29kZWQuCnNwZWM6CiAgY3JkOgogICAgc3BlYzoKICAgICAgbmFtZXM6CiAgICAgICAga2luZDogSzhzRGVueURlZmF1bHROYW1lc3BhY2UKICAgICAgdmFsaWRhdGlvbjoKICAgICAgICBvcGVuQVBJVjNTY2hlbWE6CiAgICAgICAgICB0eXBlOiBvYmplY3QKICB0YXJnZXRzOgogICAgLSB0YXJnZXQ6IGFkbWlzc2lvbi5rOHMuZ2F0ZWtlZXBlci5zaAogICAgICByZWdvOiB8CiAgICAgICAgcGFja2FnZSBrOHNkZW55ZGVmYXVsdG5hbWVzcGFjZQoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2d9XSB7CiAgICAgICAgICBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSA9PSAiZGVmYXVsdCIKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJyZXNvdXJjZXMgbXVzdCBub3QgYmUgZGVwbG95ZWQgdG8gdGhlICdkZWZhdWx0JyBuYW1lc3BhY2U6ICV2IiwgW2lucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZV0pCiAgICAgICAgfQo="
           },
-          "apiGroups": [""],
-          "kinds": ["Pod"],
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
           "namespaces": "[parameters('namespaces')]",
           "excludedNamespaces": "[parameters('excludedNamespaces')]"
         }
