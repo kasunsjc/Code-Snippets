@@ -39,23 +39,37 @@ flowchart LR
 - **Fourteen fully custom, OPA/Rego-backed Azure Policy definitions**
    (`policies/custom/`) — every policy in this demo is a complete, hand-authored
    `Microsoft.Authorization/policyDefinitions` JSON body (not a reference to one
-   of Microsoft's built-in policy GUIDs), so you can see exactly how a custom
-   Kubernetes policy is put together end-to-end:
-  - `deny-privileged-containers` — blocks `securityContext.privileged: true` (CIS 5.2.1)
-  - `deny-host-namespaces` — blocks `hostPID`/`hostIPC` (CIS 5.2.2/5.2.3)
-  - `deny-privilege-escalation` — requires `allowPrivilegeEscalation: false` (CIS 5.2.5)
-  - `require-readonly-root-fs` — requires `readOnlyRootFilesystem: true`
-  - `require-resource-limits` — requires CPU/memory limits within bounds
-  - `allowed-repos` — only allows images from approved repository prefixes
-  - `deny-default-namespace` — blocks deploying into the `default` namespace
-  - `require-team-labels` — requires `team`/`environment` labels on every Pod
+   of Microsoft's built-in policy GUIDs, so you can see exactly how a custom
+   Kubernetes policy is put together end-to-end.
 
-- `require-non-root` — requires containers to run as non-root users
-- `require-seccomp-runtime-default` — requires the `RuntimeDefault` seccomp profile
-- `drop-all-capabilities` — requires containers to drop all Linux capabilities
-- `deny-host-network` — blocks sharing the node network namespace
-- `deny-latest-image-tags` — blocks mutable `:latest` image tags
-- `require-probes` — requires liveness and readiness probes
+### Policy reference
+
+| Policy | What it checks | Compliant configuration | Violation sample |
+| --- | --- | --- | --- |
+| `deny-privileged-containers` | Blocks containers with `securityContext.privileged: true`. | `privileged: false` or omitted. | `bad-pod-privileged.yaml` |
+| `deny-host-namespaces` | Blocks sharing the host PID or IPC namespace. | `hostPID: false` and `hostIPC: false` or omitted. | `bad-pod-host-namespace.yaml` |
+| `deny-privilege-escalation` | Blocks containers that allow privilege escalation. | `securityContext.allowPrivilegeEscalation: false`. | `bad-pod-privilege-escalation.yaml` |
+| `require-readonly-root-fs` | Requires the container root filesystem to be read-only. | `securityContext.readOnlyRootFilesystem: true`. | `bad-pod-writable-root-fs.yaml` |
+| `require-resource-limits` | Requires CPU and memory limits and checks them against configured maximums. | `resources.limits.cpu` and `resources.limits.memory` are present and within bounds. | `bad-pod-no-resource-limits.yaml` |
+| `allowed-repos` | Allows images only when they start with an approved repository prefix. | For example, `docker.io/library/nginx:1.27-alpine`. | `bad-pod-disallowed-image.yaml` |
+| `deny-default-namespace` | Blocks Pods deployed to the Kubernetes `default` namespace. | Deploy workloads into a dedicated namespace such as `workloads`. | `bad-pod-default-namespace.yaml` |
+| `require-team-labels` | Requires `team` and `environment` labels; `environment` must match `dev`, `staging`, or `prod`. | Pod has both labels with an allowed environment value. | `bad-pod-missing-labels.yaml` |
+| `require-non-root` | Requires every container to run as a non-root user. | `securityContext.runAsNonRoot: true`; do not use UID `0`. | `bad-pod-root.yaml` |
+| `require-seccomp-runtime-default` | Requires the Kubernetes default seccomp profile. | `spec.securityContext.seccompProfile.type: RuntimeDefault`. | `bad-pod-no-seccomp.yaml` |
+| `drop-all-capabilities` | Requires every container to drop Linux capabilities. | `securityContext.capabilities.drop: ["ALL"]`. | `bad-pod-capabilities.yaml` |
+| `deny-host-network` | Blocks Pods that share the node network namespace. | `spec.hostNetwork: false` or omitted. | `bad-pod-host-network.yaml` |
+| `deny-latest-image-tags` | Blocks mutable `:latest` image tags. | Pin an explicit version or immutable digest. | `bad-pod-latest-tag.yaml` |
+| `require-probes` | Requires liveness and readiness probes on containers. | Define both `livenessProbe` and `readinessProbe`. | `bad-pod-no-probes.yaml` |
+
+Each policy has four related artifacts:
+
+- `<name>.definition.json` — complete Azure Policy definition, including the
+  `Microsoft.Kubernetes.Data` mode, parameters, resource-type scope, and
+  Base64Encoded ConstraintTemplate.
+- `<name>.parameters.json` — assignment values used by `deploy.sh`.
+- `templates/<name>.yaml` — readable Gatekeeper `ConstraintTemplate` CRD and
+  Rego source.
+- `sample-apps/bad-*.yaml` — a workload intentionally violating the policy.
 
    Each `*.definition.json` follows the same shape: `displayName`, `policyType:
    Custom`, `mode: Microsoft.Kubernetes.Data`, a `parameters` schema (`effect`,
