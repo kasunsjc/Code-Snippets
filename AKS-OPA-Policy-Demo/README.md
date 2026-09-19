@@ -145,8 +145,10 @@ az policy state list --resource-group <rg> --filter "PolicyDefinitionAction eq '
 ./cleanup.sh
 ```
 
-Removes every policy assignment and custom policy definition, then runs
-`terraform destroy` for the AKS infrastructure.
+Removes every policy assignment at the demo resource-group scope and every
+custom policy definition owned by this demo, then runs `terraform destroy`
+for the AKS infrastructure. Assignment and definition cleanup also works if
+Terraform state or the local `.terraform` directory has already been removed.
 
 ## References
 
