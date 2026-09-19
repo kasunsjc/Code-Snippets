@@ -58,7 +58,7 @@ spec:
 ## Field reference
 
 | Field | Purpose |
-|---|---|
+| --- | --- |
 | `metadata.name` | Name of the ConstraintTemplate CRD (lowercase). |
 | `spec.crd.spec.names.kind` | The Kind of the `Constraint` custom resource this template produces. Referenced by Azure Policy only indirectly - Azure creates a `Constraint` of this `Kind` automatically from your policy assignment's parameters. |
 | `spec.crd.spec.validation.openAPIV3Schema` | JSON-schema-style definition of the parameters your policy can accept (`spec.parameters` on the Constraint). Each property here should have a matching entry in the Azure Policy definition's `parameters` block and be wired through `policyRule.then.details.values`. |
@@ -98,7 +98,7 @@ unchanged) from the official, community-maintained
 so the policy logic is well-tested and widely used in production:
 
 | File | Library source |
-|---|---|
+| --- | --- |
 | `deny-privileged-containers.yaml` | `library/pod-security-policy/privileged-containers` |
 | `deny-host-namespaces.yaml` | `library/pod-security-policy/host-namespaces` |
 | `deny-privilege-escalation.yaml` | `library/pod-security-policy/allow-privilege-escalation` |
@@ -107,9 +107,16 @@ so the policy logic is well-tested and widely used in production:
 | `allowed-repos.yaml` | `library/general/allowedrepos` |
 | `require-team-labels.yaml` | `library/general/requiredlabels` |
 
-`deny-default-namespace.yaml` has **no** equivalent in the public library, so
-it is fully self-authored here to demonstrate writing your own Rego from
-scratch.
+The following templates are fully self-authored here to demonstrate writing
+your own Rego from scratch:
+
+- `deny-default-namespace.yaml`
+- `require-non-root.yaml`
+- `require-seccomp-runtime-default.yaml`
+- `drop-all-capabilities.yaml`
+- `deny-host-network.yaml`
+- `deny-latest-image-tags.yaml`
+- `require-probes.yaml`
 
 Unlike the earlier version of this demo, none of the Azure Policy definitions
 reference these templates by public URL (`sourceType: PublicURL`) - every one

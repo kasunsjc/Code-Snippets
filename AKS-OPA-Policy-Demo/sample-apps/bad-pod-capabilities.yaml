@@ -1,0 +1,24 @@
+# Violates: drop-all-capabilities (custom policy, K8sDropAllCapabilities)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-capabilities
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true

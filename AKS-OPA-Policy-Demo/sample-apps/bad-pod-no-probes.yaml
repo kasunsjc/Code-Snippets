@@ -1,0 +1,26 @@
+# Violates: require-probes (custom policy, K8sRequireProbes)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-no-probes
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

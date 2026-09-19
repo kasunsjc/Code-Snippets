@@ -1,0 +1,85 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes containers should run as non-root",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy requiring every container to run as a non-root user.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      },
+      "exemptImages": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Exempt images",
+          "description": "Container images excluded from enforcement."
+        },
+        "defaultValue": []
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c3JlcXVpcmVub25yb290CiAgYW5ub3RhdGlvbnM6CiAgICBtZXRhZGF0YS5nYXRla2VlcGVyLnNoL3RpdGxlOiAiUmVxdWlyZSBOb24tUm9vdCBDb250YWluZXJzIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIFJlcXVpcmVzIGV2ZXJ5IFBvZCBjb250YWluZXIgdG8gcnVuIGFzIGEgbm9uLXJvb3QgdXNlci4Kc3BlYzoKICBjcmQ6CiAgICBzcGVjOgogICAgICBuYW1lczoKICAgICAgICBraW5kOiBLOHNSZXF1aXJlTm9uUm9vdAogICAgICB2YWxpZGF0aW9uOgogICAgICAgIG9wZW5BUElWM1NjaGVtYToKICAgICAgICAgIHR5cGU6IG9iamVjdAogICAgICAgICAgcHJvcGVydGllczoKICAgICAgICAgICAgZXhlbXB0SW1hZ2VzOgogICAgICAgICAgICAgIHR5cGU6IGFycmF5CiAgICAgICAgICAgICAgaXRlbXM6CiAgICAgICAgICAgICAgICB0eXBlOiBzdHJpbmcKICB0YXJnZXRzOgogICAgLSB0YXJnZXQ6IGFkbWlzc2lvbi5rOHMuZ2F0ZWtlZXBlci5zaAogICAgICByZWdvOiB8CiAgICAgICAgcGFja2FnZSBrOHNyZXF1aXJlbm9ucm9vdAoKICAgICAgICBpbXBvcnQgZGF0YS5saWIuZXhlbXB0X2NvbnRhaW5lci5pc19leGVtcHQKCiAgICAgICAgdmlvbGF0aW9uW3sibXNnIjogbXNnfV0gewogICAgICAgICAgYyA6PSBpbnB1dF9jb250YWluZXJzW19dCiAgICAgICAgICBub3QgaXNfZXhlbXB0KGMpCiAgICAgICAgICBub3QgYy5zZWN1cml0eUNvbnRleHQucnVuQXNOb25Sb290ID09IHRydWUKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJQb2QgPCV2PiBpbiBuYW1lc3BhY2UgPCV2PiwgY29udGFpbmVyIDwldj4gbXVzdCBydW4gYXMgbm9uLXJvb3Q7IHNldCBzZWN1cml0eUNvbnRleHQucnVuQXNOb25Sb290IHRvIHRydWUiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgYy5uYW1lXSkKICAgICAgICB9CgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGMgOj0gaW5wdXRfY29udGFpbmVyc1tfXQogICAgICAgICAgbm90IGlzX2V4ZW1wdChjKQogICAgICAgICAgYy5zZWN1cml0eUNvbnRleHQucnVuQXNVc2VyID09IDAKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJQb2QgPCV2PiBpbiBuYW1lc3BhY2UgPCV2PiwgY29udGFpbmVyIDwldj4gZXhwbGljaXRseSBydW5zIGFzIFVJRCAwOyBjaG9vc2UgYSBub24tcm9vdCBVSUQiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgYy5uYW1lXSkKICAgICAgICB9CgogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuY29udGFpbmVyc1tfXQogICAgICAgIH0KICAgICAgICBpbnB1dF9jb250YWluZXJzW2NdIHsKICAgICAgICAgIGMgOj0gaW5wdXQucmV2aWV3Lm9iamVjdC5zcGVjLmluaXRDb250YWluZXJzW19dCiAgICAgICAgfQogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuZXBoZW1lcmFsQ29udGFpbmVyc1tfXQogICAgICAgIH0KCiAgICAgICAgaGFzX2ZpZWxkKG9iamVjdCwgZmllbGQpID0gdHJ1ZSB7CiAgICAgICAgICBvYmplY3RbZmllbGRdCiAgICAgICAgfQogICAgICBsaWJzOgogICAgICAgIC0gfAogICAgICAgICAgcGFja2FnZSBsaWIuZXhlbXB0X2NvbnRhaW5lcgoKICAgICAgICAgIGlzX2V4ZW1wdChjb250YWluZXIpIHsKICAgICAgICAgICAgZXhlbXB0X2ltYWdlcyA6PSBvYmplY3QuZ2V0KG9iamVjdC5nZXQoaW5wdXQsICJwYXJhbWV0ZXJzIiwge30pLCAiZXhlbXB0SW1hZ2VzIiwgW10pCiAgICAgICAgICAgIGltZyA6PSBjb250YWluZXIuaW1hZ2UKICAgICAgICAgICAgZXhlbXB0aW9uIDo9IGV4ZW1wdF9pbWFnZXNbX10KICAgICAgICAgICAgX21hdGNoZXNfZXhlbXB0aW9uKGltZywgZXhlbXB0aW9uKQogICAgICAgICAgfQoKICAgICAgICAgIF9tYXRjaGVzX2V4ZW1wdGlvbihpbWcsIGV4ZW1wdGlvbikgewogICAgICAgICAgICBub3QgZW5kc3dpdGgoZXhlbXB0aW9uLCAiKiIpCiAgICAgICAgICAgIGV4ZW1wdGlvbiA9PSBpbWcKICAgICAgICAgIH0KCiAgICAgICAgICBfbWF0Y2hlc19leGVtcHRpb24oaW1nLCBleGVtcHRpb24pIHsKICAgICAgICAgICAgZW5kc3dpdGgoZXhlbXB0aW9uLCAiKiIpCiAgICAgICAgICAgIHByZWZpeCA6PSB0cmltX3N1ZmZpeChleGVtcHRpb24sICIqIikKICAgICAgICAgICAgc3RhcnRzd2l0aChpbWcsIHByZWZpeCkKICAgICAgICAgIH0K"
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {
+            "exemptImages": "[parameters('exemptImages')]"
+          }
+        }
+      }
+    }
+  }
+}

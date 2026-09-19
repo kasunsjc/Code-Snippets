@@ -1,0 +1,22 @@
+# Violates: require-seccomp-runtime-default (custom policy, K8sRequireSeccompRuntimeDefault)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-no-seccomp
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

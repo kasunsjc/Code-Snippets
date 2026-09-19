@@ -1,0 +1,75 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes containers should drop all Linux capabilities",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy requiring containers to drop all Linux capabilities.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2Ryb3BhbGxjYXBhYmlsaXRpZXMKICBhbm5vdGF0aW9uczoKICAgIG1ldGFkYXRhLmdhdGVrZWVwZXIuc2gvdGl0bGU6ICJEcm9wIEFsbCBMaW51eCBDYXBhYmlsaXRpZXMiCiAgICBkZXNjcmlwdGlvbjogPi0KICAgICAgUmVxdWlyZXMgZXZlcnkgUG9kIGNvbnRhaW5lciB0byBkcm9wIGFsbCBMaW51eCBjYXBhYmlsaXRpZXMuCnNwZWM6CiAgY3JkOgogICAgc3BlYzoKICAgICAgbmFtZXM6CiAgICAgICAga2luZDogSzhzRHJvcEFsbENhcGFiaWxpdGllcwogICAgICB2YWxpZGF0aW9uOgogICAgICAgIG9wZW5BUElWM1NjaGVtYToKICAgICAgICAgIHR5cGU6IG9iamVjdAogICAgICAgICAgcHJvcGVydGllczoge30KICB0YXJnZXRzOgogICAgLSB0YXJnZXQ6IGFkbWlzc2lvbi5rOHMuZ2F0ZWtlZXBlci5zaAogICAgICByZWdvOiB8CiAgICAgICAgcGFja2FnZSBrOHNkcm9wYWxsY2FwYWJpbGl0aWVzCgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGMgOj0gaW5wdXRfY29udGFpbmVyc1tfXQogICAgICAgICAgbm90IGNhcGFiaWxpdHlfZHJvcHBlZChjKQogICAgICAgICAgbXNnIDo9IHNwcmludGYoIlBvZCA8JXY+IGluIG5hbWVzcGFjZSA8JXY+LCBjb250YWluZXIgPCV2PiBtdXN0IGRyb3AgYWxsIExpbnV4IGNhcGFiaWxpdGllcyB3aXRoIHNlY3VyaXR5Q29udGV4dC5jYXBhYmlsaXRpZXMuZHJvcDogW0FMTF0iLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgYy5uYW1lXSkKICAgICAgICB9CgogICAgICAgIGNhcGFiaWxpdHlfZHJvcHBlZChjKSB7CiAgICAgICAgICBjLnNlY3VyaXR5Q29udGV4dC5jYXBhYmlsaXRpZXMuZHJvcFtfXSA9PSAiQUxMIgogICAgICAgIH0KCiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5jb250YWluZXJzW19dCiAgICAgICAgfQogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuaW5pdENvbnRhaW5lcnNbX10KICAgICAgICB9CiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5lcGhlbWVyYWxDb250YWluZXJzW19dCiAgICAgICAgfQo="
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {}
+        }
+      }
+    }
+  }
+}

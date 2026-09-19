@@ -16,6 +16,10 @@ metadata:
     team: platform
     environment: dev
 spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
   containers:
     - name: nginx
       image: docker.io/library/nginx:1.27-alpine
@@ -27,3 +31,18 @@ spec:
         privileged: false
         allowPrivilegeEscalation: false
         readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL
+      livenessProbe:
+        httpGet:
+          path: /
+          port: 80
+        initialDelaySeconds: 5
+        periodSeconds: 10
+      readinessProbe:
+        httpGet:
+          path: /
+          port: 80
+        initialDelaySeconds: 2
+        periodSeconds: 5

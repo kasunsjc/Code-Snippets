@@ -1,0 +1,1 @@
+{"effect":{"value":"audit"},"exemptImages":{"value":[]},"namespaces":{"value":[]},"excludedNamespaces":{"value":["kube-system","gatekeeper-system","azure-arc","azure-policy"]}}

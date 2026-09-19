@@ -1,0 +1,75 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes containers should define liveness and readiness probes",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy requiring liveness and readiness probes.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c3JlcXVpcmVwcm9iZXMKICBhbm5vdGF0aW9uczoKICAgIG1ldGFkYXRhLmdhdGVrZWVwZXIuc2gvdGl0bGU6ICJSZXF1aXJlIExpdmVuZXNzIGFuZCBSZWFkaW5lc3MgUHJvYmVzIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIFJlcXVpcmVzIGV2ZXJ5IFBvZCBjb250YWluZXIgdG8gZGVmaW5lIGxpdmVuZXNzIGFuZCByZWFkaW5lc3MgcHJvYmVzLgpzcGVjOgogIGNyZDoKICAgIHNwZWM6CiAgICAgIG5hbWVzOgogICAgICAgIGtpbmQ6IEs4c1JlcXVpcmVQcm9iZXMKICAgICAgdmFsaWRhdGlvbjoKICAgICAgICBvcGVuQVBJVjNTY2hlbWE6CiAgICAgICAgICB0eXBlOiBvYmplY3QKICAgICAgICAgIHByb3BlcnRpZXM6IHt9CiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzcmVxdWlyZXByb2JlcwoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2d9XSB7CiAgICAgICAgICBjIDo9IGlucHV0X2NvbnRhaW5lcnNbX10KICAgICAgICAgIG5vdCBjLmxpdmVuZXNzUHJvYmUKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJQb2QgPCV2PiBpbiBuYW1lc3BhY2UgPCV2PiwgY29udGFpbmVyIDwldj4gaXMgbWlzc2luZyBhIGxpdmVuZXNzUHJvYmUiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgYy5uYW1lXSkKICAgICAgICB9CgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGMgOj0gaW5wdXRfY29udGFpbmVyc1tfXQogICAgICAgICAgbm90IGMucmVhZGluZXNzUHJvYmUKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJQb2QgPCV2PiBpbiBuYW1lc3BhY2UgPCV2PiwgY29udGFpbmVyIDwldj4gaXMgbWlzc2luZyBhIHJlYWRpbmVzc1Byb2JlIiwgW2lucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZSwgaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lc3BhY2UsIGMubmFtZV0pCiAgICAgICAgfQoKICAgICAgICBpbnB1dF9jb250YWluZXJzW2NdIHsKICAgICAgICAgIGMgOj0gaW5wdXQucmV2aWV3Lm9iamVjdC5zcGVjLmNvbnRhaW5lcnNbX10KICAgICAgICB9CiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5pbml0Q29udGFpbmVyc1tfXQogICAgICAgIH0K"
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {}
+        }
+      }
+    }
+  }
+}

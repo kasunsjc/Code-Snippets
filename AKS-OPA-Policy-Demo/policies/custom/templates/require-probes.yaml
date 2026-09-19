@@ -1,0 +1,40 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireprobes
+  annotations:
+    metadata.gatekeeper.sh/title: "Require Liveness and Readiness Probes"
+    description: >-
+      Requires every Pod container to define liveness and readiness probes.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireProbes
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireprobes
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          not c.livenessProbe
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> is missing a livenessProbe", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+        }
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          not c.readinessProbe
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> is missing a readinessProbe", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }

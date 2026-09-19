@@ -1,0 +1,24 @@
+# Violates: require-non-root (custom policy, K8sRequireNonRoot)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-root
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  securityContext:
+    runAsNonRoot: false
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

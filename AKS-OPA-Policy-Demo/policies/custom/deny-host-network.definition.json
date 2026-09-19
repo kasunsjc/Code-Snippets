@@ -1,0 +1,75 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes pods should not use the host network namespace",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy preventing Pods from sharing the node network namespace.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2Rlbnlob3N0bmV0d29yawogIGFubm90YXRpb25zOgogICAgbWV0YWRhdGEuZ2F0ZWtlZXBlci5zaC90aXRsZTogIkRlbnkgSG9zdCBOZXR3b3JrIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIERpc2FsbG93cyBQb2RzIGZyb20gc2hhcmluZyB0aGUgbm9kZSBuZXR3b3JrIG5hbWVzcGFjZS4Kc3BlYzoKICBjcmQ6CiAgICBzcGVjOgogICAgICBuYW1lczoKICAgICAgICBraW5kOiBLOHNEZW55SG9zdE5ldHdvcmsKICAgICAgdmFsaWRhdGlvbjoKICAgICAgICBvcGVuQVBJVjNTY2hlbWE6CiAgICAgICAgICB0eXBlOiBvYmplY3QKICAgICAgICAgIHByb3BlcnRpZXM6IHt9CiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzZGVueWhvc3RuZXR3b3JrCgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5ob3N0TmV0d29yayA9PSB0cnVlCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiUG9kIDwldj4gaW4gbmFtZXNwYWNlIDwldj4gdXNlcyB0aGUgaG9zdCBuZXR3b3JrIG5hbWVzcGFjZTsgc2V0IHNwZWMuaG9zdE5ldHdvcmsgdG8gZmFsc2UiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZV0pCiAgICAgICAgfQo="
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {}
+        }
+      }
+    }
+  }
+}

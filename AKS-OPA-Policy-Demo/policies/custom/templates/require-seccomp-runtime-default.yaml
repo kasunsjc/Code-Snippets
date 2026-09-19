@@ -1,0 +1,31 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireseccompruntimedefault
+  annotations:
+    metadata.gatekeeper.sh/title: "Require RuntimeDefault Seccomp"
+    description: >-
+      Requires Pods to use the RuntimeDefault seccomp profile.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireSeccompRuntimeDefault
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireseccompruntimedefault
+
+        violation[{"msg": msg}] {
+          not input.review.object.spec.securityContext.seccompProfile
+          msg := sprintf("Pod <%v> in namespace <%v> must define securityContext.seccompProfile.type as RuntimeDefault", [input.review.object.metadata.name, input.review.object.metadata.namespace])
+        }
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.securityContext.seccompProfile.type != "RuntimeDefault"
+          msg := sprintf("Pod <%v> in namespace <%v> uses seccomp profile <%v>; expected RuntimeDefault", [input.review.object.metadata.name, input.review.object.metadata.namespace, input.review.object.spec.securityContext.seccompProfile.type])
+        }
