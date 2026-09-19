@@ -9,14 +9,26 @@ metadata:
     environment: dev
 spec:
   containers:
-    - name: nginx
-      image: docker.io/library/nginx:1.27-alpine
-      resources:
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop: ["ALL"]
+  - name: nginx
+    image: docker.io/library/nginx:1.27-alpine
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      runAsUser: 101
+      capabilities:
+        drop:
+        - ALL
+    volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+  volumes:
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}

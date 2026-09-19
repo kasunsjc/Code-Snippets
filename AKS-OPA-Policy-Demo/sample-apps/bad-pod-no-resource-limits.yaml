@@ -9,7 +9,17 @@ metadata:
     environment: dev
 spec:
   containers:
-    - name: nginx
-      image: docker.io/library/nginx:1.27-alpine
-      securityContext:
-        readOnlyRootFilesystem: true
+  - name: nginx
+    image: docker.io/library/nginx:1.27-alpine
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+  volumes:
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}

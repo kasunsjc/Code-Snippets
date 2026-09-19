@@ -9,11 +9,25 @@ metadata:
     environment: dev
 spec:
   containers:
-    - name: app
-      image: example.io/random-registry/app:latest
-      resources:
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-      securityContext:
-        readOnlyRootFilesystem: true
+  - name: app
+    image: docker.io/nginxinc/nginx-unprivileged:1.27-alpine
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+    - name: nginx-tmp
+      mountPath: /tmp
+  volumes:
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}
+  - name: nginx-tmp
+    emptyDir: {}

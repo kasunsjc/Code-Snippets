@@ -9,11 +9,11 @@ metadata:
     environment: dev
 spec:
   containers:
-    - name: nginx
-      image: docker.io/library/nginx:1.27-alpine
-      resources:
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-      securityContext:
-        readOnlyRootFilesystem: false
+  - name: nginx
+    image: docker.io/library/nginx:1.27-alpine
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      readOnlyRootFilesystem: false

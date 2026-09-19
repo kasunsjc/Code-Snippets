@@ -3,10 +3,6 @@ kind: Namespace
 metadata:
   name: workloads
 ---
-# Compliant with every policy assigned in this demo:
-# non-privileged, no privilege escalation, no host namespaces, read-only root
-# filesystem, resource limits set, required labels present, allowed image, and
-# not in the default namespace.
 apiVersion: v1
 kind: Pod
 metadata:
@@ -20,29 +16,40 @@ spec:
     runAsNonRoot: true
     seccompProfile:
       type: RuntimeDefault
+    runAsUser: 101
   containers:
-    - name: nginx
-      image: docker.io/library/nginx:1.27-alpine
-      resources:
-        limits:
-          cpu: "500m"
-          memory: "512Mi"
-      securityContext:
-        privileged: false
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop:
-            - ALL
-      livenessProbe:
-        httpGet:
-          path: /
-          port: 80
-        initialDelaySeconds: 5
-        periodSeconds: 10
-      readinessProbe:
-        httpGet:
-          path: /
-          port: 80
-        initialDelaySeconds: 2
-        periodSeconds: 5
+  - name: nginx
+    image: docker.io/library/nginx:1.27-alpine
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      privileged: false
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    livenessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    readinessProbe:
+      httpGet:
+        path: /
+        port: 80
+      initialDelaySeconds: 2
+      periodSeconds: 5
+    volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+  volumes:
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}
