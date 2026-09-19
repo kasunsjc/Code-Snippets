@@ -21,11 +21,32 @@ spec:
         package k8srequireseccompruntimedefault
 
         violation[{"msg": msg}] {
-          not input.review.object.spec.securityContext.seccompProfile
-          msg := sprintf("Pod <%v> in namespace <%v> must define securityContext.seccompProfile.type as RuntimeDefault", [input.review.object.metadata.name, input.review.object.metadata.namespace])
+          c := input_containers[_]
+          effective_seccomp_type(c) != "RuntimeDefault"
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> has effective seccomp profile <%v>; expected RuntimeDefault. A container-level profile overrides the Pod-level profile", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name, effective_seccomp_type(c)])
         }
 
-        violation[{"msg": msg}] {
-          input.review.object.spec.securityContext.seccompProfile.type != "RuntimeDefault"
-          msg := sprintf("Pod <%v> in namespace <%v> uses seccomp profile <%v>; expected RuntimeDefault", [input.review.object.metadata.name, input.review.object.metadata.namespace, input.review.object.spec.securityContext.seccompProfile.type])
+        effective_seccomp_type(c) = profile_type {
+          c.securityContext.seccompProfile.type
+          profile_type := c.securityContext.seccompProfile.type
+        }
+
+        effective_seccomp_type(c) = profile_type {
+          not c.securityContext.seccompProfile.type
+          profile_type := input.review.object.spec.securityContext.seccompProfile.type
+        }
+
+        effective_seccomp_type(c) = "Missing" {
+          not c.securityContext.seccompProfile.type
+          not input.review.object.spec.securityContext.seccompProfile.type
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.ephemeralContainers[_]
         }

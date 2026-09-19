@@ -92,7 +92,7 @@ The whole YAML file above is base64-encoded and placed at:
 
 ## Source of the Rego in this demo
 
-Seven of the eight ConstraintTemplates here are copied verbatim (Rego logic
+Seven of the ConstraintTemplates here are copied verbatim (Rego logic
 unchanged) from the official, community-maintained
 [open-policy-agent/gatekeeper-library](https://github.com/open-policy-agent/gatekeeper-library)
 so the policy logic is well-tested and widely used in production:
@@ -117,6 +117,7 @@ your own Rego from scratch:
 - `deny-host-network.yaml`
 - `deny-latest-image-tags.yaml`
 - `require-probes.yaml`
+- `deny-host-ports.yaml`
 
 Unlike the earlier version of this demo, none of the Azure Policy definitions
 reference these templates by public URL (`sourceType: PublicURL`) - every one
@@ -204,17 +205,52 @@ parameter lets an assignment replace the default violation text.
 
 ### `require-non-root`
 
-Rego iterates through all container types and requires
-`securityContext.runAsNonRoot == true`. It also explicitly rejects
-`securityContext.runAsUser == 0`. This demonstrates the difference between
-declaring that a container must not run as root and merely omitting a user ID.
+Rego iterates through all container types and calculates the effective
+`runAsNonRoot` and `runAsUser` values. A container-level value wins; when the
+container field is absent, the rule falls back to the Pod-level
+`spec.securityContext`. It requires the effective `runAsNonRoot` value to be
+true and rejects an effective `runAsUser` of `0`. This prevents a container
+from overriding a secure Pod-level default with a root configuration.
 
 ### `require-seccomp-runtime-default`
 
-The template reads the Pod-level
-`spec.securityContext.seccompProfile.type` field. It emits a violation when
-the profile is missing or is not `RuntimeDefault`. The `RuntimeDefault`
-profile lets the container runtime apply its standard syscall restrictions.
+The template calculates the effective seccomp profile for every container.
+`container.securityContext.seccompProfile` overrides the Pod-level
+`spec.securityContext.seccompProfile`, so Rego checks the container profile
+first and falls back to the Pod profile only when the container does not set
+one. It emits a violation unless the effective profile is `RuntimeDefault`.
+This specifically catches a container changing a secure Pod-level profile to
+`Unconfined`.
+
+### Pod-level versus container-level security context
+
+Kubernetes security context and networking fields do not all have the same
+scope. Some fields exist at both `spec.securityContext` (Pod) and
+`container.securityContext`, where the container value wins when both are
+set. Others exist at only one level, so there is nothing for a container (or
+a Pod default) to override:
+
+| Policy | Field | Exists at Pod level? | Exists at container level? | Can a container override the Pod default? |
+| --- | --- | --- | --- | --- |
+| `require-non-root` | `runAsNonRoot`, `runAsUser` | Yes | Yes | Yes. The Rego calculates the effective container value, falling back to the Pod value only when the container omits the field. |
+| `require-seccomp-runtime-default` | `seccompProfile.type` | Yes | Yes | Yes. The container profile wins over the Pod profile. |
+| `deny-privileged-containers` | `privileged` | No | Yes | Not applicable. `privileged` does not exist in `PodSecurityContext`, so there is no Pod-level default to override. |
+| `deny-privilege-escalation` | `allowPrivilegeEscalation` | No | Yes | Not applicable, for the same reason as `privileged`. This is why the policy only ever needs to read `container.securityContext.allowPrivilegeEscalation`. |
+| `require-readonly-root-fs` | `readOnlyRootFilesystem` | No | Yes | Not applicable. This field is container-only. |
+| `drop-all-capabilities` | `capabilities.drop` | No | Yes | Not applicable. `capabilities` is container-only. |
+| `deny-host-network` | `hostNetwork` | Yes (`spec.hostNetwork`) | No | Not applicable, in the other direction: there is no container-level `hostNetwork`, so only the Pod-level field needs to be checked. |
+| `deny-host-namespaces` | `hostPID`, `hostIPC` | Yes | No | Not applicable, for the same reason as `hostNetwork`. |
+| `deny-host-ports` | `hostPort` | No | Yes (per container port) | Not applicable. `hostPort` is set per container port; there is no Pod-level default to override, but every container must still be checked individually. |
+
+The important rule for policy authors is to first determine **where a field
+can legally be set** before writing the Rego. When a field exists at both
+levels (`runAsNonRoot`, `runAsUser`, `seccompProfile`), the policy must
+compute the *effective* value, because a compliant Pod-level default can be
+silently overridden by a container. When a field exists at only one level
+(`privileged`, `allowPrivilegeEscalation`, `readOnlyRootFilesystem`,
+`capabilities`, `hostNetwork`, `hostPID`, `hostIPC`, `hostPort`), checking
+that single level is already correct and complete - there is no override to
+guard against.
 
 ### `drop-all-capabilities`
 
@@ -244,6 +280,15 @@ For regular and init containers, Rego requires both `livenessProbe` and
 container; a readiness probe controls whether the container receives traffic.
 The policy checks that the probe objects exist, while Kubernetes validates the
 probe handler itself.
+
+### `deny-host-ports`
+
+For every regular and init container, Rego iterates through `container.ports`
+and emits a violation when a port sets `hostPort` to a non-zero value.
+`hostPort` binds the container port directly to that port on the node,
+bypassing the Pod network and potentially conflicting with other workloads
+or exposing the container outside of a Service. There is no Pod-level
+`hostPort` field, so this policy only ever needs to check containers.
 
 ## Reading a violation rule
 

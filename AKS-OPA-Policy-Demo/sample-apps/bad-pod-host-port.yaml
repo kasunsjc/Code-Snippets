@@ -1,0 +1,37 @@
+# Violates: deny-host-ports (custom policy, K8sDenyHostPorts)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-host-port
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: nginx
+      image: docker.io/library/nginx:1.27-alpine
+      ports:
+        - containerPort: 8080
+          hostPort: 8080
+      resources:
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+      livenessProbe:
+        httpGet:
+          path: /
+          port: 8080
+      readinessProbe:
+        httpGet:
+          path: /
+          port: 8080

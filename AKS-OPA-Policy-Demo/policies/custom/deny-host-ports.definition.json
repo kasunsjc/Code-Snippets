@@ -1,0 +1,74 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes cluster containers should not bind host ports",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy preventing containers from binding directly to a port on the node via hostPort.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2Rlbnlob3N0cG9ydHMKICBhbm5vdGF0aW9uczoKICAgIG1ldGFkYXRhLmdhdGVrZWVwZXIuc2gvdGl0bGU6ICJEZW55IEhvc3QgUG9ydHMiCiAgICBkZXNjcmlwdGlvbjogPi0KICAgICAgRGlzYWxsb3dzIGJpbmRpbmcgYSBjb250YWluZXIgcG9ydCBkaXJlY3RseSB0byBhIHBvcnQgb24gdGhlIG5vZGUgdmlhCiAgICAgIGhvc3RQb3J0LgpzcGVjOgogIGNyZDoKICAgIHNwZWM6CiAgICAgIG5hbWVzOgogICAgICAgIGtpbmQ6IEs4c0RlbnlIb3N0UG9ydHMKICAgICAgdmFsaWRhdGlvbjoKICAgICAgICBvcGVuQVBJVjNTY2hlbWE6CiAgICAgICAgICB0eXBlOiBvYmplY3QKICAgICAgICAgIHByb3BlcnRpZXM6IHt9CiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzZGVueWhvc3Rwb3J0cwoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2d9XSB7CiAgICAgICAgICBjIDo9IGlucHV0X2NvbnRhaW5lcnNbX10KICAgICAgICAgIHAgOj0gYy5wb3J0c1tfXQogICAgICAgICAgcC5ob3N0UG9ydAogICAgICAgICAgcC5ob3N0UG9ydCAhPSAwCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiUG9kIDwldj4gaW4gbmFtZXNwYWNlIDwldj4sIGNvbnRhaW5lciA8JXY+IGJpbmRzIGhvc3RQb3J0IDwldj47IHJlbW92ZSBob3N0UG9ydCBzbyB0aGUgY29udGFpbmVyIGRvZXMgbm90IGJpbmQgZGlyZWN0bHkgdG8gdGhlIG5vZGUgbmV0d29yayBpbnRlcmZhY2UiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgYy5uYW1lLCBwLmhvc3RQb3J0XSkKICAgICAgICB9CgogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuY29udGFpbmVyc1tfXQogICAgICAgIH0KICAgICAgICBpbnB1dF9jb250YWluZXJzW2NdIHsKICAgICAgICAgIGMgOj0gaW5wdXQucmV2aWV3Lm9iamVjdC5zcGVjLmluaXRDb250YWluZXJzW19dCiAgICAgICAgfQo="
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]"
+        }
+      }
+    }
+  }
+}

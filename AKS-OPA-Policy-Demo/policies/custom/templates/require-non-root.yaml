@@ -29,15 +29,33 @@ spec:
         violation[{"msg": msg}] {
           c := input_containers[_]
           not is_exempt(c)
-          not c.securityContext.runAsNonRoot == true
-          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> must run as non-root; set securityContext.runAsNonRoot to true", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+          not effective_run_as_non_root(c)
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> is not configured to run as non-root; set the Pod or container securityContext.runAsNonRoot to true", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
         }
 
         violation[{"msg": msg}] {
           c := input_containers[_]
           not is_exempt(c)
-          c.securityContext.runAsUser == 0
-          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> explicitly runs as UID 0; choose a non-root UID", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+          effective_run_as_user(c) == 0
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> overrides the effective user to UID 0; set a non-root Pod or container runAsUser", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+        }
+
+        effective_run_as_non_root(c) {
+          c.securityContext.runAsNonRoot == true
+        }
+
+        effective_run_as_non_root(c) {
+          not has_field(c.securityContext, "runAsNonRoot")
+          input.review.object.spec.securityContext.runAsNonRoot == true
+        }
+
+        effective_run_as_user(c) = user {
+          user := c.securityContext.runAsUser
+        }
+
+        effective_run_as_user(c) = user {
+          not has_field(c.securityContext, "runAsUser")
+          user := input.review.object.spec.securityContext.runAsUser
         }
 
         input_containers[c] {

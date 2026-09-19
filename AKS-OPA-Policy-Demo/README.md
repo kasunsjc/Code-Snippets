@@ -36,7 +36,7 @@ flowchart LR
 - **Terraform** (`terraform/`) — a resource group, VNet/subnet, Log Analytics
    workspace, and an AKS cluster with `azure_policy_enabled = true` (Azure CNI
    Overlay + Azure network policy, Container Insights wired to Log Analytics).
-- **Fourteen fully custom, OPA/Rego-backed Azure Policy definitions**
+- **Fifteen fully custom, OPA/Rego-backed Azure Policy definitions**
    (`policies/custom/`) — every policy in this demo is a complete, hand-authored
    `Microsoft.Authorization/policyDefinitions` JSON body (not a reference to one
    of Microsoft's built-in policy GUIDs, so you can see exactly how a custom
@@ -55,11 +55,12 @@ flowchart LR
 | `deny-default-namespace` | Blocks Pods deployed to the Kubernetes `default` namespace. | Deploy workloads into a dedicated namespace such as `workloads`. | `bad-pod-default-namespace.yaml` |
 | `require-team-labels` | Requires `team` and `environment` labels; `environment` must match `dev`, `staging`, or `prod`. | Pod has both labels with an allowed environment value. | `bad-pod-missing-labels.yaml` |
 | `require-non-root` | Requires every container to run as a non-root user. | `securityContext.runAsNonRoot: true`; do not use UID `0`. | `bad-pod-root.yaml` |
-| `require-seccomp-runtime-default` | Requires the Kubernetes default seccomp profile. | `spec.securityContext.seccompProfile.type: RuntimeDefault`. | `bad-pod-no-seccomp.yaml` |
+| `require-seccomp-runtime-default` | Requires the effective container seccomp profile to be the Kubernetes default profile. | Pod or container `securityContext.seccompProfile.type: RuntimeDefault`; container-level settings override Pod-level settings. | `bad-pod-no-seccomp.yaml`, `bad-pod-security-context-override.yaml` |
 | `drop-all-capabilities` | Requires every container to drop Linux capabilities. | `securityContext.capabilities.drop: ["ALL"]`. | `bad-pod-capabilities.yaml` |
 | `deny-host-network` | Blocks Pods that share the node network namespace. | `spec.hostNetwork: false` or omitted. | `bad-pod-host-network.yaml` |
 | `deny-latest-image-tags` | Blocks mutable `:latest` image tags. | Pin an explicit version or immutable digest. | `bad-pod-latest-tag.yaml` |
 | `require-probes` | Requires liveness and readiness probes on containers. | Define both `livenessProbe` and `readinessProbe`. | `bad-pod-no-probes.yaml` |
+| `deny-host-ports` | Blocks containers that bind a port directly on the node via `hostPort`. | Omit `hostPort` on container ports, or set it to `0`. | `bad-pod-host-port.yaml` |
 
 Each policy has four related artifacts:
 
