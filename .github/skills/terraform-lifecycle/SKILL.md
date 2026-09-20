@@ -19,7 +19,8 @@ Terraform-based demo folder.
   supports them (e.g. `storage_account_id`, `user_assigned_identity_id`) rather
   than name/legacy arguments — see `AKS-KEDA-Demo/terraform/modules/`.
 - Never commit secrets, subscription IDs, or credentials — use variables or
-  `.tfvars` files (excluded from git) instead.
+  an explicitly gitignored tfvars file (for example `terraform.tfvars` or
+  `*.auto.tfvars`) instead.
 - Always format before committing:
 
   ```bash
@@ -28,8 +29,8 @@ Terraform-based demo folder.
 
 ## Validating (mirrors CI)
 
-`terraform-validate-scheduled.yml` and the PR-triggered `validate-terraform` job
-in `pr-validation.yml` run, for each changed Terraform directory:
+The PR-triggered `validate-terraform` job in `pr-validation.yml` runs, for each
+changed Terraform directory:
 
 ```bash
 terraform -chdir=<demo>/terraform fmt -check
@@ -39,6 +40,9 @@ terraform -chdir=<demo>/terraform validate
 
 Run these locally before opening a PR to catch formatting/validation failures
 early.
+
+`terraform-validate-scheduled.yml` runs the same commands across every
+Terraform directory in the repository, not just the ones changed in a PR.
 
 ## Cleanup
 

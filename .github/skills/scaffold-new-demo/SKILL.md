@@ -36,9 +36,9 @@ Pick a prefix that matches the intended category, or update `categorize()` in
     summary — no markdown links/badges on that specific line.
 - If the demo has Terraform, follow the AKS/IaC conventions already documented in
   `.github/copilot-instructions.md`:
-  - Set an explicit, readable `node_resource_group` (Bicep) or
-    `--node-resource-group` (Azure CLI) for any AKS cluster, following the pattern
-    `rg-<project>-<env>-nodes`.
+  - Set an explicit, readable `node_resource_group` (Terraform),
+    `nodeResourceGroup` (Bicep), or `--node-resource-group` (Azure CLI) for any
+    AKS cluster, following the pattern `rg-<project>-<env>-nodes`.
   - Include/point to a cleanup script that runs `terraform destroy` and removes
     local state files and the `.terraform` provider folder.
 - Shell scripts must start with a shebang and should use `set -e` (or
