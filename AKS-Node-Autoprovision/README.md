@@ -75,9 +75,18 @@ This runs `terraform init`/`apply` to create:
 Or apply everything manually:
 
 ```bash
-kubectl apply -f kubernetes-manifests/nodepools
-kubectl apply -f kubernetes-manifests/workloads
+kubectl apply -f kubernetes-manifests/nodepools/01-general-purpose-nodepool.yaml
+kubectl apply -f kubernetes-manifests/nodepools/02-memory-optimized-nodepool.yaml
+kubectl apply -f kubernetes-manifests/nodepools/04-arm64-nodepool.yaml
+kubectl apply -f kubernetes-manifests/nodepools/05-static-nodepool.yaml
+kubectl apply -f kubernetes-manifests/workloads/01-general-purpose-workload.yaml
+kubectl apply -f kubernetes-manifests/workloads/02-memory-intensive-workload.yaml
+kubectl apply -f kubernetes-manifests/workloads/04-arm64-workload.yaml
+kubectl apply -f kubernetes-manifests/workloads/05-affinity-antiaffinity-workload.yaml
 ```
+
+> Apply priority demo manifests separately (see [PriorityClass](#priorityclass))
+> because they are pinned to `northeurope-1`.
 
 ### 3. Watch NAP provision nodes
 

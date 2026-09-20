@@ -151,16 +151,20 @@ az aks get-credentials --resource-group "$RG_NAME" --name "$AKS_NAME" --overwrit
 
 echo ""
 echo "[5/5] Applying custom NodePools (NAP will reuse the built-in 'default' AKSNodeClass)..."
-if [[ "$DEMO" != "none" ]]; then
-  for nodepool_manifest in "$NODEPOOLS_DIR"/*.yaml; do
-    if [[ "$(basename "$nodepool_manifest")" == "06-priority-zone-nodepool.yaml" ]]; then
-      continue
-    fi
-    kubectl apply -f "$nodepool_manifest"
-  done
-else
-  echo "  Skipping NodePool manifests (--demo none)."
-fi
+apply_nodepool() {
+  kubectl apply -f "$NODEPOOLS_DIR/$1"
+}
+
+case "$DEMO" in
+  none) echo "  Skipping NodePool manifests (--demo none)." ;;
+  general)  apply_nodepool "01-general-purpose-nodepool.yaml" ;;
+  memory)   apply_nodepool "02-memory-optimized-nodepool.yaml" ;;
+  arm64)    apply_nodepool "04-arm64-nodepool.yaml" ;;
+  static)   apply_nodepool "05-static-nodepool.yaml" ;;
+  affinity) apply_nodepool "01-general-purpose-nodepool.yaml" ;;
+  priority) apply_nodepool "06-priority-zone-nodepool.yaml" ;;
+  all)      kubectl apply -f "$NODEPOOLS_DIR" ;;
+esac
 
 apply_workload() {
   echo "  Applying workload: $1"
@@ -174,7 +178,6 @@ apply_priority_workloads() {
     exit 1
   fi
 
-  kubectl apply -f "$NODEPOOLS_DIR/06-priority-zone-nodepool.yaml"
   apply_workload "06-priorityclass-workload.yaml"
   # Give low-priority pods a head start, but continue even if they don't fully roll out
   # so preemption/provisioning-order behavior can still be demonstrated.

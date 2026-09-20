@@ -84,4 +84,5 @@ resource "azurerm_role_assignment" "user_cluster_admin" {
   scope                = azurerm_kubernetes_cluster.main.id
   role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
   principal_id         = local.effective_principal_object_id
+  depends_on           = [azurerm_kubernetes_cluster.main]
 }
