@@ -168,7 +168,9 @@ apply_priority_workloads() {
 
   kubectl apply -f "$NODEPOOLS_DIR/06-priority-zone-nodepool.yaml"
   apply_workload "06-priorityclass-workload.yaml"
-  kubectl rollout status deployment/priority-low-demo --timeout=180s
+  # Give low-priority pods a head start, but continue even if they don't fully roll out
+  # so preemption/provisioning-order behavior can still be demonstrated.
+  kubectl rollout status deployment/priority-low-demo --timeout=60s >/dev/null 2>&1 || true
   apply_workload "07-priorityclass-high-workload.yaml"
 }
 

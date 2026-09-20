@@ -72,6 +72,6 @@ fi
 
 echo ""
 echo "Removing local Terraform state and provider cache..."
-rm -rf "$TF_DIR/.terraform" "$TF_DIR/.terraform.lock.hcl" "$TF_DIR/terraform.tfstate" "$TF_DIR/terraform.tfstate.backup"
+rm -rf "$TF_DIR/.terraform" "$TF_DIR/terraform.tfstate" "$TF_DIR/terraform.tfstate.backup"
 
 echo -e "${GREEN}Cleanup complete.${NC}"
