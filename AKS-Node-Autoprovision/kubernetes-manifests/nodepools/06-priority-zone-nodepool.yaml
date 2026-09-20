@@ -24,12 +24,6 @@ spec:
         kind: AKSNodeClass
         name: default
       expireAfter: 720h
-      # Reserved capacity: only pods that tolerate this taint get scheduled here
-      # (see priority-high-demo in workloads/06-priorityclass-workload.yaml).
-      taints:
-        - key: dedicated
-          value: priority-zone
-          effect: NoSchedule
       requirements:
         - key: kubernetes.io/arch
           operator: In

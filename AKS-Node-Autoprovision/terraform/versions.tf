@@ -11,11 +11,5 @@ terraform {
 }
 
 provider "azurerm" {
-  features {
-    resource_group {
-      # AKS auto-creates a ContainerInsights solution resource in this RG (outside Terraform
-      # state) when the oms_agent add-on is enabled; allow RG deletion despite it.
-      prevent_deletion_if_contains_resources = false
-    }
-  }
+  features {}
 }

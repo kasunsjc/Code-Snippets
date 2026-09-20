@@ -1,5 +1,5 @@
-# Static NodePool: fixed-size capacity for critical workloads that shouldn't be
-# consolidated away. Scale explicitly with:
+# Static NodePool: fixed-size shared capacity that remains available (not
+# consolidation-managed). Scale explicitly with:
 #   kubectl scale nodepool static-critical --replicas=3
 apiVersion: karpenter.sh/v1
 kind: NodePool

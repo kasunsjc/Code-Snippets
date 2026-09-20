@@ -92,6 +92,15 @@ if [[ -z "$USER_OBJECT_ID" ]]; then
   echo -e "${YELLOW}  Warning: Could not retrieve user Object ID. Optional role assignment will be skipped.${NC}"
 fi
 
+USER_OBJECT_ID_ARG=()
+if [[ -n "$USER_OBJECT_ID" ]]; then
+  if [[ -f "$TF_VARS_FILE" ]] && grep -Eq '^[[:space:]]*user_object_id[[:space:]]*=' "$TF_VARS_FILE"; then
+    echo "  terraform.tfvars defines user_object_id; using that value."
+  else
+    USER_OBJECT_ID_ARG=(-var="user_object_id=${USER_OBJECT_ID}")
+  fi
+fi
+
 echo ""
 echo "[1/5] Initializing Terraform..."
 terraform -chdir="$TF_DIR" init
@@ -99,12 +108,12 @@ terraform -chdir="$TF_DIR" init
 echo ""
 echo "[2/5] Applying Terraform infrastructure (this can take ~10 minutes)..."
 if [[ -f "$TF_VARS_FILE" ]]; then
-  terraform -chdir="$TF_DIR" apply -auto-approve -var-file="$TF_VARS_FILE" -var="user_object_id=${USER_OBJECT_ID:-}"
+  terraform -chdir="$TF_DIR" apply -auto-approve -var-file="$TF_VARS_FILE" "${USER_OBJECT_ID_ARG[@]}"
 else
   terraform -chdir="$TF_DIR" apply -auto-approve \
     -var="resource_group_name=$RESOURCE_GROUP" \
     -var="location=$LOCATION" \
-    -var="user_object_id=${USER_OBJECT_ID:-}"
+    "${USER_OBJECT_ID_ARG[@]}"
 fi
 
 echo ""
@@ -127,11 +136,27 @@ az aks get-credentials --resource-group "$RG_NAME" --name "$AKS_NAME" --overwrit
 
 echo ""
 echo "[5/5] Applying custom NodePools (NAP will reuse the built-in 'default' AKSNodeClass)..."
-kubectl apply -f "$NODEPOOLS_DIR"
+if [[ "$DEMO" != "none" ]]; then
+  kubectl apply -f "$NODEPOOLS_DIR"
+else
+  echo "  Skipping NodePool manifests (--demo none)."
+fi
 
 apply_workload() {
   echo "  Applying workload: $1"
   kubectl apply -f "$WORKLOADS_DIR/$1"
+}
+
+apply_priority_workloads() {
+  AKS_LOCATION=$(az aks show --resource-group "$RG_NAME" --name "$AKS_NAME" --query location -o tsv)
+  if [[ "$AKS_LOCATION" != "northeurope" ]]; then
+    echo -e "${RED}ERROR: Priority demo currently supports only 'northeurope' because zone manifests are pinned to northeurope-1.${NC}"
+    exit 1
+  fi
+
+  apply_workload "06-priorityclass-workload.yaml"
+  kubectl rollout status deployment/priority-low-demo --timeout=180s
+  apply_workload "07-priorityclass-high-workload.yaml"
 }
 
 case "$DEMO" in
@@ -140,13 +165,13 @@ case "$DEMO" in
   arm64)    apply_workload "04-arm64-workload.yaml" ;;
   static)   echo "  Static NodePool 'static-critical' already applied with fixed replicas: 2" ;;
   affinity) apply_workload "05-affinity-antiaffinity-workload.yaml" ;;
-  priority) apply_workload "06-priorityclass-workload.yaml" ;;
+  priority) apply_priority_workloads ;;
   all)
     apply_workload "01-general-purpose-workload.yaml"
     apply_workload "02-memory-intensive-workload.yaml"
     apply_workload "04-arm64-workload.yaml"
     apply_workload "05-affinity-antiaffinity-workload.yaml"
-    apply_workload "06-priorityclass-workload.yaml"
+    apply_priority_workloads
     ;;
   none) echo "  Skipping sample workload deployment (--demo none)." ;;
 esac

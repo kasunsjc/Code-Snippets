@@ -21,7 +21,7 @@ of `NodePool` manifests and sample workloads that showcase common patterns:
 | `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
 | `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
 | `general-purpose`     | Required pod anti-affinity/affinity — spread vs. co-locate | `05-affinity-antiaffinity-workload.yaml` |
-| `priority-zone-restricted` | Zone-pinned, tainted pool reserved for high-priority pods | `06-priorityclass-workload.yaml` |
+| `priority-zone-restricted` | Zone-pinned pool used by the priority demo workloads | `06-priorityclass-workload.yaml`, `07-priorityclass-high-workload.yaml` |
 
 ## 📁 Contents
 
@@ -166,9 +166,10 @@ kubectl get nodes -L karpenter.sh/nodepool
 
 ### PriorityClass
 
-`06-priorityclass-workload.yaml` defines `nap-demo-high-priority` (1000000) and
-`nap-demo-low-priority` (100) and deploys low-priority "filler" pods before high-priority
-"critical" pods:
+`06-priorityclass-workload.yaml` defines `nap-demo-high-priority` (1000000),
+`nap-demo-low-priority` (100), and the low-priority filler Deployment.
+`07-priorityclass-high-workload.yaml` defines the high-priority Deployment.
+`deploy.sh --demo priority` applies low-priority first, waits for rollout, then applies high-priority:
 
 1. **Preemption happens before provisioning.** If the low-priority pods already occupy
    capacity, kube-scheduler preempts (evicts) them to make room for pending high-priority
@@ -180,22 +181,23 @@ kubectl get nodes -L karpenter.sh/nodepool
 3. **Consolidation bias.** NAP prefers to consolidate/delete nodes that only run
    low-priority, easily-rescheduled pods, and is more conservative about disrupting nodes
    that host high-priority pods.
-4. **Region/zone selection.** The high-priority `critical` pods carry a `nodeAffinity` on
-   `topology.kubernetes.io/zone` plus a toleration for the `dedicated=priority-zone:NoSchedule`
-   taint, so NAP only provisions them onto the `priority-zone-restricted` NodePool
+4. **Region/zone selection.** Both priority workloads carry required `nodeAffinity` on
+   `workload-type=priority-zone-restricted`, and the high-priority pods also require
+   `topology.kubernetes.io/zone=northeurope-1`, so this demo provisions onto the
+   `priority-zone-restricted` NodePool
    ([06-priority-zone-nodepool.yaml](kubernetes-manifests/nodepools/06-priority-zone-nodepool.yaml)) —
-   a NodePool that's itself restricted to a single availability zone. Low-priority pods
-   have no such constraint and can land on any other NodePool/zone. This is the pattern to
+   a NodePool that's itself restricted to a single availability zone. This is the pattern to
    use when a priority tier of workloads must stay in a specific region/zone (e.g. for
    latency or data-residency reasons) instead of wherever NAP would otherwise place them.
 
-   > Update the `topology.kubernetes.io/zone` value in both the NodePool and the
-   > Deployment's `nodeAffinity` to a zone that exists in your region — list them with
-   > `az vm list-skus --location <region> --zone --output table`.
+   > This demo currently supports `northeurope` for the priority scenario unless you
+   > update the zone pinning in both manifests.
 
 ```bash
 kubectl apply -f kubernetes-manifests/nodepools/06-priority-zone-nodepool.yaml
 kubectl apply -f kubernetes-manifests/workloads/06-priorityclass-workload.yaml
+kubectl rollout status deployment/priority-low-demo --timeout=180s
+kubectl apply -f kubernetes-manifests/workloads/07-priorityclass-high-workload.yaml
 kubectl get pods -l app=priority-low-demo -o wide
 kubectl get pods -l app=priority-high-demo -o wide
 kubectl get nodes -L topology.kubernetes.io/zone,karpenter.sh/nodepool

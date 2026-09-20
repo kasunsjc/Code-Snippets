@@ -41,7 +41,8 @@ spec:
 # 2) "cache" pods use REQUIRED podAffinity to always land on the SAME node as a
 #    "spread-demo" pod — the opposite behavior. Since spread-demo is already forced onto
 #    3 separate nodes, NAP must also provision/reuse a node per cache replica that
-#    co-locates with one of those specific pods.
+#    co-locates with one of those specific pods. REQUIRED podAntiAffinity on
+#    app=affinity-cache-demo keeps one cache replica per node.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -64,6 +65,12 @@ spec:
             - labelSelector:
                 matchLabels:
                   app: spread-demo
+              topologyKey: kubernetes.io/hostname
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: affinity-cache-demo
               topologyKey: kubernetes.io/hostname
       containers:
         - name: redis
