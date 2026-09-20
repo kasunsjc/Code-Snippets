@@ -16,6 +16,12 @@ variable "cluster_name" {
   default     = "aks-node-autoprovision"
 }
 
+variable "node_resource_group" {
+  description = "Custom, readable AKS node resource group name."
+  type        = string
+  default     = "rg-aks-node-autoprovision-demo-nodes"
+}
+
 variable "kubernetes_version" {
   description = "Kubernetes version for the cluster. Leave null to use the latest recommended GA version."
   type        = string

@@ -161,6 +161,7 @@ apply_priority_workloads() {
     exit 1
   fi
 
+  kubectl apply -f "$NODEPOOLS_DIR/06-priority-zone-nodepool.yaml"
   apply_workload "06-priorityclass-workload.yaml"
   kubectl rollout status deployment/priority-low-demo --timeout=180s
   apply_workload "07-priorityclass-high-workload.yaml"

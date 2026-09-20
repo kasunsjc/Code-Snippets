@@ -15,7 +15,6 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 # Custom, readable node resource group name instead of the AKS-generated MC_* default.
 locals {
-  node_resource_group          = "rg-${var.cluster_name}-nodes"
   effective_principal_object_id = var.principal_object_id != "" ? var.principal_object_id : var.user_object_id
 }
 
@@ -25,7 +24,7 @@ resource "azurerm_kubernetes_cluster" "main" {
   resource_group_name = azurerm_resource_group.main.name
   dns_prefix          = var.cluster_name
   kubernetes_version  = var.kubernetes_version
-  node_resource_group = local.node_resource_group
+  node_resource_group = var.node_resource_group
   sku_tier            = "Standard"
 
   # Node auto-provisioning (NAP) requires this block. NAP manages Karpenter NodePools/AKSNodeClasses

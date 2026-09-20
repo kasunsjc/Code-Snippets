@@ -58,7 +58,7 @@ AKS-Node-Autoprovision/
 
 This runs `terraform init`/`apply` to create:
 
-- A resource group and a custom, readable node resource group (`rg-<cluster>-nodes`)
+- A resource group and a custom, readable node resource group (`rg-<project>-<env>-nodes`)
 - An AKS cluster with:
   - `node_provisioning_profile { mode = "Auto" }` (NAP enabled)
   - Azure CNI Overlay + Cilium dataplane + Standard Load Balancer (required by NAP)
