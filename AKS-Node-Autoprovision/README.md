@@ -169,7 +169,7 @@ kubectl get nodes -L karpenter.sh/nodepool
 `06-priorityclass-workload.yaml` defines `nap-demo-high-priority` (1000000),
 `nap-demo-low-priority` (100), and the low-priority filler Deployment.
 `07-priorityclass-high-workload.yaml` defines the high-priority Deployment.
-`deploy.sh --demo priority` applies low-priority first, waits for rollout, then applies high-priority:
+`deploy.sh --demo priority` applies low-priority first, gives it a brief head start, then applies high-priority:
 
 1. **Preemption happens before provisioning.** If the low-priority pods already occupy
    capacity, kube-scheduler preempts (evicts) them to make room for pending high-priority
