@@ -174,8 +174,8 @@ apply_workload() {
 apply_priority_workloads() {
   AKS_LOCATION=$(az aks show --resource-group "$RG_NAME" --name "$AKS_NAME" --query location -o tsv)
   if [[ "$AKS_LOCATION" != "northeurope" ]]; then
-    echo -e "${RED}ERROR: Priority demo currently supports only 'northeurope' because zone manifests are pinned to northeurope-1.${NC}"
-    exit 1
+    echo -e "${YELLOW}Skipping priority demo: currently supported only in 'northeurope' because manifests are pinned to northeurope-1.${NC}"
+    return 0
   fi
 
   apply_workload "06-priorityclass-workload.yaml"

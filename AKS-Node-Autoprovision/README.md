@@ -72,7 +72,7 @@ This runs `terraform init`/`apply` to create:
 ./deploy.sh --demo general   # or: memory | arm64 | static | affinity | priority | all
 ```
 
-Or apply everything manually:
+Or apply non-priority demos manually:
 
 ```bash
 kubectl apply -f kubernetes-manifests/nodepools/01-general-purpose-nodepool.yaml
