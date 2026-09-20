@@ -139,6 +139,11 @@ AKS_NAME=$(tf_out aks_cluster_name)
 RG_NAME=$(tf_out resource_group_name)
 NODE_RG=$(tf_out node_resource_group)
 LAW_NAME=$(tf_out log_analytics_workspace_name)
+AKS_LOCATION=$(az aks show --resource-group "$RG_NAME" --name "$AKS_NAME" --query location -o tsv)
+PRIORITY_SUPPORTED=false
+if [[ "$AKS_LOCATION" == "northeurope" ]]; then
+  PRIORITY_SUPPORTED=true
+fi
 
 echo "  AKS cluster       : $AKS_NAME"
 echo "  Resource group    : $RG_NAME"
@@ -162,8 +167,26 @@ case "$DEMO" in
   arm64)    apply_nodepool "04-arm64-nodepool.yaml" ;;
   static)   apply_nodepool "05-static-nodepool.yaml" ;;
   affinity) apply_nodepool "01-general-purpose-nodepool.yaml" ;;
-  priority) apply_nodepool "06-priority-zone-nodepool.yaml" ;;
-  all)      kubectl apply -f "$NODEPOOLS_DIR" ;;
+  priority)
+    if [[ "$PRIORITY_SUPPORTED" == "true" ]]; then
+      apply_nodepool "06-priority-zone-nodepool.yaml"
+    else
+      echo -e "${YELLOW}Skipping priority NodePool outside northeurope.${NC}"
+    fi
+    ;;
+  all)
+    if [[ "$PRIORITY_SUPPORTED" == "true" ]]; then
+      kubectl apply -f "$NODEPOOLS_DIR"
+    else
+      echo -e "${YELLOW}Skipping priority NodePool outside northeurope.${NC}"
+      for nodepool_manifest in "$NODEPOOLS_DIR"/*.yaml; do
+        if [[ "$(basename "$nodepool_manifest")" == "06-priority-zone-nodepool.yaml" ]]; then
+          continue
+        fi
+        kubectl apply -f "$nodepool_manifest"
+      done
+    fi
+    ;;
 esac
 
 apply_workload() {
@@ -172,8 +195,7 @@ apply_workload() {
 }
 
 apply_priority_workloads() {
-  AKS_LOCATION=$(az aks show --resource-group "$RG_NAME" --name "$AKS_NAME" --query location -o tsv)
-  if [[ "$AKS_LOCATION" != "northeurope" ]]; then
+  if [[ "$PRIORITY_SUPPORTED" != "true" ]]; then
     echo -e "${YELLOW}Skipping priority demo: currently supported only in 'northeurope' because manifests are pinned to northeurope-1.${NC}"
     return 0
   fi

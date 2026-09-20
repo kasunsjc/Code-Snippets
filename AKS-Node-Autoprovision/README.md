@@ -203,6 +203,7 @@ kubectl get nodes -L karpenter.sh/nodepool
    > update the zone pinning in both manifests.
 
 ```bash
+# Run these only when the AKS cluster location is northeurope.
 kubectl apply -f kubernetes-manifests/nodepools/06-priority-zone-nodepool.yaml
 kubectl apply -f kubernetes-manifests/workloads/06-priorityclass-workload.yaml
 kubectl rollout status deployment/priority-low-demo --timeout=60s || true

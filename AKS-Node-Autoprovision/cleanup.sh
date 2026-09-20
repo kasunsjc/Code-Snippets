@@ -64,6 +64,7 @@ fi
 
 echo ""
 echo "Destroying Terraform-managed infrastructure..."
+terraform -chdir="$TF_DIR" init -input=false >/dev/null
 if [[ -f "$TF_VARS_FILE" ]]; then
   terraform -chdir="$TF_DIR" destroy -auto-approve -var-file="$TF_VARS_FILE"
 else
