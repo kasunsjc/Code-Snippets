@@ -144,7 +144,12 @@ az aks get-credentials --resource-group "$RG_NAME" --name "$AKS_NAME" --overwrit
 echo ""
 echo "[5/5] Applying custom NodePools (NAP will reuse the built-in 'default' AKSNodeClass)..."
 if [[ "$DEMO" != "none" ]]; then
-  kubectl apply -f "$NODEPOOLS_DIR"
+  for nodepool_manifest in "$NODEPOOLS_DIR"/*.yaml; do
+    if [[ "$(basename "$nodepool_manifest")" == "06-priority-zone-nodepool.yaml" ]]; then
+      continue
+    fi
+    kubectl apply -f "$nodepool_manifest"
+  done
 else
   echo "  Skipping NodePool manifests (--demo none)."
 fi
