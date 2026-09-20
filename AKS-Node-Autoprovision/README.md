@@ -196,7 +196,7 @@ kubectl get nodes -L karpenter.sh/nodepool
 ```bash
 kubectl apply -f kubernetes-manifests/nodepools/06-priority-zone-nodepool.yaml
 kubectl apply -f kubernetes-manifests/workloads/06-priorityclass-workload.yaml
-kubectl rollout status deployment/priority-low-demo --timeout=180s
+kubectl rollout status deployment/priority-low-demo --timeout=60s || true
 kubectl apply -f kubernetes-manifests/workloads/07-priorityclass-high-workload.yaml
 kubectl get pods -l app=priority-low-demo -o wide
 kubectl get pods -l app=priority-high-demo -o wide

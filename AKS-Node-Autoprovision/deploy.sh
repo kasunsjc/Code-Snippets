@@ -58,7 +58,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 VALID_DEMOS=(none general memory arm64 static affinity priority all)
-if [[ ! " ${VALID_DEMOS[*]} " =~ $DEMO ]]; then
+IS_VALID_DEMO=false
+for valid_demo in "${VALID_DEMOS[@]}"; do
+  if [[ "$DEMO" == "$valid_demo" ]]; then
+    IS_VALID_DEMO=true
+    break
+  fi
+done
+
+if [[ "$IS_VALID_DEMO" != "true" ]]; then
   echo -e "${RED}ERROR: Invalid --demo value '$DEMO'.${NC} Expected one of: ${VALID_DEMOS[*]}."
   exit 1
 fi
