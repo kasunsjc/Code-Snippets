@@ -1,5 +1,17 @@
 # Copilot Instructions
 
+## Repository Skills
+
+This repository defines reusable Copilot skills under `.github/skills/`. Prefer
+invoking the relevant skill over re-deriving these workflows from scratch:
+
+| Skill | Use when |
+|---|---|
+| [`branch-pr-workflow`](./skills/branch-pr-workflow/SKILL.md) | Starting **any** task that changes files in this repo — ensures work happens on a feature branch, never on `main`. |
+| [`scaffold-new-demo`](./skills/scaffold-new-demo/SKILL.md) | Adding a new demo/example/tutorial folder to the repo. |
+| [`readme-sync`](./skills/readme-sync/SKILL.md) | Regenerating the root `README.md` after adding/renaming/removing a demo folder. |
+| [`terraform-lifecycle`](./skills/terraform-lifecycle/SKILL.md) | Authoring, validating, or tearing down Terraform-based demos. |
+
 ## Branching Strategy
 
 - The `main` branch is **protected** and does not accept direct pushes.
