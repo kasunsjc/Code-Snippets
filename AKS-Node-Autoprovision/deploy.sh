@@ -86,18 +86,25 @@ echo -e "${GREEN}Checking Azure CLI login...${NC}"
 az account show --output none || { echo -e "${RED}ERROR: Not logged in to Azure. Run 'az login'.${NC}"; exit 1; }
 
 echo ""
-echo "Retrieving current user Object ID for role assignments..."
-USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
-if [[ -z "$USER_OBJECT_ID" ]]; then
-  echo -e "${YELLOW}  Warning: Could not retrieve user Object ID. Optional role assignment will be skipped.${NC}"
+echo "Retrieving principal Object ID for optional role assignment..."
+PRINCIPAL_OBJECT_ID=""
+ACCOUNT_TYPE=$(az account show --query user.type -o tsv 2>/dev/null || echo "")
+ACCOUNT_NAME=$(az account show --query user.name -o tsv 2>/dev/null || echo "")
+if [[ "$ACCOUNT_TYPE" == "user" ]]; then
+  PRINCIPAL_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || echo "")
+elif [[ "$ACCOUNT_TYPE" == "servicePrincipal" && -n "$ACCOUNT_NAME" ]]; then
+  PRINCIPAL_OBJECT_ID=$(az ad sp show --id "$ACCOUNT_NAME" --query id -o tsv 2>/dev/null || echo "")
+fi
+if [[ -z "$PRINCIPAL_OBJECT_ID" ]]; then
+  echo -e "${YELLOW}  Warning: Could not auto-detect principal Object ID. Optional role assignment will be skipped unless set in terraform.tfvars.${NC}"
 fi
 
-USER_OBJECT_ID_ARG=()
-if [[ -n "$USER_OBJECT_ID" ]]; then
-  if [[ -f "$TF_VARS_FILE" ]] && grep -Eq '^[[:space:]]*user_object_id[[:space:]]*=' "$TF_VARS_FILE"; then
-    echo "  terraform.tfvars defines user_object_id; using that value."
+PRINCIPAL_OBJECT_ID_ARG=()
+if [[ -n "$PRINCIPAL_OBJECT_ID" ]]; then
+  if [[ -f "$TF_VARS_FILE" ]] && grep -Eq '^[[:space:]]*(principal_object_id|user_object_id)[[:space:]]*=' "$TF_VARS_FILE"; then
+    echo "  terraform.tfvars defines principal object id; using that value."
   else
-    USER_OBJECT_ID_ARG=(-var="user_object_id=${USER_OBJECT_ID}")
+    PRINCIPAL_OBJECT_ID_ARG=(-var="principal_object_id=${PRINCIPAL_OBJECT_ID}")
   fi
 fi
 
@@ -108,12 +115,12 @@ terraform -chdir="$TF_DIR" init
 echo ""
 echo "[2/5] Applying Terraform infrastructure (this can take ~10 minutes)..."
 if [[ -f "$TF_VARS_FILE" ]]; then
-  terraform -chdir="$TF_DIR" apply -auto-approve -var-file="$TF_VARS_FILE" "${USER_OBJECT_ID_ARG[@]}"
+  terraform -chdir="$TF_DIR" apply -auto-approve -var-file="$TF_VARS_FILE" "${PRINCIPAL_OBJECT_ID_ARG[@]}"
 else
   terraform -chdir="$TF_DIR" apply -auto-approve \
     -var="resource_group_name=$RESOURCE_GROUP" \
     -var="location=$LOCATION" \
-    "${USER_OBJECT_ID_ARG[@]}"
+    "${PRINCIPAL_OBJECT_ID_ARG[@]}"
 fi
 
 echo ""

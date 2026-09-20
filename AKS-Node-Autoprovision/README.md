@@ -20,7 +20,7 @@ of `NodePool` manifests and sample workloads that showcase common patterns:
 | `memory-optimized`    | E-family, tainted for memory-heavy workloads      | `02-memory-intensive-workload.yaml`  |
 | `arm64-pool`          | Arm64 (Ampere Altra) nodes for multi-arch images  | `04-arm64-workload.yaml`             |
 | `static-critical`     | Fixed-size pool (`replicas: 2`), no consolidation | n/a — always-on capacity             |
-| `general-purpose`     | Required pod anti-affinity/affinity — spread vs. co-locate | `05-affinity-antiaffinity-workload.yaml` |
+| `NodePool-agnostic`   | Required pod anti-affinity/affinity — spread vs. co-locate | `05-affinity-antiaffinity-workload.yaml` |
 | `priority-zone-restricted` | Zone-pinned pool used by the priority demo workloads | `06-priorityclass-workload.yaml`, `07-priorityclass-high-workload.yaml` |
 
 ## 📁 Contents

@@ -8,9 +8,9 @@ system_node_count               = 1
 node_provisioning_default_pools = "Auto"
 log_retention_days              = 30
 
-# Optional: set to your Entra ID object id (az ad signed-in-user show --query id -o tsv)
-# to get the "Azure Kubernetes Service RBAC Cluster Admin" role on the cluster.
-user_object_id = ""
+# Optional: set to an Entra ID object id (user/group/service principal) to get
+# the "Azure Kubernetes Service RBAC Cluster Admin" role on the cluster.
+principal_object_id = ""
 
 tags = {
   project     = "aks-node-autoprovision"

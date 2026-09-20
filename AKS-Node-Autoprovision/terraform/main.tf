@@ -15,7 +15,8 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 # Custom, readable node resource group name instead of the AKS-generated MC_* default.
 locals {
-  node_resource_group = "rg-${var.cluster_name}-nodes"
+  node_resource_group          = "rg-${var.cluster_name}-nodes"
+  effective_principal_object_id = var.principal_object_id != "" ? var.principal_object_id : var.user_object_id
 }
 
 resource "azurerm_kubernetes_cluster" "main" {
@@ -80,8 +81,8 @@ resource "azurerm_monitor_diagnostic_setting" "nap" {
 }
 
 resource "azurerm_role_assignment" "user_cluster_admin" {
-  count                = var.user_object_id != "" ? 1 : 0
+  count                = local.effective_principal_object_id != "" ? 1 : 0
   scope                = azurerm_kubernetes_cluster.main.id
   role_definition_name = "Azure Kubernetes Service RBAC Cluster Admin"
-  principal_id         = var.user_object_id
+  principal_id         = local.effective_principal_object_id
 }

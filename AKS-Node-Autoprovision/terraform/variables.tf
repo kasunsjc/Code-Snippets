@@ -52,7 +52,13 @@ variable "log_retention_days" {
 }
 
 variable "user_object_id" {
-  description = "Optional Entra ID object ID of the current user, granted the Azure Kubernetes Service RBAC Cluster Admin role for convenience."
+  description = "Optional Entra ID object ID for the cluster admin role assignment (deprecated alias of principal_object_id)."
+  type        = string
+  default     = ""
+}
+
+variable "principal_object_id" {
+  description = "Optional Entra ID object ID (user, group, or service principal) granted the Azure Kubernetes Service RBAC Cluster Admin role."
   type        = string
   default     = ""
 }
