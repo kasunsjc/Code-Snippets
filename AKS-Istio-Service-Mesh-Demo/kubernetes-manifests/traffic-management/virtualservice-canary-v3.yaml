@@ -1,0 +1,20 @@
+# Canary rollout demo: split traffic 90/10 between the stable v1 and the new v3
+# (red star ratings) subset. Re-apply with adjusted weights to walk through a
+# gradual rollout, e.g. 75/25, 50/50, then 0/100 to complete the rollout.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: reviews
+spec:
+  hosts:
+    - reviews
+  http:
+    - route:
+        - destination:
+            host: reviews
+            subset: v1
+          weight: 90
+        - destination:
+            host: reviews
+            subset: v3
+          weight: 10

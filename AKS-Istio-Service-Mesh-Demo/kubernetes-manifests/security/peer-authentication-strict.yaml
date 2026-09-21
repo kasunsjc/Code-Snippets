@@ -1,0 +1,14 @@
+# Mesh-wide strict mTLS: every sidecar-injected workload in the `istio-system`
+# mesh (any namespace labeled with an istio.io/rev revision) must present a
+# valid mTLS certificate issued by istiod. Plaintext traffic is rejected.
+#
+# Placed in the root namespace (istio-system) so it applies mesh-wide - see
+# https://istio.io/latest/docs/reference/config/security/peer_authentication/
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: aks-istio-system
+spec:
+  mtls:
+    mode: STRICT
