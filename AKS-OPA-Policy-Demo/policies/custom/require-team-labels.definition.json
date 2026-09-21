@@ -1,0 +1,101 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes pods should have required team and environment labels",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Demonstrates authoring a custom OPA/Rego-backed Azure Policy definition for AKS. Embeds the open-source Gatekeeper library's K8sRequiredLabels ConstraintTemplate (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/requiredlabels) to require that every Pod carries the labels supplied in the 'labels' parameter (for example 'team' and 'environment').",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "message": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Custom message",
+          "description": "Optional custom violation message. Leave empty to use the ConstraintTemplate's default message."
+        },
+        "defaultValue": ""
+      },
+      "labels": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Required labels",
+          "description": "A list of objects, each with a 'key' (the required label name) and an optional 'allowedRegex' the label's value must match."
+        },
+        "defaultValue": [
+          {
+            "key": "team"
+          },
+          {
+            "key": "environment"
+          }
+        ]
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "List of Kubernetes namespaces to include in policy evaluation. An empty list means all namespaces not explicitly excluded."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "List of Kubernetes namespaces to exclude from policy evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c3JlcXVpcmVkbGFiZWxzCiAgYW5ub3RhdGlvbnM6CiAgICBtZXRhZGF0YS5nYXRla2VlcGVyLnNoL3RpdGxlOiAiUmVxdWlyZWQgTGFiZWxzIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIFJlcXVpcmVzIHJlc291cmNlcyB0byBjb250YWluIHNwZWNpZmllZCBsYWJlbHMsIHdpdGggdmFsdWVzIG1hdGNoaW5nCiAgICAgIHByb3ZpZGVkIHJlZ3VsYXIgZXhwcmVzc2lvbnMuCnNwZWM6CiAgY3JkOgogICAgc3BlYzoKICAgICAgbmFtZXM6CiAgICAgICAga2luZDogSzhzUmVxdWlyZWRMYWJlbHMKICAgICAgdmFsaWRhdGlvbjoKICAgICAgICBvcGVuQVBJVjNTY2hlbWE6CiAgICAgICAgICB0eXBlOiBvYmplY3QKICAgICAgICAgIHByb3BlcnRpZXM6CiAgICAgICAgICAgIG1lc3NhZ2U6CiAgICAgICAgICAgICAgdHlwZTogc3RyaW5nCiAgICAgICAgICAgIGxhYmVsczoKICAgICAgICAgICAgICB0eXBlOiBhcnJheQogICAgICAgICAgICAgIGRlc2NyaXB0aW9uOiBBIGxpc3Qgb2YgbGFiZWxzIGFuZCB2YWx1ZXMgdGhlIG9iamVjdCBtdXN0IHNwZWNpZnkuCiAgICAgICAgICAgICAgaXRlbXM6CiAgICAgICAgICAgICAgICB0eXBlOiBvYmplY3QKICAgICAgICAgICAgICAgIHByb3BlcnRpZXM6CiAgICAgICAgICAgICAgICAgIGtleToKICAgICAgICAgICAgICAgICAgICB0eXBlOiBzdHJpbmcKICAgICAgICAgICAgICAgICAgICBkZXNjcmlwdGlvbjogVGhlIHJlcXVpcmVkIGxhYmVsLgogICAgICAgICAgICAgICAgICBhbGxvd2VkUmVnZXg6CiAgICAgICAgICAgICAgICAgICAgdHlwZTogc3RyaW5nCiAgICAgICAgICAgICAgICAgICAgZGVzY3JpcHRpb246ID4tCiAgICAgICAgICAgICAgICAgICAgICBJZiBzcGVjaWZpZWQsIGEgcmVndWxhciBleHByZXNzaW9uIHRoZSBsYWJlbCdzIHZhbHVlCiAgICAgICAgICAgICAgICAgICAgICBtdXN0IG1hdGNoLiBUaGUgdmFsdWUgbXVzdCBjb250YWluIGF0IGxlYXN0IG9uZSBtYXRjaAogICAgICAgICAgICAgICAgICAgICAgZm9yIHRoZSByZWd1bGFyIGV4cHJlc3Npb24uCiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzcmVxdWlyZWRsYWJlbHMKCiAgICAgICAgZ2V0X21lc3NhZ2UocGFyYW1ldGVycywgX2RlZmF1bHQpIDo9IF9kZWZhdWx0IHsKICAgICAgICAgIG9iamVjdC5nZXQocGFyYW1ldGVycywgIm1lc3NhZ2UiLCAiIikgPT0gIiIKICAgICAgICB9CgogICAgICAgIGdldF9tZXNzYWdlKHBhcmFtZXRlcnMsIF8pIDo9IHBhcmFtZXRlcnMubWVzc2FnZSB7CiAgICAgICAgICBvYmplY3QuZ2V0KHBhcmFtZXRlcnMsICJtZXNzYWdlIiwgIiIpICE9ICIiCiAgICAgICAgfQoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2csICJkZXRhaWxzIjogeyJtaXNzaW5nX2xhYmVscyI6IG1pc3Npbmd9fV0gewogICAgICAgICAgcHJvdmlkZWQgOj0ge2xhYmVsIHwgaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5sYWJlbHNbbGFiZWxdfQogICAgICAgICAgcmVxdWlyZWQgOj0ge2xhYmVsIHwgbGFiZWwgOj0gaW5wdXQucGFyYW1ldGVycy5sYWJlbHNbX10ua2V5fQogICAgICAgICAgbWlzc2luZyA6PSByZXF1aXJlZCAtIHByb3ZpZGVkCiAgICAgICAgICBjb3VudChtaXNzaW5nKSA+IDAKICAgICAgICAgIGRlZl9tc2cgOj0gc3ByaW50ZigiUG9kIDwldj4gaW4gbmFtZXNwYWNlIDwldj4gaXMgbWlzc2luZyByZXF1aXJlZCBsYWJlbHM6ICV2IiwgW2lucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZSwgaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lc3BhY2UsIG1pc3NpbmddKQogICAgICAgICAgbXNnIDo9IGdldF9tZXNzYWdlKGlucHV0LnBhcmFtZXRlcnMsIGRlZl9tc2cpCiAgICAgICAgfQoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2d9XSB7CiAgICAgICAgICB2YWx1ZSA6PSBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLmxhYmVsc1trZXldCiAgICAgICAgICBleHBlY3RlZCA6PSBpbnB1dC5wYXJhbWV0ZXJzLmxhYmVsc1tfXQogICAgICAgICAgZXhwZWN0ZWQua2V5ID09IGtleQogICAgICAgICAgIyBkbyBub3QgbWF0Y2ggaWYgYWxsb3dlZFJlZ2V4IGlzIG5vdCBkZWZpbmVkLCBvciBpcyBhbiBlbXB0eSBzdHJpbmcKICAgICAgICAgIGV4cGVjdGVkLmFsbG93ZWRSZWdleCAhPSAiIgogICAgICAgICAgbm90IHJlZ2V4Lm1hdGNoKGV4cGVjdGVkLmFsbG93ZWRSZWdleCwgdmFsdWUpCiAgICAgICAgICBkZWZfbXNnIDo9IHNwcmludGYoIlBvZCA8JXY+IGluIG5hbWVzcGFjZSA8JXY+IGhhcyBsYWJlbCA8JXY6ICV2PiB0aGF0IGRvZXMgbm90IHNhdGlzZnkgYWxsb3dlZCByZWdleDogJXYiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwga2V5LCB2YWx1ZSwgZXhwZWN0ZWQuYWxsb3dlZFJlZ2V4XSkKICAgICAgICAgIG1zZyA6PSBnZXRfbWVzc2FnZShpbnB1dC5wYXJhbWV0ZXJzLCBkZWZfbXNnKQogICAgICAgIH0K"
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {
+            "message": "[parameters('message')]",
+            "labels": "[parameters('labels')]"
+          }
+        }
+      }
+    }
+  }
+}

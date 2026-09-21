@@ -1,0 +1,52 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireseccompruntimedefault
+  annotations:
+    metadata.gatekeeper.sh/title: "Require RuntimeDefault Seccomp"
+    description: >-
+      Requires Pods to use the RuntimeDefault seccomp profile.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireSeccompRuntimeDefault
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireseccompruntimedefault
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          effective_seccomp_type(c) != "RuntimeDefault"
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> has effective seccomp profile <%v>; expected RuntimeDefault. A container-level profile overrides the Pod-level profile", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name, effective_seccomp_type(c)])
+        }
+
+        effective_seccomp_type(c) = profile_type {
+          c.securityContext.seccompProfile.type
+          profile_type := c.securityContext.seccompProfile.type
+        }
+
+        effective_seccomp_type(c) = profile_type {
+          not c.securityContext.seccompProfile.type
+          profile_type := input.review.object.spec.securityContext.seccompProfile.type
+        }
+
+        effective_seccomp_type(c) = "Missing" {
+          not c.securityContext.seccompProfile.type
+          not input.review.object.spec.securityContext.seccompProfile.type
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.ephemeralContainers[_]
+        }

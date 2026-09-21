@@ -1,0 +1,75 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes containers should not use the latest image tag",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy preventing mutable latest image tags.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2RlbnlsYXRlc3RpbWFnZXRhZ3MKICBhbm5vdGF0aW9uczoKICAgIG1ldGFkYXRhLmdhdGVrZWVwZXIuc2gvdGl0bGU6ICJEZW55IExhdGVzdCBJbWFnZSBUYWdzIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIERpc2FsbG93cyBtdXRhYmxlIGxhdGVzdCBpbWFnZSB0YWdzIHNvIHdvcmtsb2FkIHZlcnNpb25zIGFyZSBleHBsaWNpdC4Kc3BlYzoKICBjcmQ6CiAgICBzcGVjOgogICAgICBuYW1lczoKICAgICAgICBraW5kOiBLOHNEZW55TGF0ZXN0SW1hZ2VUYWdzCiAgICAgIHZhbGlkYXRpb246CiAgICAgICAgb3BlbkFQSVYzU2NoZW1hOgogICAgICAgICAgdHlwZTogb2JqZWN0CiAgICAgICAgICBwcm9wZXJ0aWVzOiB7fQogIHRhcmdldHM6CiAgICAtIHRhcmdldDogYWRtaXNzaW9uLms4cy5nYXRla2VlcGVyLnNoCiAgICAgIHJlZ286IHwKICAgICAgICBwYWNrYWdlIGs4c2RlbnlsYXRlc3RpbWFnZXRhZ3MKCiAgICAgICAgdmlvbGF0aW9uW3sibXNnIjogbXNnfV0gewogICAgICAgICAgYyA6PSBpbnB1dF9jb250YWluZXJzW19dCiAgICAgICAgICB1c2VzX211dGFibGVfaW1hZ2VfcmVmZXJlbmNlKGMuaW1hZ2UpCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiUG9kIDwldj4gaW4gbmFtZXNwYWNlIDwldj4sIGNvbnRhaW5lciA8JXY+IHVzZXMgYSBtdXRhYmxlIGltYWdlIHJlZmVyZW5jZSA8JXY+OyBwaW4gYW4gaW1tdXRhYmxlIHZlcnNpb24gdGFnIG9yIGRpZ2VzdCIsIFtpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWUsIGlucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZXNwYWNlLCBjLm5hbWUsIGMuaW1hZ2VdKQogICAgICAgIH0KCiAgICAgICAgdXNlc19tdXRhYmxlX2ltYWdlX3JlZmVyZW5jZShpbWFnZSkgewogICAgICAgICAgZW5kc3dpdGgobG93ZXIoaW1hZ2UpLCAiOmxhdGVzdCIpCiAgICAgICAgfQoKICAgICAgICB1c2VzX211dGFibGVfaW1hZ2VfcmVmZXJlbmNlKGltYWdlKSB7CiAgICAgICAgICBub3QgY29udGFpbnMoaW1hZ2UsICJAIikKICAgICAgICAgIGltYWdlX3BhcnRzIDo9IHNwbGl0KGltYWdlLCAiLyIpCiAgICAgICAgICBpbWFnZV9uYW1lIDo9IGltYWdlX3BhcnRzW2NvdW50KGltYWdlX3BhcnRzKSAtIDFdCiAgICAgICAgICBub3QgY29udGFpbnMoaW1hZ2VfbmFtZSwgIjoiKQogICAgICAgIH0KCiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5jb250YWluZXJzW19dCiAgICAgICAgfQogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuaW5pdENvbnRhaW5lcnNbX10KICAgICAgICB9CiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5lcGhlbWVyYWxDb250YWluZXJzW19dCiAgICAgICAgfQo="
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes pods should use the RuntimeDefault seccomp profile",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA policy requiring the RuntimeDefault seccomp profile.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "audit allows a non-compliant resource to be created and reports it; deny blocks it; disabled turns it off."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "Namespaces included in evaluation; empty means all."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "Namespaces excluded from evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c3JlcXVpcmVzZWNjb21wcnVudGltZWRlZmF1bHQKICBhbm5vdGF0aW9uczoKICAgIG1ldGFkYXRhLmdhdGVrZWVwZXIuc2gvdGl0bGU6ICJSZXF1aXJlIFJ1bnRpbWVEZWZhdWx0IFNlY2NvbXAiCiAgICBkZXNjcmlwdGlvbjogPi0KICAgICAgUmVxdWlyZXMgUG9kcyB0byB1c2UgdGhlIFJ1bnRpbWVEZWZhdWx0IHNlY2NvbXAgcHJvZmlsZS4Kc3BlYzoKICBjcmQ6CiAgICBzcGVjOgogICAgICBuYW1lczoKICAgICAgICBraW5kOiBLOHNSZXF1aXJlU2VjY29tcFJ1bnRpbWVEZWZhdWx0CiAgICAgIHZhbGlkYXRpb246CiAgICAgICAgb3BlbkFQSVYzU2NoZW1hOgogICAgICAgICAgdHlwZTogb2JqZWN0CiAgICAgICAgICBwcm9wZXJ0aWVzOiB7fQogIHRhcmdldHM6CiAgICAtIHRhcmdldDogYWRtaXNzaW9uLms4cy5nYXRla2VlcGVyLnNoCiAgICAgIHJlZ286IHwKICAgICAgICBwYWNrYWdlIGs4c3JlcXVpcmVzZWNjb21wcnVudGltZWRlZmF1bHQKCiAgICAgICAgdmlvbGF0aW9uW3sibXNnIjogbXNnfV0gewogICAgICAgICAgYyA6PSBpbnB1dF9jb250YWluZXJzW19dCiAgICAgICAgICBlZmZlY3RpdmVfc2VjY29tcF90eXBlKGMpICE9ICJSdW50aW1lRGVmYXVsdCIKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJQb2QgPCV2PiBpbiBuYW1lc3BhY2UgPCV2PiwgY29udGFpbmVyIDwldj4gaGFzIGVmZmVjdGl2ZSBzZWNjb21wIHByb2ZpbGUgPCV2PjsgZXhwZWN0ZWQgUnVudGltZURlZmF1bHQuIEEgY29udGFpbmVyLWxldmVsIHByb2ZpbGUgb3ZlcnJpZGVzIHRoZSBQb2QtbGV2ZWwgcHJvZmlsZSIsIFtpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWUsIGlucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZXNwYWNlLCBjLm5hbWUsIGVmZmVjdGl2ZV9zZWNjb21wX3R5cGUoYyldKQogICAgICAgIH0KCiAgICAgICAgZWZmZWN0aXZlX3NlY2NvbXBfdHlwZShjKSA9IHByb2ZpbGVfdHlwZSB7CiAgICAgICAgICBjLnNlY3VyaXR5Q29udGV4dC5zZWNjb21wUHJvZmlsZS50eXBlCiAgICAgICAgICBwcm9maWxlX3R5cGUgOj0gYy5zZWN1cml0eUNvbnRleHQuc2VjY29tcFByb2ZpbGUudHlwZQogICAgICAgIH0KCiAgICAgICAgZWZmZWN0aXZlX3NlY2NvbXBfdHlwZShjKSA9IHByb2ZpbGVfdHlwZSB7CiAgICAgICAgICBub3QgYy5zZWN1cml0eUNvbnRleHQuc2VjY29tcFByb2ZpbGUudHlwZQogICAgICAgICAgcHJvZmlsZV90eXBlIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5zZWN1cml0eUNvbnRleHQuc2VjY29tcFByb2ZpbGUudHlwZQogICAgICAgIH0KCiAgICAgICAgZWZmZWN0aXZlX3NlY2NvbXBfdHlwZShjKSA9ICJNaXNzaW5nIiB7CiAgICAgICAgICBub3QgYy5zZWN1cml0eUNvbnRleHQuc2VjY29tcFByb2ZpbGUudHlwZQogICAgICAgICAgbm90IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5zZWN1cml0eUNvbnRleHQuc2VjY29tcFByb2ZpbGUudHlwZQogICAgICAgIH0KCiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5jb250YWluZXJzW19dCiAgICAgICAgfQogICAgICAgIGlucHV0X2NvbnRhaW5lcnNbY10gewogICAgICAgICAgYyA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuaW5pdENvbnRhaW5lcnNbX10KICAgICAgICB9CiAgICAgICAgaW5wdXRfY29udGFpbmVyc1tjXSB7CiAgICAgICAgICBjIDo9IGlucHV0LnJldmlldy5vYmplY3Quc3BlYy5lcGhlbWVyYWxDb250YWluZXJzW19dCiAgICAgICAgfQo="
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {}
+        }
+      }
+    }
+  }
+}

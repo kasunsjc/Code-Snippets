@@ -1,0 +1,94 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequirenonroot
+  annotations:
+    metadata.gatekeeper.sh/title: "Require Non-Root Containers"
+    description: >-
+      Requires every Pod container to run as a non-root user.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireNonRoot
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            exemptImages:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequirenonroot
+
+        import data.lib.exempt_container.is_exempt
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          not is_exempt(c)
+          not effective_run_as_non_root(c)
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> is not configured to run as non-root; set the Pod or container securityContext.runAsNonRoot to true", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+        }
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          not is_exempt(c)
+          effective_run_as_user(c) == 0
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> overrides the effective user to UID 0; set a non-root Pod or container runAsUser", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name])
+        }
+
+        effective_run_as_non_root(c) {
+          c.securityContext.runAsNonRoot == true
+        }
+
+        effective_run_as_non_root(c) {
+          not has_field(c.securityContext, "runAsNonRoot")
+          input.review.object.spec.securityContext.runAsNonRoot == true
+        }
+
+        effective_run_as_user(c) = user {
+          user := c.securityContext.runAsUser
+        }
+
+        effective_run_as_user(c) = user {
+          not has_field(c.securityContext, "runAsUser")
+          user := input.review.object.spec.securityContext.runAsUser
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.ephemeralContainers[_]
+        }
+
+        has_field(object, field) = true {
+          _ := object[field]
+        }
+      libs:
+        - |
+          package lib.exempt_container
+
+          is_exempt(container) {
+            exempt_images := object.get(object.get(input, "parameters", {}), "exemptImages", [])
+            img := container.image
+            exemption := exempt_images[_]
+            _matches_exemption(img, exemption)
+          }
+
+          _matches_exemption(img, exemption) {
+            not endswith(exemption, "*")
+            exemption == img
+          }
+
+          _matches_exemption(img, exemption) {
+            endswith(exemption, "*")
+            prefix := trim_suffix(exemption, "*")
+            startswith(img, prefix)
+          }

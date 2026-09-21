@@ -1,0 +1,6 @@
+{
+  "effect": { "value": "audit" },
+  "repos": { "value": ["mcr.microsoft.com/", "docker.io/library/"] },
+  "namespaces": { "value": [] },
+  "excludedNamespaces": { "value": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"] }
+}

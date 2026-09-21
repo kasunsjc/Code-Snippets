@@ -1,0 +1,48 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenylatestimagetags
+  annotations:
+    metadata.gatekeeper.sh/title: "Deny Latest Image Tags"
+    description: >-
+      Disallows mutable latest image tags so workload versions are explicit.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyLatestImageTags
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenylatestimagetags
+
+        violation[{"msg": msg}] {
+          c := input_containers[_]
+          uses_mutable_image_reference(c.image)
+          msg := sprintf("Pod <%v> in namespace <%v>, container <%v> uses a mutable image reference <%v>; pin an immutable version tag or digest", [input.review.object.metadata.name, input.review.object.metadata.namespace, c.name, c.image])
+        }
+
+        uses_mutable_image_reference(image) {
+          endswith(lower(image), ":latest")
+        }
+
+        uses_mutable_image_reference(image) {
+          not contains(image, "@")
+          image_parts := split(image, "/")
+          image_name := image_parts[count(image_parts) - 1]
+          not contains(image_name, ":")
+        }
+
+        input_containers[c] {
+          c := input.review.object.spec.containers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.initContainers[_]
+        }
+        input_containers[c] {
+          c := input.review.object.spec.ephemeralContainers[_]
+        }

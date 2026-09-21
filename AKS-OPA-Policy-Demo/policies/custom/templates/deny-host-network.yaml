@@ -1,0 +1,26 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyhostnetwork
+  annotations:
+    metadata.gatekeeper.sh/title: "Deny Host Network"
+    description: >-
+      Disallows Pods from sharing the node network namespace.
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyHostNetwork
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties: {}
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyhostnetwork
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.hostNetwork == true
+          msg := sprintf("Pod <%v> in namespace <%v> uses the host network namespace; set spec.hostNetwork to false", [input.review.object.metadata.name, input.review.object.metadata.namespace])
+        }

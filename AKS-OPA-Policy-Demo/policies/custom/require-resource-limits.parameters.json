@@ -1,0 +1,8 @@
+{
+  "effect": { "value": "audit" },
+  "cpu": { "value": "1" },
+  "memory": { "value": "1Gi" },
+  "exemptImages": { "value": [] },
+  "namespaces": { "value": [] },
+  "excludedNamespaces": { "value": ["kube-system", "gatekeeper-system", "azure-arc", "azure-policy"] }
+}

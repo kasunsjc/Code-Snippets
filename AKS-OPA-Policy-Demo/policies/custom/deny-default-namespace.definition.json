@@ -1,0 +1,74 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes cluster should not use the default namespace",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA/Rego-backed Azure Policy definition. Unlike the other policies in this demo, this one is NOT based on a public Gatekeeper library template - it embeds a small, self-authored Rego ConstraintTemplate directly via templateInfo.sourceType=Base64Encoded, showing how to ship your own OPA policy logic with no external dependency.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "List of Kubernetes namespaces to include in policy evaluation. An empty list means all namespaces not explicitly excluded."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "List of Kubernetes namespaces to exclude from policy evaluation. 'default' is intentionally NOT in this list, since it is the namespace this policy targets."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2RlbnlkZWZhdWx0bmFtZXNwYWNlCiAgYW5ub3RhdGlvbnM6CiAgICBtZXRhZGF0YS5nYXRla2VlcGVyLnNoL3RpdGxlOiAiRGVueSBEZWZhdWx0IE5hbWVzcGFjZSIKICAgIGRlc2NyaXB0aW9uOiA+LQogICAgICBEaXNhbGxvd3MgY3JlYXRpbmcgbmFtZXNwYWNlZCByZXNvdXJjZXMgaW4gdGhlICdkZWZhdWx0JyBuYW1lc3BhY2UuCiAgICAgIFNlbGYtYXV0aG9yZWQgdGVtcGxhdGUgKG5vdCBmcm9tIHRoZSBwdWJsaWMgR2F0ZWtlZXBlciBsaWJyYXJ5KSB0bwogICAgICBkZW1vbnN0cmF0ZSB3cml0aW5nIHlvdXIgb3duIFJlZ28gZnJvbSBzY3JhdGNoIGFuZCBlbWJlZGRpbmcgaXQKICAgICAgZGlyZWN0bHkgaW4gYW4gQXp1cmUgUG9saWN5IGRlZmluaXRpb24gdmlhCiAgICAgIHRlbXBsYXRlSW5mby5zb3VyY2VUeXBlPUJhc2U2NEVuY29kZWQuCnNwZWM6CiAgY3JkOgogICAgc3BlYzoKICAgICAgbmFtZXM6CiAgICAgICAga2luZDogSzhzRGVueURlZmF1bHROYW1lc3BhY2UKICAgICAgdmFsaWRhdGlvbjoKICAgICAgICBvcGVuQVBJVjNTY2hlbWE6CiAgICAgICAgICB0eXBlOiBvYmplY3QKICAgICAgICAgIHByb3BlcnRpZXM6IHt9CiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzZGVueWRlZmF1bHRuYW1lc3BhY2UKCiAgICAgICAgdmlvbGF0aW9uW3sibXNnIjogbXNnfV0gewogICAgICAgICAgaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lc3BhY2UgPT0gImRlZmF1bHQiCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiUG9kIDwldj4gaXMgaW4gdGhlIHByb2hpYml0ZWQgJ2RlZmF1bHQnIG5hbWVzcGFjZTsgZGVwbG95IGl0IHRvIGEgZGVkaWNhdGVkIG5hbWVzcGFjZSIsIFtpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVdKQogICAgICAgIH0K"
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]"
+        }
+      }
+    }
+  }
+}

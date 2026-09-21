@@ -1,0 +1,88 @@
+{
+  "properties": {
+    "displayName": "[Custom] Kubernetes cluster containers should only use allowed image repositories",
+    "policyType": "Custom",
+    "mode": "Microsoft.Kubernetes.Data",
+    "description": "Custom OPA/Rego-backed Azure Policy definition. Embeds a copy of the open-source Gatekeeper library's K8sAllowedRepos ConstraintTemplate (https://github.com/open-policy-agent/gatekeeper-library/tree/master/library/general/allowedrepos) to require every container image start with one of the allowed repository prefixes.",
+    "metadata": {
+      "version": "1.0.0",
+      "category": "Kubernetes"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "metadata": {
+          "displayName": "Effect",
+          "description": "'audit' allows a non-compliant resource to be created but flags it as non-compliant. 'deny' blocks the non-compliant resource from being created. 'disabled' turns off the policy."
+        },
+        "allowedValues": [
+          "audit",
+          "deny",
+          "disabled"
+        ],
+        "defaultValue": "audit"
+      },
+      "repos": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Allowed repository prefixes",
+          "description": "List of image repository prefixes a container image is allowed to start with, e.g. 'mcr.microsoft.com/' or 'docker.io/library/'."
+        },
+        "defaultValue": [
+          "mcr.microsoft.com/",
+          "docker.io/library/"
+        ]
+      },
+      "namespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespaces",
+          "description": "List of Kubernetes namespaces to include in policy evaluation. An empty list means all namespaces not explicitly excluded."
+        },
+        "defaultValue": []
+      },
+      "excludedNamespaces": {
+        "type": "Array",
+        "metadata": {
+          "displayName": "Namespace exclusions",
+          "description": "List of Kubernetes namespaces to exclude from policy evaluation."
+        },
+        "defaultValue": [
+          "kube-system",
+          "gatekeeper-system",
+          "azure-arc",
+          "azure-policy"
+        ]
+      }
+    },
+    "policyRule": {
+      "if": {
+        "field": "type",
+        "in": [
+          "Microsoft.ContainerService/managedClusters",
+          "Microsoft.Kubernetes/connectedClusters"
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]",
+        "details": {
+          "templateInfo": {
+            "sourceType": "Base64Encoded",
+            "content": "YXBpVmVyc2lvbjogdGVtcGxhdGVzLmdhdGVrZWVwZXIuc2gvdjEKa2luZDogQ29uc3RyYWludFRlbXBsYXRlCm1ldGFkYXRhOgogIG5hbWU6IGs4c2FsbG93ZWRyZXBvcwogIGFubm90YXRpb25zOgogICAgbWV0YWRhdGEuZ2F0ZWtlZXBlci5zaC90aXRsZTogIkFsbG93ZWQgUmVwb3NpdG9yaWVzIgogICAgZGVzY3JpcHRpb246ID4tCiAgICAgIFJlcXVpcmVzIGNvbnRhaW5lciBpbWFnZXMgdG8gYmVnaW4gd2l0aCBhIHN0cmluZyBmcm9tIHRoZSBzcGVjaWZpZWQKICAgICAgbGlzdC4gVG8gcHJldmVudCBieXBhc3NlcywgZW5zdXJlIGEgJy8nIGlzIGFkZGVkIHdoZW4gc3BlY2lmeWluZwogICAgICBEb2NrZXJIdWIgcmVwb3NpdG9yaWVzIG9yIGN1c3RvbSByZWdpc3RyaWVzLgpzcGVjOgogIGNyZDoKICAgIHNwZWM6CiAgICAgIG5hbWVzOgogICAgICAgIGtpbmQ6IEs4c0FsbG93ZWRSZXBvcwogICAgICB2YWxpZGF0aW9uOgogICAgICAgIG9wZW5BUElWM1NjaGVtYToKICAgICAgICAgIHR5cGU6IG9iamVjdAogICAgICAgICAgcHJvcGVydGllczoKICAgICAgICAgICAgcmVwb3M6CiAgICAgICAgICAgICAgZGVzY3JpcHRpb246IFRoZSBsaXN0IG9mIHByZWZpeGVzIGEgY29udGFpbmVyIGltYWdlIGlzIGFsbG93ZWQgdG8gaGF2ZS4KICAgICAgICAgICAgICB0eXBlOiBhcnJheQogICAgICAgICAgICAgIGl0ZW1zOgogICAgICAgICAgICAgICAgdHlwZTogc3RyaW5nCiAgdGFyZ2V0czoKICAgIC0gdGFyZ2V0OiBhZG1pc3Npb24uazhzLmdhdGVrZWVwZXIuc2gKICAgICAgcmVnbzogfAogICAgICAgIHBhY2thZ2UgazhzYWxsb3dlZHJlcG9zCgogICAgICAgIHZpb2xhdGlvblt7Im1zZyI6IG1zZ31dIHsKICAgICAgICAgIGNvbnRhaW5lciA6PSBpbnB1dC5yZXZpZXcub2JqZWN0LnNwZWMuY29udGFpbmVyc1tfXQogICAgICAgICAgbm90IHN0cmluZ3MuYW55X3ByZWZpeF9tYXRjaChjb250YWluZXIuaW1hZ2UsIGlucHV0LnBhcmFtZXRlcnMucmVwb3MpCiAgICAgICAgICBtc2cgOj0gc3ByaW50ZigiUG9kIDwldj4gaW4gbmFtZXNwYWNlIDwldj4sIGNvbnRhaW5lciA8JXY+IGhhcyBhbiBpbnZhbGlkIGltYWdlIHJlcG8gPCV2PiwgYWxsb3dlZCByZXBvcyBhcmUgJXYiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgY29udGFpbmVyLm5hbWUsIGNvbnRhaW5lci5pbWFnZSwgaW5wdXQucGFyYW1ldGVycy5yZXBvc10pCiAgICAgICAgfQoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2d9XSB7CiAgICAgICAgICBjb250YWluZXIgOj0gaW5wdXQucmV2aWV3Lm9iamVjdC5zcGVjLmluaXRDb250YWluZXJzW19dCiAgICAgICAgICBub3Qgc3RyaW5ncy5hbnlfcHJlZml4X21hdGNoKGNvbnRhaW5lci5pbWFnZSwgaW5wdXQucGFyYW1ldGVycy5yZXBvcykKICAgICAgICAgIG1zZyA6PSBzcHJpbnRmKCJQb2QgPCV2PiBpbiBuYW1lc3BhY2UgPCV2PiwgaW5pdENvbnRhaW5lciA8JXY+IGhhcyBhbiBpbnZhbGlkIGltYWdlIHJlcG8gPCV2PiwgYWxsb3dlZCByZXBvcyBhcmUgJXYiLCBbaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lLCBpbnB1dC5yZXZpZXcub2JqZWN0Lm1ldGFkYXRhLm5hbWVzcGFjZSwgY29udGFpbmVyLm5hbWUsIGNvbnRhaW5lci5pbWFnZSwgaW5wdXQucGFyYW1ldGVycy5yZXBvc10pCiAgICAgICAgfQoKICAgICAgICB2aW9sYXRpb25beyJtc2ciOiBtc2d9XSB7CiAgICAgICAgICBjb250YWluZXIgOj0gaW5wdXQucmV2aWV3Lm9iamVjdC5zcGVjLmVwaGVtZXJhbENvbnRhaW5lcnNbX10KICAgICAgICAgIG5vdCBzdHJpbmdzLmFueV9wcmVmaXhfbWF0Y2goY29udGFpbmVyLmltYWdlLCBpbnB1dC5wYXJhbWV0ZXJzLnJlcG9zKQogICAgICAgICAgbXNnIDo9IHNwcmludGYoIlBvZCA8JXY+IGluIG5hbWVzcGFjZSA8JXY+LCBlcGhlbWVyYWxDb250YWluZXIgPCV2PiBoYXMgYW4gaW52YWxpZCBpbWFnZSByZXBvIDwldj4sIGFsbG93ZWQgcmVwb3MgYXJlICV2IiwgW2lucHV0LnJldmlldy5vYmplY3QubWV0YWRhdGEubmFtZSwgaW5wdXQucmV2aWV3Lm9iamVjdC5tZXRhZGF0YS5uYW1lc3BhY2UsIGNvbnRhaW5lci5uYW1lLCBjb250YWluZXIuaW1hZ2UsIGlucHV0LnBhcmFtZXRlcnMucmVwb3NdKQogICAgICAgIH0K"
+          },
+          "apiGroups": [
+            ""
+          ],
+          "kinds": [
+            "Pod"
+          ],
+          "namespaces": "[parameters('namespaces')]",
+          "excludedNamespaces": "[parameters('excludedNamespaces')]",
+          "values": {
+            "repos": "[parameters('repos')]"
+          }
+        }
+      }
+    }
+  }
+}

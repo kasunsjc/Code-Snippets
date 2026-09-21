@@ -1,0 +1,31 @@
+# Violates: deny-host-network (custom policy, K8sDenyHostNetwork)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-host-network
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  hostNetwork: true
+  containers:
+  - name: nginx
+    image: docker.io/library/nginx:1.27-alpine
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+  volumes:
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}

@@ -1,0 +1,38 @@
+# Violates: deny-latest-image-tags (custom policy, K8sDenyLatestImageTags)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-latest-tag
+  namespace: workloads
+  labels:
+    team: platform
+    environment: dev
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+    runAsUser: 101
+  containers:
+  - name: nginx
+    image: docker.io/library/nginx:latest
+    resources:
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    volumeMounts:
+    - name: nginx-cache
+      mountPath: /var/cache/nginx
+    - name: nginx-run
+      mountPath: /var/run
+  volumes:
+  - name: nginx-cache
+    emptyDir: {}
+  - name: nginx-run
+    emptyDir: {}
