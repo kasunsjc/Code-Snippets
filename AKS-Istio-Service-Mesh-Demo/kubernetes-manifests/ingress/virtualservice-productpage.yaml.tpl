@@ -1,6 +1,8 @@
+# Rendered by deploy.sh via envsubst. Placeholder: ${BOOKINFO_FQDN}
+#
 # Routes external traffic arriving on the Gateway above to the productpage
 # service, exposing the bookinfo sample app through the Istio ingress gateway's
-# public Azure Load Balancer IP.
+# public Azure Load Balancer IP under its real Azure DNS hostname.
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
@@ -8,7 +10,7 @@ metadata:
   namespace: default
 spec:
   hosts:
-    - "*"
+    - "${BOOKINFO_FQDN}"
   gateways:
     - bookinfo-gateway
   http:

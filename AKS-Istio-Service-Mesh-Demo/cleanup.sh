@@ -21,6 +21,21 @@ if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
 fi
 
 if [ -d "$TF_DIR" ] && [ -f "$TF_DIR/.terraform.lock.hcl" ]; then
+    # The Azure DNS zone is an EXISTING resource (data source only) - the A
+    # record this demo added to it survives `terraform destroy` and must be
+    # removed explicitly.
+    DNS_ZONE_NAME=$(terraform -chdir="$TF_DIR" output -raw dns_zone_name 2>/dev/null || true)
+    DNS_ZONE_RESOURCE_GROUP=$(terraform -chdir="$TF_DIR" output -raw dns_zone_resource_group 2>/dev/null || true)
+    BOOKINFO_SUBDOMAIN=$(terraform -chdir="$TF_DIR" output -raw bookinfo_subdomain 2>/dev/null || true)
+    if [ -n "$DNS_ZONE_NAME" ] && [ -n "$DNS_ZONE_RESOURCE_GROUP" ] && [ -n "$BOOKINFO_SUBDOMAIN" ]; then
+        echo -e "${YELLOW}Removing the bookinfo A record from Azure DNS...${NC}"
+        az network dns record-set a delete \
+            --resource-group "$DNS_ZONE_RESOURCE_GROUP" --zone-name "$DNS_ZONE_NAME" \
+            --name "$BOOKINFO_SUBDOMAIN" --yes --only-show-errors 2>/dev/null || true
+        echo -e "${GREEN}✓ A record removed (or already gone)${NC}"
+        echo ""
+    fi
+
     echo -e "${YELLOW}Running terraform destroy...${NC}"
     terraform -chdir="$TF_DIR" destroy -auto-approve
     echo -e "${GREEN}✓ Azure resources destroyed${NC}"

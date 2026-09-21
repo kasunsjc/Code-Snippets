@@ -17,6 +17,15 @@ external_ingress_gateway_enabled = true
 
 enable_monitoring = true
 
+# --- cert-manager + Azure DNS (required - no default) ---
+# An EXISTING Azure DNS zone already delegated to Azure DNS; this demo does not
+# create the zone. bookinfo_subdomain + dns_zone_name form the app's hostname
+# (e.g. bookinfo-demo -> bookinfo-demo.example.com).
+dns_zone_name           = "example.com"
+dns_zone_resource_group = "rg-dns-zones"
+bookinfo_subdomain      = "bookinfo-demo"
+acme_email              = "you@example.com"
+
 tags = {
   owner = "your-name"
 }

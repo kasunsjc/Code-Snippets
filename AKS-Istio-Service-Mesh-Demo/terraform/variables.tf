@@ -67,6 +67,29 @@ variable "enable_monitoring" {
   default     = true
 }
 
+# --- cert-manager + Azure DNS (TLS for the Istio ingress gateway) -------------
+
+variable "dns_zone_name" {
+  description = "Name of an EXISTING Azure DNS zone (e.g. example.com) already delegated to Azure DNS. This demo does not create the zone."
+  type        = string
+}
+
+variable "dns_zone_resource_group" {
+  description = "Resource group that contains the existing Azure DNS zone."
+  type        = string
+}
+
+variable "bookinfo_subdomain" {
+  description = "Subdomain the bookinfo sample app is exposed on, combined with dns_zone_name (e.g. bookinfo-demo -> bookinfo-demo.example.com)."
+  type        = string
+  default     = "bookinfo"
+}
+
+variable "acme_email" {
+  description = "Contact email registered with Let's Encrypt for certificate expiry notices."
+  type        = string
+}
+
 variable "tags" {
   description = "Extra tags applied to all resources."
   type        = map(string)

@@ -38,3 +38,31 @@ output "prometheus_workspace_id" {
 output "grafana_endpoint" {
   value = var.enable_monitoring ? azurerm_dashboard_grafana.this[0].endpoint : null
 }
+
+output "subscription_id" {
+  value = data.azurerm_client_config.current.subscription_id
+}
+
+output "dns_zone_name" {
+  value = data.azurerm_dns_zone.this.name
+}
+
+output "dns_zone_resource_group" {
+  value = var.dns_zone_resource_group
+}
+
+output "bookinfo_fqdn" {
+  value = local.bookinfo_fqdn
+}
+
+output "bookinfo_subdomain" {
+  value = var.bookinfo_subdomain
+}
+
+output "acme_email" {
+  value = var.acme_email
+}
+
+output "cert_manager_client_id" {
+  value = azurerm_user_assigned_identity.cert_manager.client_id
+}
