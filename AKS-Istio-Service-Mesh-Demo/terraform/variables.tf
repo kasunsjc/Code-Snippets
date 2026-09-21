@@ -39,8 +39,9 @@ variable "node_vm_size" {
 variable "istio_revisions" {
   description = <<-EOT
     Istio control plane revision(s) to install (e.g. ["asm-1-24"]).
-    Leave empty to let AKS install its current default supported revision -
-    the actual revision is only known after apply (see the istio_revisions output).
+    Leave empty to auto-detect AKS's current default supported revision for
+    `location`/`kubernetes_version` via `az aks mesh get-revisions` (requires
+    az CLI login + the aks-preview extension; see scripts/default-istio-revision.sh).
     Set 2 revisions only while performing a canary minor-version upgrade.
   EOT
   type        = list(string)

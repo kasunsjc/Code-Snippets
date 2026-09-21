@@ -18,6 +18,19 @@ locals {
 
 data "azurerm_client_config" "current" {}
 
+# service_mesh_profile.revisions requires >= 1 entry (the provider docs'
+# "leave it empty" claim doesn't hold in practice) - resolve AKS's current
+# default supported revision for this region/Kubernetes version when the
+# caller didn't pin one.
+data "external" "istio_default_revision" {
+  count   = length(var.istio_revisions) == 0 ? 1 : 0
+  program = ["bash", "${path.module}/scripts/default-istio-revision.sh", var.location, var.kubernetes_version]
+}
+
+locals {
+  istio_revisions = length(var.istio_revisions) > 0 ? var.istio_revisions : [data.external.istio_default_revision[0].result.revision]
+}
+
 resource "random_string" "suffix" {
   length  = 5
   upper   = false
@@ -50,12 +63,11 @@ resource "azurerm_user_assigned_identity" "cert_manager" {
 }
 
 resource "azurerm_federated_identity_credential" "cert_manager" {
-  name                = "cert-manager"
-  resource_group_name = azurerm_resource_group.this.name
-  parent_id           = azurerm_user_assigned_identity.cert_manager.id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = azurerm_kubernetes_cluster.this.oidc_issuer_url
-  subject             = "system:serviceaccount:cert-manager:cert-manager"
+  name                      = "cert-manager"
+  user_assigned_identity_id = azurerm_user_assigned_identity.cert_manager.id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = azurerm_kubernetes_cluster.this.oidc_issuer_url
+  subject                   = "system:serviceaccount:cert-manager:cert-manager"
 }
 
 # Scoped to the single DNS zone only - not subscription- or RG-wide access.
@@ -152,7 +164,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   # supported revision when the list is empty and reports it back after apply.
   service_mesh_profile {
     mode                             = "Istio"
-    revisions                        = var.istio_revisions
+    revisions                        = local.istio_revisions
     internal_ingress_gateway_enabled = var.internal_ingress_gateway_enabled
     external_ingress_gateway_enabled = var.external_ingress_gateway_enabled
   }

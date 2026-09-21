@@ -81,7 +81,7 @@ graph TB
 | **`aks-preview` CLI extension** | Only needed for optional day-2 diagnostics (`az aks mesh get-revisions`, `az aks mesh get-upgrades`). `deploy.sh` installs/updates it best-effort; not required for the Terraform-driven deploy in this demo. |
 | **Terraform >= 1.6** | Provisions the AKS cluster with the add-on enabled. |
 | **kubectl** | Any recent version compatible with your target Kubernetes version. |
-| **jq** | Used by `deploy.sh` to parse the `istio_revisions` Terraform output. |
+| **jq** | Used by `deploy.sh` (to parse Terraform outputs) and by Terraform itself, via `terraform/scripts/default-istio-revision.sh`, to auto-detect a supported Istio revision when `istio_revisions` is left empty. |
 | **`istioctl` (optional)** | Only needed for advanced day-2 operations such as revision-tag based canary upgrades ([Upgrade the add-on](https://learn.microsoft.com/azure/aks/istio-upgrade)) — not required for this demo. |
 | **AKS cluster version >= 1.23** | Enforced by Terraform/AKS itself; `terraform.tfvars.example` defaults to a recent GA minor version. |
 | No **Open Service Mesh (OSM) add-on** and no **self-managed Istio install** already on the target cluster | The Istio add-on refuses to coexist with either — see [Limitations](#limitations-of-the-aks-istio-add-on). |
@@ -251,7 +251,7 @@ Prompts for confirmation, then removes the A record `deploy.sh` added to your Az
 |---|---|
 | Pods stuck with 1/1 containers instead of 2/2 | Namespace isn't labeled with `istio.io/rev=<revision>` (the generic `istio-injection=enabled` label does **not** work for the add-on), or the pod was created before the label was applied — restart the deployment. |
 | `403 RBAC: access denied` on requests that should be allowed | Check the `AuthorizationPolicy` `selector` and `principals` match the caller's actual ServiceAccount (`kubectl get pod <pod> -o jsonpath='{.spec.serviceAccountName}'`). |
-| `terraform apply` fails with an unsupported Istio revision/region combo | Run `az aks mesh get-revisions --location <region> -o table` (requires `aks-preview`) and pin a supported `istio_revisions` value in `terraform.tfvars`. |
+| `terraform apply`/`plan` fails with `No Istio add-on revision compatible with Kubernetes ...` | No supported Istio revision for your `location`/`kubernetes_version` combo. Run `az aks mesh get-revisions --location <region> -o table` (requires `aks-preview`) and either adjust `kubernetes_version` or pin a supported `istio_revisions` value in `terraform.tfvars`. |
 | Ingress gateway has no external IP | Standard Load Balancer provisioning can take a few minutes; re-run `kubectl get svc aks-istio-ingressgateway-external -n aks-istio-ingress -w`. |
 | `Certificate` stuck `Pending`/not `Ready` | DNS-01 propagation delay (wait a minute and re-check), or Workload Identity misconfigured. Check `kubectl describe certificate bookinfo-gateway-tls -n aks-istio-ingress` and `kubectl logs -n cert-manager deploy/cert-manager`; confirm the federated credential subject matches `system:serviceaccount:cert-manager:cert-manager`. |
 | cert-manager gets a `403`/`Forbidden` from Azure DNS | RBAC propagation delay (wait 30-90s after `terraform apply`) or the `DNS Zone Contributor` role assignment on `data.azurerm_dns_zone.this` is missing/wrong — check `terraform/main.tf`. |
