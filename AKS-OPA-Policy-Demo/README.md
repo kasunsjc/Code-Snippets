@@ -85,7 +85,7 @@ Each policy has four related artifacts:
   field maps into the Azure Policy JSON. Seven of the original templates are
   copied verbatim (Rego unchanged) from the official, community-maintained
    [Gatekeeper library](https://github.com/open-policy-agent/gatekeeper-library);
-  the remaining seven templates are self-authored to demonstrate writing
+   the remaining eight templates are self-authored to demonstrate writing
   your own Rego from scratch.
 - **Sample manifests** (`sample-apps/`) — one fully compliant pod and one
    pod per policy that deliberately violates it, for testing.

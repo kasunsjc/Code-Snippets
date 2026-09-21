@@ -69,7 +69,7 @@ spec:
         }
 
         has_field(object, field) = true {
-          object[field]
+          _ := object[field]
         }
       libs:
         - |

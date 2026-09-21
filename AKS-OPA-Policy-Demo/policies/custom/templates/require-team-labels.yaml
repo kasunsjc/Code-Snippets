@@ -39,10 +39,12 @@ spec:
         package k8srequiredlabels
 
         get_message(parameters, _default) := _default {
-          not parameters.message
+          object.get(parameters, "message", "") == ""
         }
 
-        get_message(parameters, _) := parameters.message
+        get_message(parameters, _) := parameters.message {
+          object.get(parameters, "message", "") != ""
+        }
 
         violation[{"msg": msg, "details": {"missing_labels": missing}}] {
           provided := {label | input.review.object.metadata.labels[label]}
