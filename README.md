@@ -5,7 +5,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **22 examples** | Kubernetes: 15 | Docker: 4 | Azure: 1 | *Last Updated: September 2026*
+> **23 examples** | Kubernetes: 16 | Docker: 4 | Azure: 1 | *Last Updated: September 2026*
 
 ## 📝 Related Blog Posts
 
@@ -42,15 +42,16 @@ articles linked below.
 | 11 | [AKS-Nginx-Add-on](./AKS-Nginx-Add-on/) | Deploy the NGINX Ingress Controller as a native AKS add-on with SSL/TLS termination support. | Kubernetes |
 | 12 | [AKS-Node-Autoprovision](./AKS-Node-Autoprovision/) | Automatically provision AKS nodes based on workload requirements without managing node pools manu... | Kubernetes |
 | 13 | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) | Enhance AKS security by restricting access to node resource group resources. | Kubernetes |
-| 14 | [Agentic-CLI-AKS](./Agentic-CLI-AKS/) | > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not ... | Kubernetes |
-| 15 | [Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/) | This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot ... | Other |
-| 16 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
-| 17 | [Custom-AKS-Copilot-Agent](./Custom-AKS-Copilot-Agent/) | A custom GitHub Copilot agent specialized in Azure Kubernetes Service (AKS) and Kubernetes troubl... | Kubernetes |
-| 18 | [Docker-Hardened-Images](./Docker-Hardened-Images/) | Welcome to this comprehensive demo on **Docker Hardened Images**! This repository demonstrates Do... | Docker |
-| 19 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
-| 20 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
-| 21 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
-| 22 | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) | This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstr... | Other |
+| 14 | [AKS-OPA-Policy-Demo](./AKS-OPA-Policy-Demo/) | This demo provisions an AKS cluster with the **Azure Policy Add-on** enabled and | Kubernetes |
+| 15 | [Agentic-CLI-AKS](./Agentic-CLI-AKS/) | > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not ... | Kubernetes |
+| 16 | [Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/) | This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot ... | Other |
+| 17 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
+| 18 | [Custom-AKS-Copilot-Agent](./Custom-AKS-Copilot-Agent/) | A custom GitHub Copilot agent specialized in Azure Kubernetes Service (AKS) and Kubernetes troubl... | Kubernetes |
+| 19 | [Docker-Hardened-Images](./Docker-Hardened-Images/) | Welcome to this comprehensive demo on **Docker Hardened Images**! This repository demonstrates Do... | Docker |
+| 20 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
+| 21 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
+| 22 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
+| 23 | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) | This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstr... | Other |
 
 ---
 
@@ -82,6 +83,8 @@ articles linked below.
   - 📄 README: Yes | 📁 Files: 4
 - **[AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/)** — Enhance AKS security by restricting access to node resource group resources.
   - 📄 README: Yes | 📁 Files: 2
+- **[AKS-OPA-Policy-Demo](./AKS-OPA-Policy-Demo/)** — This demo provisions an AKS cluster with the **Azure Policy Add-on** enabled and
+  - 📄 README: Yes | 📁 Files: 73
 - **[Agentic-CLI-AKS](./Agentic-CLI-AKS/)** — > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not recommended for production environments.
   - 📄 README: Yes | 📁 Files: 25
 - **[BYO-CNI-AKS](./BYO-CNI-AKS/)** — Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Container Network Interface. This demo includes Bicep infrastructure-as-code, automated deployment scripts, and sample applications with Cilium network policies.
