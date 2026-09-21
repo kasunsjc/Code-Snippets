@@ -49,7 +49,6 @@ if [[ -d .terraform || -f terraform.tfstate || -f terraform.tfstate.backup ]]; t
   terraform destroy -auto-approve -input=false
   rm -f terraform.tfstate terraform.tfstate.backup
 fi
-setopt nocorrect 2>/dev/null || true
 rm -rf .terraform .terraform.lock.hcl
 popd >/dev/null
 
