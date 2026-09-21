@@ -5,8 +5,9 @@ locals {
   cluster_name        = "aks-${local.name_prefix}"
   log_workspace_name  = "log-${local.name_prefix}"
   prometheus_ws_name  = "prom-${local.name_prefix}"
-  grafana_name        = "graf-${replace(local.name_prefix, "-", "")}-${random_string.suffix.result}"
-  bookinfo_fqdn       = "${var.bookinfo_subdomain}.${var.dns_zone_name}"
+  # Azure Managed Grafana names are capped at 23 chars, letters/digits/dashes only.
+  grafana_name  = "graf-${substr(replace(local.name_prefix, "-", ""), 0, 12)}-${random_string.suffix.result}"
+  bookinfo_fqdn = "${var.bookinfo_subdomain}.${var.dns_zone_name}"
 
   tags = merge({
     project     = var.project
