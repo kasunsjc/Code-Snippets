@@ -21,9 +21,11 @@ if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
 fi
 
 if [ -d "$TF_DIR" ] && [ -f "$TF_DIR/.terraform.lock.hcl" ]; then
-    # The Azure DNS zone is an EXISTING resource (data source only) - the A
-    # record this demo added to it survives `terraform destroy` and must be
-    # removed explicitly.
+    # Capture everything we need for post-destroy cleanup up front - once the
+    # cluster/DNS zone data source's dependent resources are destroyed, the
+    # outputs that reference them can no longer be read from state.
+    CLUSTER_NAME=$(terraform -chdir="$TF_DIR" output -raw aks_cluster_name 2>/dev/null || true)
+    RESOURCE_GROUP=$(terraform -chdir="$TF_DIR" output -raw resource_group_name 2>/dev/null || true)
     DNS_ZONE_NAME=$(terraform -chdir="$TF_DIR" output -raw dns_zone_name 2>/dev/null || true)
     DNS_ZONE_RESOURCE_GROUP=$(terraform -chdir="$TF_DIR" output -raw dns_zone_resource_group 2>/dev/null || true)
     BOOKINFO_SUBDOMAIN=$(terraform -chdir="$TF_DIR" output -raw bookinfo_subdomain 2>/dev/null || true)
@@ -49,5 +51,20 @@ rm -f "$TF_DIR"/terraform.tfstate "$TF_DIR"/terraform.tfstate.backup
 rm -rf "$TF_DIR"/.terraform
 echo -e "${GREEN}✓ Local Terraform files removed${NC}"
 echo ""
+
+echo -e "${YELLOW}Removing rendered manifest cache...${NC}"
+rm -rf "$SCRIPT_DIR/.rendered"
+echo -e "${GREEN}✓ .rendered/ removed${NC}"
+echo ""
+
+if [ -n "${CLUSTER_NAME:-}" ] && command -v kubectl &>/dev/null; then
+    echo -e "${YELLOW}Removing the '$CLUSTER_NAME' entry from your local kubeconfig...${NC}"
+    USER_ENTRY_NAME="clusterUser_${RESOURCE_GROUP}_${CLUSTER_NAME}"
+    kubectl config delete-context "$CLUSTER_NAME" &>/dev/null || true
+    kubectl config delete-cluster "$CLUSTER_NAME" &>/dev/null || true
+    kubectl config unset "users.$USER_ENTRY_NAME" &>/dev/null || true
+    echo -e "${GREEN}✓ kubeconfig entries removed (or already gone)${NC}"
+    echo ""
+fi
 
 echo -e "${GREEN}Cleanup complete.${NC}"

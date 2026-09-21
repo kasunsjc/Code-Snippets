@@ -243,7 +243,7 @@ The add-on uses [canary minor-revision upgrades](https://learn.microsoft.com/azu
 ./cleanup.sh
 ```
 
-Prompts for confirmation, then removes the A record `deploy.sh` added to your Azure DNS zone (the zone itself is never touched), runs `terraform destroy`, removes local state files, and deletes the `.terraform` provider cache — leaving no orphaned Azure resources or stale provider locks behind.
+Prompts for confirmation, then removes the A record `deploy.sh` added to your Azure DNS zone (the zone itself is never touched), runs `terraform destroy`, removes local state files, deletes the `.terraform` provider cache and rendered manifest cache, and removes the cluster's context/cluster/user entries from your local `~/.kube/config` — leaving no orphaned Azure resources, stale provider locks, or dead kubeconfig entries behind.
 
 ## Troubleshooting
 
