@@ -9,3 +9,8 @@ user_object_id = ""
 enable_oidc_auth = true
 harbor_oidc_app_display_name = "harbor-oidc-sso"
 harbor_admin_group_member_upns = []
+
+# Generate with: ssh-keygen -t ed25519 -f ./harbor-jumpbox-key -N ""
+jumpbox_ssh_public_key = "ssh-ed25519 AAAA... you@example.com"
+jumpbox_admin_username = "azureuser"
+jumpbox_vm_size = "Standard_B2s"

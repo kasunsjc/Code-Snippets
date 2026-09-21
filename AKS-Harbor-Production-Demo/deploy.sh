@@ -26,7 +26,7 @@ json_escape() {
 }
 
 check_prerequisites() {
-  for cmd in az terraform kubectl helm envsubst; do
+  for cmd in az terraform kubectl helm envsubst ssh scp nc; do
     if ! command -v "$cmd" >/dev/null 2>&1; then
       error "Required tool not found: $cmd"
       exit 1
@@ -36,6 +36,11 @@ check_prerequisites() {
   if ! az account show >/dev/null 2>&1; then
     error "Azure CLI is not logged in. Run 'az login' first."
     exit 1
+  fi
+
+  if ! az extension show --name bastion >/dev/null 2>&1; then
+    info "Installing the 'bastion' az CLI extension..."
+    az extension add --name bastion --only-show-errors
   fi
 }
 
@@ -92,60 +97,52 @@ main() {
     ACME_EMAIL CERT_MANAGER_CLIENT_ID KEY_VAULT_NAME KV_CSI_CLIENT_ID HARBOR_ADMIN_PASSWORD \
     POSTGRES_HOST POSTGRES_PASSWORD REDIS_HOST REDIS_PORT REDIS_PASSWORD HARBOR_OIDC_SETTINGS_JSON
 
-  az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" --overwrite-existing
+  BASTION_NAME="$(terraform -chdir="$TF_DIR" output -raw bastion_name)"
+  JUMPBOX_VM_ID="$(terraform -chdir="$TF_DIR" output -raw jumpbox_vm_id)"
+  JUMPBOX_ADMIN_USERNAME="$(terraform -chdir="$TF_DIR" output -raw jumpbox_admin_username)"
+  JUMPBOX_SSH_KEY="${JUMPBOX_SSH_KEY:-$HOME/.ssh/id_rsa}"
+  local_tunnel_port=2222
+  ssh_opts=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$JUMPBOX_SSH_KEY" -p "$local_tunnel_port")
 
-  info "Installing Helm repositories..."
-  helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null
-  helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
-  helm repo add harbor https://helm.goharbor.io --force-update >/dev/null
-  helm repo update >/dev/null
+  info "Fetching kubeconfig for the private cluster (control-plane API call only, no VNet access needed)..."
+  az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" \
+    --file "$RENDERED_DIR/kubeconfig" --overwrite-existing
 
-  info "Installing Traefik..."
-  helm upgrade --install traefik traefik/traefik \
-    --namespace traefik --create-namespace \
-    --version "41.5.0" \
-    --wait --timeout 5m
-
-  info "Installing cert-manager..."
-  helm upgrade --install cert-manager jetstack/cert-manager \
-    --namespace cert-manager --create-namespace \
-    --version "1.21.2" \
-    --set crds.enabled=true \
-    --wait --timeout 5m
-
-  info "Creating Harbor namespace and base manifests..."
-  kubectl apply -f "$MANIFESTS_DIR/namespace.yaml"
+  info "Rendering Kubernetes manifests..."
   envsubst < "$MANIFESTS_DIR/cluster-issuer.yaml.tpl" > "$RENDERED_DIR/cluster-issuer.yaml"
-  kubectl apply -f "$RENDERED_DIR/cluster-issuer.yaml"
-
-  info "Applying storage class and secret sync resources..."
-  kubectl apply -f "$MANIFESTS_DIR/storageclass-azurefile-zrs-nfs.yaml"
   envsubst < "$MANIFESTS_DIR/secretproviderclass.yaml.tpl" > "$RENDERED_DIR/secretproviderclass.yaml"
-  kubectl apply -f "$RENDERED_DIR/secretproviderclass.yaml"
-  kubectl apply -f "$MANIFESTS_DIR/keyvault-secret-sync.yaml"
-
-  info "Applying Harbor audit-log forwarder (must be Ready before Harbor installs)..."
-  kubectl apply -f "$MANIFESTS_DIR/audit-log-forwarder.yaml"
-  kubectl rollout status deployment/harbor-audit-forwarder -n harbor --timeout=120s
-
-  info "Applying Harbor values template..."
   envsubst < "$MANIFESTS_DIR/harbor-values.yaml.tpl" > "$RENDERED_DIR/harbor-values.yaml"
-
-  info "Deploying Harbor..."
-  helm upgrade --install harbor harbor/harbor \
-    --namespace harbor \
-    --create-namespace \
-    -f "$RENDERED_DIR/harbor-values.yaml" \
-    --version "1.19.2" \
-    --wait --timeout 10m
-
-  info "Applying Harbor ingress and certificate manifests..."
   envsubst < "$MANIFESTS_DIR/harbor-certificate.yaml.tpl" > "$RENDERED_DIR/harbor-certificate.yaml"
   envsubst < "$MANIFESTS_DIR/harbor-ingress-route.yaml.tpl" > "$RENDERED_DIR/harbor-ingress-route.yaml"
-  kubectl apply -f "$RENDERED_DIR/harbor-certificate.yaml"
-  kubectl apply -f "$RENDERED_DIR/harbor-ingress-route.yaml"
+  cp "$MANIFESTS_DIR/namespace.yaml" "$MANIFESTS_DIR/storageclass-azurefile-zrs-nfs.yaml" \
+    "$MANIFESTS_DIR/keyvault-secret-sync.yaml" "$MANIFESTS_DIR/audit-log-forwarder.yaml" \
+    "$MANIFESTS_DIR/remote-deploy.sh" "$RENDERED_DIR/"
+  chmod +x "$RENDERED_DIR/remote-deploy.sh"
 
-  info "Harbor deployment completed with Entra ID OIDC configuration."
+  info "Opening an Azure Bastion tunnel to the jumpbox (127.0.0.1:$local_tunnel_port)..."
+  az network bastion tunnel \
+    --name "$BASTION_NAME" --resource-group "$RESOURCE_GROUP" \
+    --target-resource-id "$JUMPBOX_VM_ID" \
+    --resource-port 22 --port "$local_tunnel_port" \
+    --only-show-errors &>/tmp/harbor-bastion-tunnel.log &
+  tunnel_pid=$!
+  trap 'kill "$tunnel_pid" >/dev/null 2>&1 || true' EXIT
+
+  info "Waiting for the tunnel to come up..."
+  for _ in $(seq 1 30); do
+    if nc -z 127.0.0.1 "$local_tunnel_port" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+  done
+
+  info "Copying rendered manifests to the jumpbox..."
+  ssh "${ssh_opts[@]}" "$JUMPBOX_ADMIN_USERNAME@127.0.0.1" 'mkdir -p /tmp/harbor-deploy'
+  scp -P "$local_tunnel_port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$JUMPBOX_SSH_KEY" \
+    "$RENDERED_DIR"/* "$JUMPBOX_ADMIN_USERNAME@127.0.0.1:/tmp/harbor-deploy/"
+
+  info "Running the deployment on the jumpbox..."
+  ssh "${ssh_opts[@]}" "$JUMPBOX_ADMIN_USERNAME@127.0.0.1" 'bash /tmp/harbor-deploy/remote-deploy.sh'
 }
 
 main "$@"

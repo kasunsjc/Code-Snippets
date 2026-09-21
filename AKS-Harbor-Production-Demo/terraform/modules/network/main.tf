@@ -35,6 +35,21 @@ resource "azurerm_subnet" "privatelink" {
   private_endpoint_network_policies = "Disabled"
 }
 
+# Name is fixed by Azure Bastion - it will not deploy into a subnet with any other name.
+resource "azurerm_subnet" "bastion" {
+  name                 = "AzureBastionSubnet"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.this.name
+  address_prefixes     = ["10.50.18.0/26"]
+}
+
+resource "azurerm_subnet" "jumpbox" {
+  name                 = "snet-jumpbox"
+  resource_group_name  = var.resource_group_name
+  virtual_network_name = azurerm_virtual_network.this.name
+  address_prefixes     = ["10.50.18.64/28"]
+}
+
 resource "azurerm_private_dns_zone" "postgres" {
   name                = "privatelink.postgres.database.azure.com"
   resource_group_name = var.resource_group_name

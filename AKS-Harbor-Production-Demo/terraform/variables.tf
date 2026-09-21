@@ -103,6 +103,23 @@ variable "harbor_admin_group_member_upns" {
   default     = []
 }
 
+variable "jumpbox_ssh_public_key" {
+  description = "SSH public key (e.g. contents of id_ed25519.pub) authorized on the Bastion-only jumpbox VM."
+  type        = string
+}
+
+variable "jumpbox_admin_username" {
+  description = "Admin username for the jumpbox VM."
+  type        = string
+  default     = "azureuser"
+}
+
+variable "jumpbox_vm_size" {
+  description = "VM size for the jumpbox used to reach the private AKS API server via Azure Bastion."
+  type        = string
+  default     = "Standard_B2s"
+}
+
 variable "tags" {
   description = "Tags applied to Azure resources."
   type        = map(string)

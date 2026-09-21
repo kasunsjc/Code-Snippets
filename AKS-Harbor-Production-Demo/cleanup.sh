@@ -14,12 +14,7 @@ if [[ -d "$TF_DIR" ]]; then
   terraform -chdir="$TF_DIR" destroy -auto-approve || true
 fi
 
-helm uninstall harbor -n harbor >/dev/null 2>&1 || true
-helm uninstall traefik -n traefik >/dev/null 2>&1 || true
-helm uninstall cert-manager -n cert-manager >/dev/null 2>&1 || true
-kubectl delete namespace harbor --ignore-not-found >/dev/null 2>&1 || true
-kubectl delete namespace traefik --ignore-not-found >/dev/null 2>&1 || true
-kubectl delete namespace cert-manager --ignore-not-found >/dev/null 2>&1 || true
-
+# Helm/kubectl cleanup is unnecessary: the AKS API server is private, and
+# terraform destroy above already removes the cluster (and everything on it).
 rm -rf "$SCRIPT_DIR/.rendered"
 echo "Cleanup completed."

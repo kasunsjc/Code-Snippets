@@ -130,3 +130,19 @@ output "harbor_limited_guest_group_object_id" {
   value = module.identity.harbor_limited_guest_group_object_id
 }
 
+output "bastion_name" {
+  value = module.bastion.bastion_name
+}
+
+output "jumpbox_vm_id" {
+  value = module.bastion.jumpbox_vm_id
+}
+
+output "jumpbox_private_ip" {
+  value = module.bastion.jumpbox_private_ip
+}
+
+output "jumpbox_admin_username" {
+  value = module.bastion.jumpbox_admin_username
+}
+

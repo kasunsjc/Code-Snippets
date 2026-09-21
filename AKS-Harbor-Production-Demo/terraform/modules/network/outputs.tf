@@ -14,6 +14,22 @@ output "privatelink_subnet_id" {
   value = azurerm_subnet.privatelink.id
 }
 
+output "bastion_subnet_id" {
+  value = azurerm_subnet.bastion.id
+}
+
+output "bastion_subnet_address_prefix" {
+  value = azurerm_subnet.bastion.address_prefixes[0]
+}
+
+output "jumpbox_subnet_id" {
+  value = azurerm_subnet.jumpbox.id
+}
+
+output "jumpbox_subnet_address_prefix" {
+  value = azurerm_subnet.jumpbox.address_prefixes[0]
+}
+
 output "postgres_private_dns_zone_id" {
   value = azurerm_private_dns_zone.postgres.id
 }
