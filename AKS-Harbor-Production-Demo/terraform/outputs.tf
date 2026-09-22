@@ -146,3 +146,8 @@ output "jumpbox_admin_username" {
   value = module.bastion.jumpbox_admin_username
 }
 
+output "jumpbox_admin_password" {
+  value     = module.bastion.jumpbox_admin_password
+  sensitive = true
+}
+

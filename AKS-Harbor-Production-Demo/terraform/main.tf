@@ -141,6 +141,7 @@ module "bastion" {
   jumpbox_vm_size               = var.jumpbox_vm_size
   jumpbox_admin_username        = var.jumpbox_admin_username
   jumpbox_ssh_public_key        = var.jumpbox_ssh_public_key
+  jumpbox_admin_password        = var.jumpbox_admin_password
   tags                          = local.tags
 }
 

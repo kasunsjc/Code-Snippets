@@ -37,7 +37,16 @@ variable "jumpbox_admin_username" {
 }
 
 variable "jumpbox_ssh_public_key" {
-  type = string
+  description = "Optional SSH public key for the jumpbox. SSH key auth is more secure than a password - prefer it for anything long-lived."
+  type        = string
+  default     = ""
+}
+
+variable "jumpbox_admin_password" {
+  description = "Optional jumpbox admin password. Leave blank to auto-generate one (retrieve it via the jumpbox_admin_password output)."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "tags" {

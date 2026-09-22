@@ -104,8 +104,16 @@ variable "harbor_admin_group_member_upns" {
 }
 
 variable "jumpbox_ssh_public_key" {
-  description = "SSH public key (e.g. contents of id_ed25519.pub) authorized on the Bastion-only jumpbox VM."
+  description = "Optional SSH public key (e.g. contents of id_ed25519.pub) authorized on the Bastion-only jumpbox VM. SSH key auth is more secure than a password - recommended if you'll use the jumpbox more than once."
   type        = string
+  default     = ""
+}
+
+variable "jumpbox_admin_password" {
+  description = "Optional jumpbox admin password. Leave blank to auto-generate one (retrieve it via the jumpbox_admin_password output)."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "jumpbox_admin_username" {

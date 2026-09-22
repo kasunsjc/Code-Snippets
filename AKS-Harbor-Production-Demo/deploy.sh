@@ -100,9 +100,25 @@ main() {
   BASTION_NAME="$(terraform -chdir="$TF_DIR" output -raw bastion_name)"
   JUMPBOX_VM_ID="$(terraform -chdir="$TF_DIR" output -raw jumpbox_vm_id)"
   JUMPBOX_ADMIN_USERNAME="$(terraform -chdir="$TF_DIR" output -raw jumpbox_admin_username)"
-  JUMPBOX_SSH_KEY="${JUMPBOX_SSH_KEY:-$HOME/.ssh/id_rsa}"
   local_tunnel_port=2222
-  ssh_opts=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$JUMPBOX_SSH_KEY" -p "$local_tunnel_port")
+
+  # Password auth (the jumpbox default) is simpler to bootstrap; set JUMPBOX_SSH_KEY
+  # to a private key path to use SSH key auth instead - it's the more secure option.
+  if [[ -n "${JUMPBOX_SSH_KEY:-}" && -f "$JUMPBOX_SSH_KEY" ]]; then
+    info "Using SSH key auth for the jumpbox (more secure than a password)."
+    ssh_cmd=(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$JUMPBOX_SSH_KEY" -p "$local_tunnel_port")
+    scp_cmd=(scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$JUMPBOX_SSH_KEY" -P "$local_tunnel_port")
+  else
+    if ! command -v sshpass >/dev/null 2>&1; then
+      error "sshpass is required for password-based jumpbox access (e.g. 'brew install hudochenkov/sshpass/sshpass')."
+      error "Alternatively, set JUMPBOX_SSH_KEY to a private key path to use SSH key auth instead - it's also more secure."
+      exit 1
+    fi
+    warn "Using password auth for the jumpbox. Set JUMPBOX_SSH_KEY for the more secure SSH key option instead."
+    JUMPBOX_ADMIN_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw jumpbox_admin_password)"
+    ssh_cmd=(sshpass -p "$JUMPBOX_ADMIN_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p "$local_tunnel_port")
+    scp_cmd=(sshpass -p "$JUMPBOX_ADMIN_PASSWORD" scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -P "$local_tunnel_port")
+  fi
 
   info "Fetching kubeconfig for the private cluster (control-plane API call only, no VNet access needed)..."
   az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" \
@@ -137,12 +153,11 @@ main() {
   done
 
   info "Copying rendered manifests to the jumpbox..."
-  ssh "${ssh_opts[@]}" "$JUMPBOX_ADMIN_USERNAME@127.0.0.1" 'mkdir -p /tmp/harbor-deploy'
-  scp -P "$local_tunnel_port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$JUMPBOX_SSH_KEY" \
-    "$RENDERED_DIR"/* "$JUMPBOX_ADMIN_USERNAME@127.0.0.1:/tmp/harbor-deploy/"
+  "${ssh_cmd[@]}" "$JUMPBOX_ADMIN_USERNAME@127.0.0.1" 'mkdir -p /tmp/harbor-deploy'
+  "${scp_cmd[@]}" "$RENDERED_DIR"/* "$JUMPBOX_ADMIN_USERNAME@127.0.0.1:/tmp/harbor-deploy/"
 
   info "Running the deployment on the jumpbox..."
-  ssh "${ssh_opts[@]}" "$JUMPBOX_ADMIN_USERNAME@127.0.0.1" 'bash /tmp/harbor-deploy/remote-deploy.sh'
+  "${ssh_cmd[@]}" "$JUMPBOX_ADMIN_USERNAME@127.0.0.1" 'bash /tmp/harbor-deploy/remote-deploy.sh'
 }
 
 main "$@"

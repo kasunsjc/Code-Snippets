@@ -13,3 +13,8 @@ output "jumpbox_private_ip" {
 output "jumpbox_admin_username" {
   value = var.jumpbox_admin_username
 }
+
+output "jumpbox_admin_password" {
+  value     = local.jumpbox_admin_password
+  sensitive = true
+}

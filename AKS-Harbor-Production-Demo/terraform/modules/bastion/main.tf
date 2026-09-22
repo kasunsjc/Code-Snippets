@@ -88,21 +88,37 @@ locals {
   EOT
 }
 
+# Password auth is simpler to bootstrap; an SSH key is more secure and is used
+# instead/in addition whenever jumpbox_ssh_public_key is supplied.
+resource "random_password" "jumpbox_admin" {
+  count   = var.jumpbox_admin_password == "" ? 1 : 0
+  length  = 20
+  special = true
+}
+
+locals {
+  jumpbox_admin_password = var.jumpbox_admin_password != "" ? var.jumpbox_admin_password : random_password.jumpbox_admin[0].result
+}
+
 resource "azurerm_linux_virtual_machine" "jumpbox" {
   name                  = "vm-jumpbox-${var.project}-${var.environment}"
   location              = var.location
   resource_group_name   = var.resource_group_name
   size                  = var.jumpbox_vm_size
   admin_username        = var.jumpbox_admin_username
+  admin_password        = local.jumpbox_admin_password
   network_interface_ids = [azurerm_network_interface.jumpbox.id]
   custom_data           = base64encode(local.jumpbox_cloud_init)
   tags                  = var.tags
 
-  disable_password_authentication = true
+  disable_password_authentication = false
 
-  admin_ssh_key {
-    username   = var.jumpbox_admin_username
-    public_key = var.jumpbox_ssh_public_key
+  dynamic "admin_ssh_key" {
+    for_each = var.jumpbox_ssh_public_key != "" ? [1] : []
+    content {
+      username   = var.jumpbox_admin_username
+      public_key = var.jumpbox_ssh_public_key
+    }
   }
 
   os_disk {
