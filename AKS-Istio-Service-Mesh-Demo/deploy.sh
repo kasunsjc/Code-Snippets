@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 MANIFESTS_DIR="$SCRIPT_DIR/kubernetes-manifests"
 RENDERED_DIR="$SCRIPT_DIR/.rendered"
+GATEWAY_IP_FILE="$RENDERED_DIR/bookinfo-gateway-ip"
 CERT_MANAGER_CHART_VERSION="1.16.2"
 
 echo -e "${GREEN}==========================================${NC}"
@@ -133,8 +134,21 @@ kubectl apply -f "$BOOKINFO_URL"
 echo -e "${GREEN}✓ bookinfo applied${NC}"
 echo ""
 
-echo -e "${YELLOW}Waiting for bookinfo pods to become Ready (sidecar injection)...${NC}"
-kubectl wait --for=condition=Ready pod -l app --timeout=300s -n default || true
+echo -e "${YELLOW}Waiting for the Bookinfo deployments to roll out...${NC}"
+for deployment in details-v1 productpage-v1 ratings-v1 reviews-v1 reviews-v2 reviews-v3; do
+    kubectl rollout status "deployment/${deployment}" -n default --timeout=300s
+done
+
+echo -e "${YELLOW}Verifying that Bookinfo pods are Ready with injected sidecars...${NC}"
+if ! kubectl get pods -l app -n default -o json | jq -e '
+    (.items | length) > 0 and
+    all(.items[]; ((.status.containerStatuses // []) | length) >= 2 and all((.status.containerStatuses // [])[]; .ready == true))
+' >/dev/null; then
+    echo -e "${RED}Error: Bookinfo pods are not fully ready with injected sidecars.${NC}"
+    kubectl get pods -l app -n default
+    exit 1
+fi
+echo -e "${GREEN}✓ Bookinfo pods are ready with sidecars${NC}"
 echo ""
 
 #############################################
@@ -179,6 +193,7 @@ if [ -n "${GATEWAY_IP:-}" ]; then
     az network dns record-set a add-record \
         --resource-group "$DNS_ZONE_RESOURCE_GROUP" --zone-name "$DNS_ZONE_NAME" \
         --record-set-name "$BOOKINFO_SUBDOMAIN" --ipv4-address "$GATEWAY_IP" --only-show-errors >/dev/null
+    printf '%s\n' "$GATEWAY_IP" > "$GATEWAY_IP_FILE"
     echo -e "${GREEN}✓ A record updated${NC}"
 else
     echo -e "${YELLOW}Gateway IP not ready - skipping DNS A record update. Re-run 'az network dns record-set a add-record' manually once it is.${NC}"
@@ -186,8 +201,12 @@ fi
 echo ""
 
 echo -e "${YELLOW}Waiting for the TLS certificate to become Ready (DNS-01 propagation)...${NC}"
-kubectl wait --for=condition=Ready certificate/bookinfo-gateway-tls -n aks-istio-ingress --timeout=300s || \
-    echo -e "${YELLOW}Certificate not Ready yet - check with: kubectl describe certificate bookinfo-gateway-tls -n aks-istio-ingress${NC}"
+if ! kubectl wait --for=condition=Ready certificate/bookinfo-gateway-tls -n aks-istio-ingress --timeout=300s; then
+    echo -e "${RED}Error: Certificate did not become Ready within the timeout.${NC}"
+    kubectl describe certificate bookinfo-gateway-tls -n aks-istio-ingress || true
+    exit 1
+fi
+echo -e "${GREEN}✓ TLS certificate is ready${NC}"
 echo ""
 echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}Deployment complete!${NC}"

@@ -41,7 +41,7 @@ variable "istio_revisions" {
     Istio control plane revision(s) to install (e.g. ["asm-1-24"]).
     Leave empty to auto-detect AKS's current default supported revision for
     `location`/`kubernetes_version` via `az aks mesh get-revisions` (requires
-    az CLI login + the aks-preview extension; see scripts/default-istio-revision.sh).
+    an Azure CLI login; see scripts/default-istio-revision.sh).
     Set 2 revisions only while performing a canary minor-version upgrade.
   EOT
   type        = list(string)
@@ -55,9 +55,14 @@ variable "internal_ingress_gateway_enabled" {
 }
 
 variable "external_ingress_gateway_enabled" {
-  description = "Enable the AKS-managed external Istio ingress gateway (public Azure Load Balancer)."
+  description = "Enable the AKS-managed external Istio ingress gateway (public Azure Load Balancer). This demo requires it for public DNS and TLS."
   type        = bool
   default     = true
+
+  validation {
+    condition     = var.external_ingress_gateway_enabled
+    error_message = "This demo requires the external Istio ingress gateway to expose Bookinfo over public DNS and TLS."
+  }
 }
 
 # --- Observability --------------------------------------------------------------

@@ -8,6 +8,7 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
+DNS_RECORD_IP_FILE="$SCRIPT_DIR/.rendered/bookinfo-gateway-ip"
 
 echo -e "${YELLOW}==========================================${NC}"
 echo -e "${YELLOW}AKS Istio Service Mesh Add-on Demo - Cleanup${NC}"
@@ -20,7 +21,10 @@ if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-if [ -d "$TF_DIR" ] && [ -f "$TF_DIR/.terraform.lock.hcl" ]; then
+if [ -d "$TF_DIR" ] && { [ -f "$TF_DIR/terraform.tfstate" ] || [ -f "$TF_DIR/terraform.tfstate.backup" ] || [ -d "$TF_DIR/.terraform" ]; }; then
+    echo -e "${YELLOW}Initializing Terraform for cleanup...${NC}"
+    terraform -chdir="$TF_DIR" init -input=false >/dev/null
+
     # Capture everything we need for post-destroy cleanup up front - once the
     # cluster/DNS zone data source's dependent resources are destroyed, the
     # outputs that reference them can no longer be read from state.
@@ -29,12 +33,29 @@ if [ -d "$TF_DIR" ] && [ -f "$TF_DIR/.terraform.lock.hcl" ]; then
     DNS_ZONE_NAME=$(terraform -chdir="$TF_DIR" output -raw dns_zone_name 2>/dev/null || true)
     DNS_ZONE_RESOURCE_GROUP=$(terraform -chdir="$TF_DIR" output -raw dns_zone_resource_group 2>/dev/null || true)
     BOOKINFO_SUBDOMAIN=$(terraform -chdir="$TF_DIR" output -raw bookinfo_subdomain 2>/dev/null || true)
-    if [ -n "$DNS_ZONE_NAME" ] && [ -n "$DNS_ZONE_RESOURCE_GROUP" ] && [ -n "$BOOKINFO_SUBDOMAIN" ]; then
-        echo -e "${YELLOW}Removing the bookinfo A record from Azure DNS...${NC}"
-        az network dns record-set a delete \
+    BOOKINFO_GATEWAY_IP=$(tr -d '[:space:]' < "$DNS_RECORD_IP_FILE" 2>/dev/null || true)
+    if [ -n "$DNS_ZONE_NAME" ] && [ -n "$DNS_ZONE_RESOURCE_GROUP" ] && [ -n "$BOOKINFO_SUBDOMAIN" ] && [ -n "$BOOKINFO_GATEWAY_IP" ]; then
+        echo -e "${YELLOW}Removing the demo-managed bookinfo A record from Azure DNS...${NC}"
+        az network dns record-set a remove-record \
             --resource-group "$DNS_ZONE_RESOURCE_GROUP" --zone-name "$DNS_ZONE_NAME" \
-            --name "$BOOKINFO_SUBDOMAIN" --yes --only-show-errors 2>/dev/null || true
-        echo -e "${GREEN}✓ A record removed (or already gone)${NC}"
+            --record-set-name "$BOOKINFO_SUBDOMAIN" --ipv4-address "$BOOKINFO_GATEWAY_IP" \
+            --only-show-errors >/dev/null 2>&1 || true
+
+        REMAINING_A_RECORDS=$(az network dns record-set a show \
+            --resource-group "$DNS_ZONE_RESOURCE_GROUP" --zone-name "$DNS_ZONE_NAME" \
+            --name "$BOOKINFO_SUBDOMAIN" --query 'length(arecords)' -o tsv 2>/dev/null || echo "")
+
+        if [ "$REMAINING_A_RECORDS" = "0" ]; then
+            az network dns record-set a delete \
+                --resource-group "$DNS_ZONE_RESOURCE_GROUP" --zone-name "$DNS_ZONE_NAME" \
+                --name "$BOOKINFO_SUBDOMAIN" --yes --only-show-errors >/dev/null 2>&1 || true
+            echo -e "${GREEN}✓ Demo A record removed and empty record set deleted${NC}"
+        else
+            echo -e "${GREEN}✓ Demo A record removed (or already gone)${NC}"
+        fi
+        echo ""
+    elif [ -n "$DNS_ZONE_NAME" ] && [ -n "$DNS_ZONE_RESOURCE_GROUP" ] && [ -n "$BOOKINFO_SUBDOMAIN" ]; then
+        echo -e "${YELLOW}Skipping Azure DNS record cleanup because no tracked demo gateway IP was found.${NC}"
         echo ""
     fi
 
