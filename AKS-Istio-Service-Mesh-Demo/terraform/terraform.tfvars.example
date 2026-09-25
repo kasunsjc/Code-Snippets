@@ -1,0 +1,31 @@
+# Copy this file to terraform.tfvars and adjust as needed.
+# All values below are the module defaults - override only what you need to change.
+
+project     = "istio-mesh"
+environment = "demo"
+location    = "northeurope"
+
+kubernetes_version = "1.34"
+node_count          = 3
+node_vm_size        = "Standard_D4ds_v5"
+
+# Leave empty to let AKS install its current default supported Istio revision.
+# istio_revisions = ["asm-1-24"]
+
+internal_ingress_gateway_enabled = false
+external_ingress_gateway_enabled = true
+
+enable_monitoring = true
+
+# --- cert-manager + Azure DNS (required - no default) ---
+# An EXISTING Azure DNS zone already delegated to Azure DNS; this demo does not
+# create the zone. bookinfo_subdomain + dns_zone_name form the app's hostname
+# (e.g. bookinfo-demo -> bookinfo-demo.example.com).
+dns_zone_name           = "example.com"
+dns_zone_resource_group = "rg-dns-zones"
+bookinfo_subdomain      = "bookinfo-demo"
+acme_email              = "you@example.com"
+
+tags = {
+  owner = "your-name"
+}

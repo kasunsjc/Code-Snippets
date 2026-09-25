@@ -56,10 +56,20 @@ emit_blog_mappings() {
   REPO_ROOT="$repo_root" python3 "$repo_root/scripts/generate_blog_mappings.py"
 }
 
-# Collect all example directories
+list_example_dirs() {
+  if git -C "$REPO_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$REPO_ROOT" ls-tree -d --name-only HEAD
+  else
+    for dir in "$REPO_ROOT"/*/; do
+      basename "$dir"
+    done
+  fi
+}
+
+# Collect all tracked top-level example directories
 declare -a EXAMPLES=()
-for dir in "$REPO_ROOT"/*/; do
-  dirname="$(basename "$dir")"
+while IFS= read -r dirname; do
+  [[ -z "$dirname" ]] && continue
 
   # Skip non-example directories
   skip=false
@@ -71,11 +81,10 @@ for dir in "$REPO_ROOT"/*/; do
   done
   $skip && continue
 
-  # Must be a directory (not a file)
-  [[ -d "$dir" ]] || continue
+  [[ -d "$REPO_ROOT/$dirname" ]] || continue
 
   EXAMPLES+=("$dirname")
-done
+done < <(list_example_dirs)
 
 # Sort examples
 IFS=$'\n' EXAMPLES=($(sort <<<"${EXAMPLES[*]}")); unset IFS
