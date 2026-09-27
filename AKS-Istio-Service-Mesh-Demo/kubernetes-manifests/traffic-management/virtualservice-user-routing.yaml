@@ -1,0 +1,24 @@
+# Header-based routing demo: the bookinfo productpage always sends an
+# `end-user` header. Route the hard-coded test user "jason" to v2 (black star
+# ratings) while everyone else keeps hitting v1 - a common pattern for internal
+# dogfooding or beta cohorts before a weighted canary.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: reviews
+spec:
+  hosts:
+    - reviews
+  http:
+    - match:
+        - headers:
+            end-user:
+              exact: jason
+      route:
+        - destination:
+            host: reviews
+            subset: v2
+    - route:
+        - destination:
+            host: reviews
+            subset: v1

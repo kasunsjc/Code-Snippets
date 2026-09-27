@@ -1,0 +1,15 @@
+# Baseline: send 100% of traffic to reviews-v1 (no star ratings shown).
+# Apply this first so the app behaves predictably before demoing canary/weighted
+# routing with virtualservice-canary-v3.yaml.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: reviews
+spec:
+  hosts:
+    - reviews
+  http:
+    - route:
+        - destination:
+            host: reviews
+            subset: v1

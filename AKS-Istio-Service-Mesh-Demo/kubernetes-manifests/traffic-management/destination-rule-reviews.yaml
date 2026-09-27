@@ -1,0 +1,22 @@
+# Defines the v1/v2/v3 subsets of the `reviews` service used by the
+# VirtualServices below. Subsets are matched on the `version` pod label that
+# the bookinfo sample app already sets on each reviews deployment.
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: reviews
+spec:
+  host: reviews
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL # enforce mTLS between callers and reviews
+  subsets:
+    - name: v1
+      labels:
+        version: v1
+    - name: v2
+      labels:
+        version: v2
+    - name: v3
+      labels:
+        version: v3
