@@ -140,14 +140,27 @@ for deployment in details-v1 productpage-v1 ratings-v1 reviews-v1 reviews-v2 rev
 done
 
 echo -e "${YELLOW}Verifying that Bookinfo pods are Ready with injected sidecars...${NC}"
-if ! kubectl get pods -l app -n default -o json | jq -e '
-    (.items | length) > 0 and
-    all(.items[]; ((.status.containerStatuses // []) | length) >= 2 and all((.status.containerStatuses // [])[]; .ready == true))
-' >/dev/null; then
-    echo -e "${RED}Error: Bookinfo pods are not fully ready with injected sidecars.${NC}"
-    kubectl get pods -l app -n default
-    exit 1
-fi
+for selector in \
+    "app=details,version=v1" \
+    "app=productpage,version=v1" \
+    "app=ratings,version=v1" \
+    "app=reviews,version=v1" \
+    "app=reviews,version=v2" \
+    "app=reviews,version=v3"; do
+    if ! kubectl get pods -n default -l "$selector" -o json | jq -e '
+        (.items | length) > 0 and
+        all(.items[];
+            .metadata.deletionTimestamp == null and
+            .status.phase == "Running" and
+            any((.status.containerStatuses // [])[]; .name == "istio-proxy" and .ready == true) and
+            any((.status.containerStatuses // [])[]; .name != "istio-proxy" and .ready == true)
+        )
+    ' >/dev/null; then
+        echo -e "${RED}Error: Bookinfo pods for selector '$selector' are not fully ready with injected sidecars.${NC}"
+        kubectl get pods -n default -l "$selector"
+        exit 1
+    fi
+done
 echo -e "${GREEN}✓ Bookinfo pods are ready with sidecars${NC}"
 echo ""
 
