@@ -7,25 +7,29 @@ spec:
   provider: azure
   parameters:
     usePodIdentity: "false"
-    useVMManagedIdentity: "false"
-    userAssignedIdentityID: "${KV_CSI_CLIENT_ID}"
+    useVMManagedIdentity: "true"
+    userAssignedIdentityID: "${KUBELET_CLIENT_ID}"
     keyvaultName: "${KEY_VAULT_NAME}"
     tenantId: "${TENANT_ID}"
     objects: |
       array:
-        - objectName: harbor-admin-password
+        - |
+          objectName: harbor-admin-password
           objectType: secret
           secretName: harbor-admin
           secretVersion: ""
-        - objectName: harbor-secret-key
+        - |
+          objectName: harbor-secret-key
           objectType: secret
           secretName: harbor-secretkey
           secretVersion: ""
-        - objectName: harbor-postgres-password
+        - |
+          objectName: harbor-postgres-password
           objectType: secret
           secretName: harbor-database
           secretVersion: ""
-        - objectName: harbor-redis-key
+        - |
+          objectName: harbor-redis-key
           objectType: secret
           secretName: harbor-redis
           secretVersion: ""

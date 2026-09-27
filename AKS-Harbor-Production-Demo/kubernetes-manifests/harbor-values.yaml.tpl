@@ -33,11 +33,14 @@ redis:
     existingSecret: "harbor-redis"
     tlsOptions:
       enable: true
-  cacheLayerDatabaseIndex: 7
-  jobserviceDatabaseIndex: 1
-  registryDatabaseIndex: 2
+  # Azure Managed Redis only exposes DB index 0 (SELECT to any other index
+  # fails with "ERR DB index is out of range"), so every subsystem shares it -
+  # Harbor namespaces keys per-subsystem internally, so this is safe.
+  cacheLayerDatabaseIndex: 0
+  jobserviceDatabaseIndex: 0
+  registryDatabaseIndex: 0
   coreDatabaseIndex: 0
-  trivyAdapterIndex: 5
+  trivyAdapterIndex: 0
 
 persistence:
   persistentVolumeClaim:
@@ -57,7 +60,7 @@ core:
   configureUserSettings: |
     {
       ${HARBOR_OIDC_SETTINGS_JSON}
-      "audit_log_forward_endpoint": "http://harbor-audit-forwarder.harbor.svc.cluster.local:10514"
+      "audit_log_forward_endpoint": "harbor-audit-forwarder.harbor.svc.cluster.local:10514"
     }
 
 portal:

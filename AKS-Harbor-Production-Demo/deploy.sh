@@ -59,6 +59,7 @@ main() {
   CERT_MANAGER_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw cert_manager_client_id)"
   KEY_VAULT_NAME="$(terraform -chdir="$TF_DIR" output -raw key_vault_name)"
   KV_CSI_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw kv_csi_client_id)"
+  KUBELET_CLIENT_ID="$(terraform -chdir="$TF_DIR" output -raw kubelet_client_id)"
   HARBOR_ADMIN_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw harbor_admin_password)"
   POSTGRES_HOST="$(terraform -chdir="$TF_DIR" output -raw postgres_host)"
   POSTGRES_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw postgres_password)"
@@ -87,7 +88,7 @@ main() {
   fi
 
   export SUBSCRIPTION_ID TENANT_ID DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP HARBOR_FQDN \
-    ACME_EMAIL CERT_MANAGER_CLIENT_ID KEY_VAULT_NAME KV_CSI_CLIENT_ID HARBOR_ADMIN_PASSWORD \
+    ACME_EMAIL CERT_MANAGER_CLIENT_ID KEY_VAULT_NAME KV_CSI_CLIENT_ID KUBELET_CLIENT_ID HARBOR_ADMIN_PASSWORD \
     POSTGRES_HOST POSTGRES_PASSWORD REDIS_HOST REDIS_PORT REDIS_PASSWORD HARBOR_OIDC_SETTINGS_JSON
 
   info "Fetching AKS credentials..."

@@ -221,16 +221,17 @@ locals {
 module "keyvault" {
   source = "./modules/keyvault"
 
-  project                   = var.project
-  environment               = var.environment
-  location                  = var.location
-  resource_group_name       = azurerm_resource_group.this.name
-  tenant_id                 = data.azurerm_client_config.current.tenant_id
-  privatelink_subnet_id     = module.network.privatelink_subnet_id
-  private_dns_zone_id       = module.network.vault_private_dns_zone_id
-  kv_csi_identity_object_id = module.aks.key_vault_identity_object_id
-  user_object_id            = var.user_object_id
-  tags                      = local.tags
+  project                    = var.project
+  environment                = var.environment
+  location                   = var.location
+  resource_group_name        = azurerm_resource_group.this.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  privatelink_subnet_id      = module.network.privatelink_subnet_id
+  private_dns_zone_id        = module.network.vault_private_dns_zone_id
+  kv_csi_identity_object_id  = module.aks.key_vault_identity_object_id
+  kubelet_identity_object_id = module.aks.kubelet_identity_object_id
+  user_object_id             = var.user_object_id
+  tags                       = local.tags
 
   harbor_admin_password       = random_password.harbor_admin.result
   postgres_password           = module.postgres.postgres_password

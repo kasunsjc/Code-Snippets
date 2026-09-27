@@ -30,6 +30,13 @@ variable "kv_csi_identity_object_id" {
   type = string
 }
 
+# Auth for the CSI driver's SecretProviderClass sync: the Key Vault Secrets
+# Provider add-on's own identity has no Workload Identity federation set up,
+# so the sync pod uses the node's kubelet identity (VM managed identity) instead.
+variable "kubelet_identity_object_id" {
+  type = string
+}
+
 variable "user_object_id" {
   type    = string
   default = ""

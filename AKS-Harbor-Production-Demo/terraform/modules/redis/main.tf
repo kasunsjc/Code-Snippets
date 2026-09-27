@@ -12,8 +12,10 @@ resource "azurerm_managed_redis" "this" {
   default_database {
     access_keys_authentication_enabled = true
     client_protocol                    = "Encrypted"
-    clustering_policy                  = "OSSCluster"
-    eviction_policy                    = "NoEviction"
+    # Harbor selects multiple logical DBs (0/1/2/5/7) across its subsystems;
+    # OSSCluster only supports DB 0, so use Enterprise clustering instead.
+    clustering_policy = "EnterpriseCluster"
+    eviction_policy   = "NoEviction"
   }
 }
 

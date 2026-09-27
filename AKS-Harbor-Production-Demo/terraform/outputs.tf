@@ -59,6 +59,10 @@ output "kv_csi_client_id" {
   value = module.aks.key_vault_identity_client_id
 }
 
+output "kubelet_client_id" {
+  value = module.aks.kubelet_identity_client_id
+}
+
 output "postgres_host" {
   value = module.postgres.server_fqdn
 }

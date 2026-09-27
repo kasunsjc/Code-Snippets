@@ -61,6 +61,15 @@ resource "azurerm_role_assignment" "secret_user" {
   principal_id         = var.kv_csi_identity_object_id
 }
 
+# The CSI driver authenticates as the node's kubelet identity (useVMManagedIdentity)
+# for the harbor-secret-sync pod, since that identity is already attached to every
+# node's VMSS - no Workload Identity federation needed.
+resource "azurerm_role_assignment" "secret_user_kubelet" {
+  scope                = azurerm_key_vault.this.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = var.kubelet_identity_object_id
+}
+
 resource "azurerm_role_assignment" "secret_officer" {
   count                = var.user_object_id == "" ? 0 : 1
   scope                = azurerm_key_vault.this.id
@@ -89,72 +98,85 @@ resource "time_sleep" "rbac_propagation" {
   depends_on = [azurerm_role_assignment.secret_user, azurerm_role_assignment.secret_officer, azurerm_role_assignment.secret_officer_caller]
 }
 
+# Key Vault firewall/network-ACL changes can lag a couple of minutes behind
+# the ARM update call succeeding - re-waits whenever the allow-listed IP
+# changes (e.g. a dynamic/residential ISP re-assigning an address mid-apply).
+resource "time_sleep" "network_acl_propagation" {
+  create_duration = "90s"
+
+  triggers = {
+    ip_rule = trimspace(data.http.my_ip.response_body)
+  }
+
+  depends_on = [azurerm_key_vault.this]
+}
+
 resource "azurerm_key_vault_secret" "harbor_admin_password" {
   name         = "harbor-admin-password"
   value        = var.harbor_admin_password
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_postgres_password" {
   name         = "harbor-postgres-password"
   value        = var.postgres_password
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_redis_key" {
   name         = "harbor-redis-key"
   value        = var.redis_password
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_secret_key" {
   name         = "harbor-secret-key"
   value        = var.harbor_secret_key
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_core_secret" {
   name         = "harbor-core-secret"
   value        = var.harbor_core_secret
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_core_xsrf_key" {
   name         = "harbor-core-xsrf-key"
   value        = var.harbor_core_xsrf_key
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_jobservice_secret" {
   name         = "harbor-jobservice-secret"
   value        = var.harbor_jobservice_secret
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_registry_http_secret" {
   name         = "harbor-registry-http-secret"
   value        = var.harbor_registry_http_secret
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_registry_passwd" {
   name         = "harbor-registry-passwd"
   value        = var.harbor_registry_passwd
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
 
 resource "azurerm_key_vault_secret" "harbor_registry_htpasswd" {
   name         = "harbor-registry-htpasswd"
   value        = var.harbor_registry_htpasswd
   key_vault_id = azurerm_key_vault.this.id
-  depends_on   = [time_sleep.rbac_propagation]
+  depends_on   = [time_sleep.rbac_propagation, time_sleep.network_acl_propagation]
 }
