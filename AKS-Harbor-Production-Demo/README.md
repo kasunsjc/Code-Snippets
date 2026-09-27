@@ -1,11 +1,12 @@
 # Harbor on AKS — Production Architecture (Terraform Modules + Traefik + cert-manager + Entra ID SSO)
 
-A production-shaped Harbor container registry deployment on AKS: a **private AKS cluster**
-reachable only through **Azure Bastion** and a jumpbox, dedicated subnets for every tier,
-an external PostgreSQL Flexible Server and Azure Cache for Redis Premium behind private
-endpoints, Key Vault-backed secrets synced via the Secrets Store CSI driver, Microsoft
-Entra ID OIDC login with per-role security groups, and Azure Monitor + Managed Grafana
-observability — all provisioned through composable Terraform modules.
+A production-shaped Harbor container registry deployment on AKS: a standard AKS cluster
+joined to its own dedicated subnet, an external PostgreSQL Flexible Server and Azure Cache
+for Redis Premium behind private endpoints, Key Vault-backed secrets synced via the
+Secrets Store CSI driver, Microsoft Entra ID OIDC login with per-role security groups, and
+Azure Monitor + Managed Grafana observability — all provisioned through composable
+Terraform modules. See [Optional: harden cluster access](#-optional-harden-cluster-access-with-azure-bastion)
+for how to add a private-cluster + Bastion access pattern on top of this if you want it.
 
 It is the production-oriented companion to the simpler [AKS-Harbor-Registry-Demo](../AKS-Harbor-Registry-Demo),
 which uses Harbor's bundled internal Postgres/Redis and local auth only. Use this demo
@@ -17,9 +18,9 @@ to end.
 | Concern | How it's covered |
 |---|---|
 | Container registry | Harbor Helm chart with **external** PostgreSQL Flexible Server + Azure Cache for Redis Premium (no bundled DB/cache), Azure Files Premium ZRS NFS for registry storage |
-| Cluster access | AKS API server has **no public endpoint** (`private_cluster_enabled = true`); reached only via **Azure Bastion** tunneling SSH to a jumpbox VM inside the VNet — see [Private cluster access](#-private-cluster-access-via-azure-bastion) |
-| Networking | Dedicated VNet with one subnet per tier — AKS, PostgreSQL, Private Link, `AzureBastionSubnet`, and a jumpbox subnet — plus private DNS zones for PostgreSQL, Redis, Key Vault, and the AKS control plane |
-| Secrets | Azure Key Vault (RBAC, private endpoint, purge protection) — synced into Kubernetes Secrets via the AKS-managed Secrets Store CSI driver (Workload Identity, no stored credentials) |
+| Cluster access | Standard AKS cluster with a public API server (simplest to demo — `kubectl`/`helm` work directly from your machine); see [Optional: harden cluster access](#-optional-harden-cluster-access-with-azure-bastion) to lock this down further |
+| Networking | Dedicated VNet with one subnet per tier — AKS, PostgreSQL, Private Link — plus private DNS zones for PostgreSQL, Redis, and Key Vault |
+| Secrets | Azure Key Vault (RBAC + private endpoint for in-cluster access, narrow IP allowlist for `terraform apply` from your machine, purge protection) — synced into Kubernetes Secrets via the AKS-managed Secrets Store CSI driver (Workload Identity, no stored credentials); see [Key Vault access model](#-key-vault-access-model) |
 | Ingress | [Traefik](https://traefik.io/traefik) (Helm) + `IngressRoute`/`Middleware` — HTTPS with HTTP→HTTPS redirect and HSTS, mirroring the registry demo's proven pattern |
 | TLS | cert-manager `Certificate` (`harbor-tls`) issued by a Let's Encrypt production `ClusterIssuer` via **Azure DNS DNS-01**, authenticated with Azure Workload Identity (no client secret) |
 | Audit logs | Fluent Bit sidecar (`harbor-audit-forwarder`) re-emits Harbor's audit syslog stream to stdout → Container Insights → Log Analytics `ContainerLogV2`. **Must be `Ready` before Harbor installs** — `harbor-core` dials it at startup and exits if unreachable |
@@ -31,14 +32,11 @@ to end.
 
 ```mermaid
 flowchart TB
-    Operator(("Operator")) -->|az network bastion tunnel| Bastion
+    Operator(("Operator")) -->|kubectl / helm / az aks get-credentials| AKS
+    Internet(("Client / Browser")) -->|HTTPS| Traefik
 
     subgraph VNet["VNet 10.50.0.0/16"]
-        Bastion["Azure Bastion\n(AzureBastionSubnet)"]
-        Jumpbox["Jumpbox VM\n(snet-jumpbox, no public IP)"]
-        Bastion -->|SSH :22| Jumpbox
-
-        subgraph AKS["AKS Cluster (snet-aks, private API server)"]
+        subgraph AKS["AKS Cluster (snet-aks, public API server)"]
             Traefik["Traefik\n(internal LoadBalancer)"]
             CertManager["cert-manager\n(Workload Identity)"]
             Forwarder["harbor-audit-forwarder\n(Fluent Bit)"]
@@ -46,16 +44,14 @@ flowchart TB
             HarborSvc["Harbor components\n(registry, jobservice, portal, trivy)"]
             CSI["Secrets Store CSI\n(Key Vault provider)"]
         end
-        Jumpbox -->|kubectl/helm over kubeconfig| AKS
 
         subgraph Data["Private data plane (snet-privatelink / snet-postgres)"]
             PG[("PostgreSQL\nFlexible Server\n(zone-redundant HA)")]
             Redis[("Azure Cache\nfor Redis Premium")]
-            KV[("Key Vault\n(private endpoint)")]
+            KV[("Key Vault\n(private endpoint + narrow IP allowlist)")]
         end
     end
 
-    Internet(("Client / Browser")) -->|HTTPS| Traefik
     Traefik --> HarborCore
     HarborCore --> HarborSvc
     HarborSvc -->|private endpoint| PG
@@ -80,46 +76,57 @@ VNet `10.50.0.0/16`, one subnet per tier so NSGs and route tables can be scoped 
 | `snet-aks` | `10.50.0.0/20` | AKS nodes (pod IPs come from the CNI overlay range, not this subnet) |
 | `snet-postgres` | `10.50.16.0/24` | Delegated to `Microsoft.DBforPostgreSQL/flexibleServers` |
 | `snet-privatelink` | `10.50.17.0/24` | Private endpoints for Redis and Key Vault |
-| `AzureBastionSubnet` | `10.50.18.0/26` | Azure Bastion (name is fixed by the service) |
-| `snet-jumpbox` | `10.50.18.64/28` | Jumpbox VM — no public IP, SSH allowed only from `AzureBastionSubnet` |
 
-Private DNS zones (all linked to the VNet above): `privatelink.postgres.database.azure.com`, `privatelink.redis.azure.net`, `privatelink.vaultcore.azure.net`, plus the AKS-managed `privatelink.<region>.azmk8s.io` zone created automatically by `private_dns_zone_id = "System"`.
+Private DNS zones (all linked to the VNet above): `privatelink.postgres.database.azure.com`, `privatelink.redis.azure.net`, `privatelink.vaultcore.azure.net`.
 
-## 🔐 Private cluster access via Azure Bastion
+## 🔒 Key Vault access model
 
-The AKS API server has `private_cluster_enabled = true` — it has no public IP and is only
-reachable from inside the VNet. There is no VPN or peering back to your laptop, so
-`deploy.sh` reaches the cluster by tunneling through Azure Bastion to a jumpbox VM that
-lives in the same VNet:
+Postgres and Redis are reachable only over their private endpoints — no public network
+access, no exceptions. Key Vault is *mostly* the same, with one deliberate, narrow
+exception: `terraform apply` runs from your machine (not from inside the VNet), and it
+needs to write the Harbor secrets into Key Vault as part of `terraform apply`. To make
+that possible without a jump host, `modules/keyvault` sets:
 
-1. `deploy.sh` runs `terraform apply`, renders every manifest locally, and fetches a
-   kubeconfig with `az aks get-credentials` (this call only talks to the ARM control
-   plane, so it works from anywhere — fetching credentials for a private cluster doesn't
-   require network access to it).
-2. It opens `az network bastion tunnel` (a local TCP forward to the jumpbox's SSH port),
-   `scp`s the rendered manifests + kubeconfig to the jumpbox, then `ssh`es in and runs
-   [`kubernetes-manifests/remote-deploy.sh`](kubernetes-manifests/remote-deploy.sh), which
-   does the actual `helm`/`kubectl` work using the shipped kubeconfig.
-3. The tunnel is closed automatically when the script exits.
+- `public_network_access_enabled = true`, but `network_acls.default_action = "Deny"` —
+  the vault rejects every request except from IPs you explicitly allow.
+- `ip_rules = [<your current public IP>]`, auto-detected at apply time via a `data "http"`
+  lookup — so only the machine currently running `terraform apply` gets a public-network
+  exception, not "everyone."
+- A private endpoint (`snet-privatelink`) for the AKS Secrets Store CSI driver — the cluster
+  never uses the public path at all.
+- Access control is RBAC-only (`rbac_authorization_enabled = true`), scoped to specific
+  role assignments, not vault-wide access policies.
 
-By default the jumpbox uses a **password** (auto-generated by Terraform if you don't set
-`jumpbox_admin_password`) — it's the simplest option to get started:
+This is a pragmatic middle ground for a demo: closed to the internet by default, with a
+single named exception for the person actually running Terraform. If you need Key Vault to
+have **zero** public network exposure, set `public_network_access_enabled = false` and
+remove the `network_acls`/`data "http" "my_ip"` block in `modules/keyvault/main.tf` — but
+then `terraform apply` (and any future `terraform apply` that touches Key Vault secrets)
+must run from inside the VNet (e.g. a jumpbox, or Azure Cloud Shell with VNet
+integration), since the write is a data-plane call that Azure RBAC alone can't route
+around a fully private vault.
 
-```bash
-terraform -chdir=terraform output -raw jumpbox_admin_password
-```
+## 🛡️ Optional: harden cluster access with Azure Bastion
 
-`deploy.sh` uses this password automatically via `sshpass` (install it, e.g.
-`brew install hudochenkov/sshpass/sshpass` on macOS). **SSH key auth is more secure** and
-recommended if you'll use the jumpbox more than once — set it instead:
+This demo keeps the AKS API server public so `kubectl`/`helm` work directly from your
+laptop — the simplest path for a demo. If you want to lock that down for a more
+production-like posture, you can extend this Terraform with:
 
-```bash
-ssh-keygen -t ed25519 -f ./harbor-jumpbox-key -N ""
-# put the .pub contents in terraform.tfvars as jumpbox_ssh_public_key, then re-apply
-export JUMPBOX_SSH_KEY="$(pwd)/harbor-jumpbox-key"   # deploy.sh prefers this over the password when set
-```
+- `private_cluster_enabled = true` (+ `private_dns_zone_id = "System"`) on the
+  `azurerm_kubernetes_cluster` resource in `modules/aks`, so the API server has no
+  public IP.
+- A dedicated `AzureBastionSubnet` (`/26` minimum) plus an Azure Bastion host
+  (Standard SKU, to get native-client tunnel support).
+- A small jumpbox VM in its own subnet, with an NSG that only allows inbound SSH from
+  the Bastion subnet, and `az`/`kubectl`/`helm` pre-installed via cloud-init.
+- `deploy.sh` would then need to fetch the kubeconfig, open
+  `az network bastion tunnel` to the jumpbox, and run `kubectl`/`helm` there instead of
+  locally.
 
-To poke around interactively instead: `az network bastion ssh --name <bastion_name> --resource-group <rg> --target-resource-id <jumpbox_vm_id> --auth-type password --username azureuser` (or `--auth-type ssh-key --ssh-key ./harbor-jumpbox-key` if you set one up). The jumpbox's cloud-init already installs `az`, `kubectl`, and `helm`.
+This is exactly the pattern this demo used until it was simplified — it works, but adds a
+real amount of moving parts (tunnel lifecycle, SSH/SCP auth, an extra VM to patch) for what
+a demo needs day to day. Add it back only if the extra isolation is worth that complexity
+for your use case.
 
 ## 📁 Contents
 
@@ -135,8 +142,7 @@ AKS-Harbor-Production-Demo/
 │   ├── terraform.tfvars.example
 │   └── modules/
 │       ├── network/            # VNet, one subnet per tier, private DNS zones
-│       ├── aks/                # private AKS cluster + harbor node pool + Key Vault CSI
-│       ├── bastion/             # Azure Bastion + jumpbox VM (only path to the private API server)
+│       ├── aks/                # AKS cluster + harbor node pool + Key Vault CSI
 │       ├── identity/           # cert-manager Workload Identity + Entra ID OIDC/SSO
 │       ├── postgres/           # PostgreSQL Flexible Server (private, zone-redundant)
 │       ├── redis/               # Azure Cache for Redis Premium (private endpoint)
@@ -151,8 +157,7 @@ AKS-Harbor-Production-Demo/
     ├── storageclass-azurefile-zrs-nfs.yaml
     ├── harbor-values.yaml.tpl           # Harbor Helm values (envsubst template)
     ├── harbor-certificate.yaml.tpl      # cert-manager Certificate
-    ├── harbor-ingress-route.yaml.tpl    # Traefik IngressRoute + Middleware
-    └── remote-deploy.sh                 # runs on the jumpbox: helm/kubectl against the private cluster
+    └── harbor-ingress-route.yaml.tpl    # Traefik IngressRoute + Middleware
 ```
 
 Every module under `terraform/modules/` (except `alerts`, which is only a
@@ -162,12 +167,11 @@ the AKS cluster.
 
 ## ✅ Prerequisites
 
-- Azure CLI (`az`) logged in with Contributor + User Access Administrator (or equivalent) on the target subscription, plus the `bastion` az CLI extension (`deploy.sh` installs it automatically if missing)
+- Azure CLI (`az`) logged in with Contributor + User Access Administrator (or equivalent) on the target subscription
 - An **existing** Azure DNS zone already delegated to Azure DNS (this demo reads it as a data source; it does not create or delegate a zone)
 - Microsoft Entra ID permissions to create app registrations, create/manage security groups, and grant admin consent — only required while `enable_oidc_auth = true` (the default)
-- `sshpass` for the jumpbox's default password auth (e.g. `brew install hudochenkov/sshpass/sshpass`) — or an SSH keypair (`ssh-keygen -t ed25519 -f ./harbor-jumpbox-key -N ""`) set as `jumpbox_ssh_public_key`, which is the more secure option
 - Terraform >= 1.6.0
-- `kubectl`, `helm` (>= 3.8), `envsubst` (part of `gettext`), `ssh`/`scp`, `nc`
+- `kubectl`, `helm` (>= 3.8), `envsubst` (part of `gettext`)
 
 ## 🚀 Quick Start
 
@@ -175,15 +179,14 @@ the AKS cluster.
 cd AKS-Harbor-Production-Demo/terraform
 cp terraform.tfvars.example terraform.tfvars
 # edit terraform.tfvars: dns_zone_name, dns_zone_resource_group, acme_email
-# (optional but more secure: set jumpbox_ssh_public_key too)
 cd ..
 ./deploy.sh
 ```
 
 `deploy.sh` runs, in order:
-1. `terraform apply` — resource group, VNet with one subnet per tier + private DNS zones, a **private** AKS cluster (Workload Identity + OIDC issuer, joined to its own VNet subnet, Container Insights, managed Prometheus, Key Vault Secrets Provider), Azure Bastion + a jumpbox VM, the cert-manager identity + federated credential + DNS role assignment, PostgreSQL Flexible Server, Redis Premium, Key Vault with all Harbor secrets, Azure Managed Grafana, and (if `enable_oidc_auth = true`) the Entra ID app/SPN, client secret, and 6 Harbor role groups.
-2. Fetches a kubeconfig for the private cluster and renders every manifest locally.
-3. Opens an Azure Bastion tunnel to the jumpbox, copies the rendered manifests over, and runs the remainder of the deployment there (Traefik, cert-manager, the `letsencrypt-prod` `ClusterIssuer`, storage class, Key Vault `SecretProviderClass`, the audit-log forwarder — which must be `Ready` before Harbor installs — Harbor itself, and the `harbor-tls` `Certificate` + Traefik `IngressRoute`/`Middleware`).
+1. `terraform apply` — resource group, VNet with one subnet per tier + private DNS zones, an AKS cluster (Workload Identity + OIDC issuer, joined to its own VNet subnet, Container Insights, managed Prometheus, Key Vault Secrets Provider), the cert-manager identity + federated credential + DNS role assignment, PostgreSQL Flexible Server, Redis Premium, Key Vault with all Harbor secrets, Azure Managed Grafana, and (if `enable_oidc_auth = true`) the Entra ID app/SPN, client secret, and 6 Harbor role groups.
+2. Fetches AKS credentials directly (`az aks get-credentials`) and renders every manifest locally.
+3. Installs Traefik, cert-manager, the `letsencrypt-prod` `ClusterIssuer`, storage class, Key Vault `SecretProviderClass`, the audit-log forwarder (which must be `Ready` before Harbor installs), Harbor itself, and the `harbor-tls` `Certificate` + Traefik `IngressRoute`/`Middleware`.
 
 ### Terraform only
 
@@ -213,17 +216,10 @@ ContainerLogV2
 
 **Metrics in Grafana:** open the endpoint from `terraform output -raw grafana_endpoint`, add an "Azure Monitor Managed Service for Prometheus" data source pointed at the Azure Monitor workspace, and run `harbor_up` in Explore.
 
-**Private networking:** confirm PostgreSQL, Redis, and Key Vault all resolve to private IPs from inside the cluster (run from the jumpbox, or via `az network bastion ssh` into a pod's node):
+**Private networking:** confirm PostgreSQL, Redis, and Key Vault all resolve to private IPs from inside the cluster:
 ```bash
 kubectl run -it --rm dnsutils --image=ghcr.io/dnsutils/dnsutils --restart=Never -- \
   sh -c "nslookup $(terraform -chdir=terraform output -raw postgres_host)"
-```
-
-**Cluster access sanity check:** confirm the API server truly has no public endpoint, then confirm the jumpbox path works:
-```bash
-az aks show --name "$(terraform -chdir=terraform output -raw cluster_name)" \
-  --resource-group "$(terraform -chdir=terraform output -raw resource_group_name)" \
-  --query "apiServerAccessProfile.enablePrivateCluster"   # expect: true
 ```
 
 ## 🧹 Cleanup
@@ -254,11 +250,10 @@ Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_
 - **Group matching is by object ID, not name** — Entra emits group object IDs in the `groups` claim, so Harbor's `oidc_admin_group` is set to the admin group's object ID.
 - To use local Harbor authentication instead, set `enable_oidc_auth = false` before the first deployment.
 
-## 🔒 Security notes
+## � Security notes
 
-- The AKS API server is private (`private_cluster_enabled = true`, no public FQDN); the only path in is Azure Bastion → jumpbox, and the jumpbox itself has no public IP and accepts SSH only from `AzureBastionSubnet` (NSG-enforced).
-- The jumpbox defaults to password auth for convenience (Terraform auto-generates one if `jumpbox_admin_password` is left blank, and marks it `sensitive`). **SSH key auth (`jumpbox_ssh_public_key`) is more secure** — prefer it over the password for anything beyond a quick demo, since a password can be guessed/brute-forced whereas a key can't; `deploy.sh` automatically uses SSH key auth instead whenever `JUMPBOX_SSH_KEY` is set.
-- Every stateful dependency (PostgreSQL, Redis, Key Vault) sits behind a private endpoint with public network access disabled; only the AKS subnet can reach them.
+- The AKS API server is public by default for demo simplicity — see [Optional: harden cluster access with Azure Bastion](#-optional-harden-cluster-access-with-azure-bastion) if you want to close that off.
+- PostgreSQL and Redis sit behind a private endpoint with public network access disabled; only the AKS subnet can reach them. Key Vault adds a narrow, auto-detected IP allowlist on top of its private endpoint so `terraform apply` can run from your machine — see [Key Vault access model](#-key-vault-access-model) for the trade-off and how to close it further.
 - Secrets never touch Terraform state as plaintext files: `harbor_admin_password`, `postgres_password`, `redis_password`, and the Harbor-internal secrets are generated with `random_password`, marked `sensitive` in outputs, and stored in Key Vault — Kubernetes only sees them via the Secrets Store CSI driver.
 - cert-manager uses Azure Workload Identity (federated credential), not a client secret, scoped to `DNS Zone Contributor` on the single DNS zone.
 - The Harbor OIDC client secret is a real secret (it lives in the `configureUserSettings` JSON blob, not a separate chart field); it's marked `sensitive` in Terraform outputs.
@@ -275,9 +270,7 @@ Terraform provisions the Entra ID identity for Harbor SSO whenever `enable_oidc_
 | Harbor can't reach PostgreSQL/Redis | Private DNS zone not linked to the AKS VNet, or NSG/firewall blocking the subnet | Verify `azurerm_private_dns_zone_virtual_network_link` in `modules/network`, and that AKS and Private Link subnets share the same VNet |
 | Harbor still shows the local login form | `enable_oidc_auth = false`, or Terraform hasn't been re-applied after enabling it | Set `enable_oidc_auth = true`, re-run `terraform apply` then `./deploy.sh` |
 | cert-manager gets 403 from Azure DNS | RBAC propagation delay (30–90s) | Re-check after a minute; confirm the zone-scoped `DNS Zone Contributor` role assignment exists |
-| `deploy.sh` hangs at "Waiting for the tunnel to come up" | `az network bastion tunnel` failed silently (extension missing, RBAC, or wrong SKU) | Check `/tmp/harbor-bastion-tunnel.log`; confirm the Bastion `sku` is `Standard` and you have `Reader` on the Bastion resource |
-| `deploy.sh` fails with "sshpass is required" | No `JUMPBOX_SSH_KEY` set and `sshpass` isn't installed | Install `sshpass` (e.g. `brew install hudochenkov/sshpass/sshpass`), or switch to the more secure SSH key option by setting `jumpbox_ssh_public_key` + `JUMPBOX_SSH_KEY` |
-| `ssh`/`scp` to the jumpbox fails with `Permission denied` | Wrong password (re-run `terraform output -raw jumpbox_admin_password`), or `JUMPBOX_SSH_KEY` doesn't match the public key in `terraform.tfvars` | For password auth, re-check the output value; for SSH key auth, regenerate both together (`ssh-keygen ...`), re-apply Terraform, and re-export `JUMPBOX_SSH_KEY` before re-running `deploy.sh` |
+| `terraform apply` fails with a Key Vault 403 writing secrets | Your public IP changed since the last apply, or the IP-allowlist data source cached a stale IP | Re-run `terraform apply` (it re-detects your current IP each run); confirm with `az keyvault network-rule list` |
 | AKS create fails with an identity/permission error on the subnet | The `modules/aks` Network Contributor role assignment hasn't propagated yet | Re-run `terraform apply` — the module's `depends_on` normally covers this, but RBAC propagation can occasionally lag a few seconds longer than the API call |
 
 ## 📚 Further Reading

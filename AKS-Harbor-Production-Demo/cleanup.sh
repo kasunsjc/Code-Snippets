@@ -31,8 +31,8 @@ if [[ -d "$TF_DIR" ]]; then
   done
 fi
 
-# Helm/kubectl cleanup is unnecessary: the AKS API server is private, and
-# terraform destroy above already removes the cluster (and everything on it).
+# Helm/kubectl cleanup is unnecessary: terraform destroy above already
+# removes the cluster (and everything on it).
 rm -rf "$SCRIPT_DIR/.rendered"
 
 if [[ -n "$CLUSTER_NAME" ]] && command -v kubectl >/dev/null 2>&1 && kubectl config get-contexts "$CLUSTER_NAME" >/dev/null 2>&1; then

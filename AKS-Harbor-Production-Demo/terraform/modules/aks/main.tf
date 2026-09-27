@@ -26,9 +26,6 @@ resource "azurerm_kubernetes_cluster" "this" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
-  private_cluster_enabled = true
-  private_dns_zone_id     = "System"
-
   default_node_pool {
     name                         = "system"
     vm_size                      = "Standard_D4s_v5"

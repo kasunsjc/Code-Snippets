@@ -128,23 +128,6 @@ module "aks" {
   tags                       = local.tags
 }
 
-module "bastion" {
-  source = "./modules/bastion"
-
-  project                       = var.project
-  environment                   = var.environment
-  location                      = var.location
-  resource_group_name           = azurerm_resource_group.this.name
-  bastion_subnet_id             = module.network.bastion_subnet_id
-  bastion_subnet_address_prefix = module.network.bastion_subnet_address_prefix
-  jumpbox_subnet_id             = module.network.jumpbox_subnet_id
-  jumpbox_vm_size               = var.jumpbox_vm_size
-  jumpbox_admin_username        = var.jumpbox_admin_username
-  jumpbox_ssh_public_key        = var.jumpbox_ssh_public_key
-  jumpbox_admin_password        = var.jumpbox_admin_password
-  tags                          = local.tags
-}
-
 module "identity" {
   source = "./modules/identity"
 
