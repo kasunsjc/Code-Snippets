@@ -110,35 +110,107 @@ az login
 
 ## Demo walkthrough
 
-### 1. Verify the control plane and data plane
+Every manifest in `kubernetes-manifests/` demonstrates one specific Istio concept. Quick reference before diving in:
+
+| # | Concept | Manifest(s) | What it proves |
+|---|---|---|---|
+| 1 | Sidecar injection | *(automatic — namespace label)* | Every pod gets an Envoy proxy transparently, no app code changes |
+| 2 | Mutual TLS (`STRICT`) | `security/peer-authentication-strict.yaml` | Zero-trust transport: plaintext traffic between mesh workloads is rejected |
+| 3a | Deterministic routing | `traffic-management/destination-rule-reviews.yaml` + `virtualservice-all-v1.yaml` | `VirtualService`/`DestinationRule` override Kubernetes' default round-robin across all pod versions |
+| 3b | Weighted canary rollout | `virtualservice-canary-v3.yaml` | Progressive delivery — shift a % of traffic to a new version without redeploying |
+| 3c | Header-based routing | `virtualservice-user-routing.yaml` | Route specific users/cohorts to a specific version (dogfooding, beta rings) |
+| 3d | Fault injection | `virtualservice-fault-injection.yaml` | Chaos-test downstream latency/timeout handling without touching app code |
+| 4 | Identity-based authorization | `security/authorization-policy-ratings.yaml` | Zero-trust access control keyed on cryptographic workload identity (SPIFFE), not IP/network |
+| 5 | Ingress + TLS | `ingress/gateway.yaml.tpl` + `ingress/virtualservice-productpage.yaml.tpl` + cert-manager | Edge encryption terminated by the AKS-managed gateway, certificate lifecycle fully automated |
+| 6 | Observability | Azure Monitor managed Prometheus + Grafana (Terraform) | Golden-signal metrics (`istio_requests_total`, latency histograms) with zero app instrumentation |
+
+### 1. Sidecar injection — the data plane
+
+**What it demonstrates:** Istio's core mechanism — every pod in a labeled namespace gets a second container (`istio-proxy`, an Envoy proxy) injected automatically at admission time. All the concepts below work *because* this proxy transparently intercepts every request in and out of the pod.
 
 ```bash
-kubectl get pods -n aks-istio-system                 # istiod
-kubectl get pods -n aks-istio-ingress                 # external ingress gateway
+kubectl get pods -n aks-istio-system                  # istiod
+kubectl get pods -n aks-istio-ingress                  # external ingress gateway
 kubectl get pods -n default -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].name}{"\n"}{end}'
-# every bookinfo pod should show 2 containers: the app + istio-proxy
 ```
 
-### 2. Traffic management — canary rollout, header routing, fault injection
+**Expected result:** every `bookinfo` pod lists two containers (the app + `istio-proxy`). On Kubernetes 1.29+ revisions `istio-proxy` may instead run as a *native sidecar* `initContainer` — `kubectl describe pod <pod>` will show it either way, and `kubectl get pods` still reports `2/2 Running`.
 
-The baseline (`virtualservice-all-v1.yaml`) sends 100% of `reviews` traffic to `v1` (no star ratings). From there:
+### 2. Mutual TLS — zero-trust transport security
+
+**What it demonstrates:** `deploy.sh` already applied `security/peer-authentication-strict.yaml`, putting the entire mesh in `STRICT` mTLS mode — every sidecar-to-sidecar connection must be mutually authenticated with certificates `istiod` issues and rotates automatically. There is no app-level TLS code anywhere in `bookinfo`.
+
+**Test it — prove plaintext traffic is rejected:** run a pod *without* a sidecar (skip injection with an annotation) in the same namespace, and try to call a mesh service directly:
 
 ```bash
-# Weighted canary: 90% v1 / 10% v3 (red stars) — repeat with higher v3 weights to complete the rollout
+kubectl run plaintext-test --image=curlimages/curl --restart=Never --rm -it \
+  --annotations="sidecar.istio.io/inject=false" -n default -- \
+  curl -sS --max-time 5 http://productpage:9080/productpage
+```
+
+**Expected result:** the connection is reset (`curl: (56) Recv failure: Connection reset by peer` or similar) — `productpage`'s own sidecar refuses the plaintext handshake. Delete the `PeerAuthentication` (`kubectl delete peerauthentication default -n aks-istio-system`) and re-run the same command to see it succeed instead — then re-apply it to restore `STRICT` mode.
+
+### 3. Traffic management
+
+All four manifests act on the same `reviews` service; apply them **in order** to build up the story (each overwrites the previous `VirtualService`/`DestinationRule` object since they share the same `metadata.name`).
+
+**3a. Deterministic routing (baseline).** By default, Kubernetes' `reviews` Service round-robins across *all* `v1`/`v2`/`v3` pods with no control over the mix. `destination-rule-reviews.yaml` defines named subsets by the `version` pod label; `virtualservice-all-v1.yaml` pins 100% of traffic to `v1` (no star ratings) — already applied by `deploy.sh`.
+
+```bash
+kubectl get destinationrule reviews -n default -o yaml
+kubectl get virtualservice reviews -n default -o yaml
+```
+
+**3b. Weighted canary rollout.** Shifts traffic between `v1` (stable) and `v3` (red stars) by percentage — the textbook canary-release pattern, with zero redeploys.
+
+```bash
 kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-canary-v3.yaml
+```
 
-# Header-based routing: route end-user "jason" to v2 (black stars), everyone else to v1
+**Test it — prove the 90/10 split empirically** (re-run after logging into `https://<bookinfo_fqdn>/productpage` as any user, or via curl):
+
+```bash
+for i in $(seq 1 20); do
+  curl -s "https://$(terraform -chdir=terraform output -raw bookinfo_fqdn)/productpage" | grep -o 'color="[a-z]*"'
+done | sort | uniq -c
+```
+
+**Expected result:** roughly 18x no-color/blank (v1) vs. 2x `color="red"` (v3) over 20 requests. Re-apply with adjusted weights (e.g. 50/50) and re-run to watch the ratio shift live.
+
+**3c. Header-based routing.** Routes a *specific* end-user to a specific version — useful for internal dogfooding or targeted beta cohorts, independent of weighted rollout.
+
+```bash
 kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-user-routing.yaml
+```
 
-# Fault injection: inject a 7s delay for "jason" calling ratings, without touching app code
+**Test it:** log into the web UI as user `jason` (any password) — you should always see `v2` (black stars); log in as anyone else (or stay logged out) and you always see `v1`. To test without a browser:
+
+```bash
+FQDN=$(terraform -chdir=terraform output -raw bookinfo_fqdn)
+COOKIE_JAR=$(mktemp)
+curl -s -c "$COOKIE_JAR" -d "username=jason&password=x" "https://${FQDN}/login" >/dev/null
+curl -s -b "$COOKIE_JAR" "https://${FQDN}/productpage" | grep -o 'color="[a-z]*"'
+# -> color="black" every time, regardless of how many times you repeat it
+```
+
+**3d. Fault injection.** Injects a fixed 7s delay into calls to `ratings` — a chaos-engineering technique for validating that callers (timeouts, retries, circuit breakers, user-facing loading states) behave correctly under degraded dependencies, without touching any application code.
+
+> **Prerequisite:** `reviews-v1` never calls `ratings` at all (that's why it shows no stars), so the delay is invisible unless `jason` is routed to `v2`/`v3` first — apply **3c or 3b** before this step.
+
+```bash
 kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-fault-injection.yaml
 ```
 
-Refresh `https://<bookinfo_fqdn>/productpage` (login as `jason`/any password to exercise the header-matched rules) to see each behavior change live, with zero application redeploys.
+**Test it:**
 
-### 3. Security — mesh-wide mTLS and zero-trust authorization
+```bash
+time curl -s -b "$COOKIE_JAR" "https://${FQDN}/productpage" >/dev/null
+# -> real  0m7.0xxs   (every other user is unaffected and returns immediately)
+```
 
-`deploy.sh` already applied a `PeerAuthentication` in `STRICT` mode, so every sidecar-to-sidecar call in the mesh must be mutually authenticated — plaintext connections are rejected. Layer identity-based authorization on top:
+### 4. Authorization Policy — zero-trust identity-based access control
+
+**What it demonstrates:** with `STRICT` mTLS in place, Istio can enforce access control based on a workload's cryptographically-verified **identity** (its Kubernetes ServiceAccount, expressed as a SPIFFE principal) rather than IP address or network segment — the essence of zero-trust. `authorization-policy-ratings.yaml` allows only the `bookinfo-reviews` ServiceAccount to call `ratings`; everything else is denied by default once any `AuthorizationPolicy` selects a workload.
 
 ```bash
 kubectl apply -f kubernetes-manifests/security/authorization-policy-ratings.yaml
@@ -146,10 +218,16 @@ kubectl apply -f kubernetes-manifests/security/authorization-policy-ratings.yaml
 # Prove it: a pod with no matching ServiceAccount identity gets rejected
 kubectl run curl --image=curlimages/curl -n default --rm -it --restart=Never -- \
   curl -sS -o /dev/null -w "%{http_code}\n" http://ratings:9080/ratings/0
-# -> 403 RBAC: access denied (only the "bookinfo-reviews" identity is allowed)
+# -> 403 RBAC: access denied
+
+# But the app still works end-to-end, because reviews (the allowed identity) still calls ratings on its behalf:
+curl -s "https://${FQDN}/productpage" -o /dev/null -w "%{http_code}\n"
+# -> 200
 ```
 
-### 4. Ingress — HTTPS via cert-manager + your Azure DNS zone
+### 5. Ingress — HTTPS via cert-manager + your Azure DNS zone
+
+**What it demonstrates:** edge encryption for the mesh's public entry point, with the entire certificate lifecycle (issuance, DNS-01 validation, renewal) automated — no manually-uploaded certs, no client secrets.
 
 ```bash
 curl -sv "https://$(terraform -chdir=terraform output -raw bookinfo_fqdn)/productpage" | head -n 5
@@ -170,15 +248,15 @@ kubectl get certificate bookinfo-gateway-tls -n aks-istio-ingress
 kubectl describe certificate bookinfo-gateway-tls -n aks-istio-ingress
 ```
 
-### 5. Observability
+### 6. Observability
 
-This demo wires up the path Microsoft explicitly verifies for the add-on — **Azure Monitor managed Prometheus + Azure Managed Grafana** (see [How is the add-on different from open-source Istio?](https://learn.microsoft.com/azure/aks/istio-about#how-is-the-add-on-different-from-open-source-istio)):
+**What it demonstrates:** Istio's sidecars emit golden-signal metrics (request volume, error rate, latency) for every service **automatically** — no app instrumentation. This demo wires up the path Microsoft explicitly verifies for the add-on — **Azure Monitor managed Prometheus + Azure Managed Grafana** (see [How is the add-on different from open-source Istio?](https://learn.microsoft.com/azure/aks/istio-about#how-is-the-add-on-different-from-open-source-istio)):
 
 ```bash
 terraform -chdir=terraform output grafana_endpoint
 ```
 
-Import Istio's official dashboards (control plane, mesh, service, workload — [istio.io/latest/docs/ops/integrations/grafana](https://istio.io/latest/docs/ops/integrations/grafana/)) into the Grafana workspace and query `istio_requests_total`, `istio_request_duration_milliseconds_bucket`, etc.
+Import Istio's official dashboards (control plane, mesh, service, workload — [istio.io/latest/docs/ops/integrations/grafana](https://istio.io/latest/docs/ops/integrations/grafana/)) into the Grafana workspace and query `istio_requests_total`, `istio_request_duration_milliseconds_bucket`, etc. — generate the traffic from sections 3-4 above first so there's something to see.
 
 **Kiali and Jaeger/distributed tracing are *not* part of the managed add-on** — they're optional, self-managed OSS components you install yourself with Helm, pointed at the add-on's control plane namespace (`aks-istio-system` instead of the upstream default of `istio-system`). Treat this as an advanced follow-up exercise; see [Kiali's Helm install docs](https://kiali.io/docs/installation/installation-guide/) and the [Istio addons](https://github.com/istio/istio/tree/master/samples/addons) sample manifests as starting points.
 
