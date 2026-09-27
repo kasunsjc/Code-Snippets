@@ -140,6 +140,10 @@ for deployment in details-v1 productpage-v1 ratings-v1 reviews-v1 reviews-v2 rev
 done
 
 echo -e "${YELLOW}Verifying that Bookinfo pods are Ready with injected sidecars...${NC}"
+# Istio revisions on Kubernetes 1.29+ (e.g. asm-1-30) inject istio-proxy as a
+# "native sidecar" initContainer (restartPolicy: Always) instead of a regular
+# container, so its status lives under initContainerStatuses, not
+# containerStatuses - check both so this works on either sidecar model.
 for selector in \
     "app=details,version=v1" \
     "app=productpage,version=v1" \
@@ -150,9 +154,10 @@ for selector in \
     if ! kubectl get pods -n default -l "$selector" -o json | jq -e '
         (.items | length) > 0 and
         all(.items[];
+            (.status.containerStatuses // []) + (.status.initContainerStatuses // []) as $allStatuses |
             .metadata.deletionTimestamp == null and
             .status.phase == "Running" and
-            any((.status.containerStatuses // [])[]; .name == "istio-proxy" and .ready == true) and
+            any($allStatuses[]; .name == "istio-proxy" and .ready == true) and
             any((.status.containerStatuses // [])[]; .name != "istio-proxy" and .ready == true)
         )
     ' >/dev/null; then
