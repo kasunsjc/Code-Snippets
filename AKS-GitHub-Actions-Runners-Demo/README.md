@@ -421,6 +421,7 @@ untrusted jobs could poison packages for subsequent builds.
 | --------- | -------- |
 | `AKSCapacityHeavyUsage` / `SkuNotAvailable` on create | Managed system node pools are capacity-restricted in that region. Delete the failed cluster/resource group, set another AKS Automatic region in `terraform.tfvars`, and check `az vm list-skus -l REGION --size Standard_D4lds_v5 --query "[].restrictions"` returns empty lists |
 | API timeout / forbidden | Verify public egress CIDR, tenant/login, target subscription, deployer RBAC propagation and `kubelogin` |
+| `failed to fetch oauth token ... ghcr.io ... 403 Forbidden` on `helm upgrade --install` | The ARC charts are public; Helm is sending a stale/expired GHCR credential from your keychain. Run `helm registry logout ghcr.io` and `docker logout ghcr.io`, then re-run `deploy.sh` |
 | Helm chart pull 403 / image pull failure | Check GHCR/Docker Hub access, proxy/firewall policies and registry authentication; do not disable TLS verification |
 | Listener fails / 401 / 403 | Inspect controller/listener logs; verify App installation ID, permissions, repository access, PAT expiry and organization policies |
 | Enterprise registration fails | Enterprise slug; PAT classic with `manage_runners:enterprise`; enterprise-owner account; existing enterprise group; token/SSO policies |
