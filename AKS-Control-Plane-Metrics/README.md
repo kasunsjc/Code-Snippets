@@ -15,27 +15,41 @@ This demo deploys everything with **Terraform**. It enables control plane metric
 
 ## Architecture
 
-```text
- ┌──────────────────────────── AKS-managed control plane ───────────────────────────┐
- │  kube-apiserver   etcd   kube-scheduler   kube-controller-manager                 │
- │        └───────────────┬─────────────────────────┘                               │
- │                        ▼                                                          │
- │        control plane metrics collector (runs in the managed control plane)       │
- └────────────────────────┬─────────────────────────────────────────────────────────┘
-                          │  Data Collection Endpoint + Rule (DCE / DCR / DCRA)
- ┌──── AKS nodes ─────────┼───────────────────┐
- │  ama-metrics pods ─────┤ (node/cluster      │
- │  ama-metrics-settings- │  metrics)          │
- │  configmap (kube-system)                    │
- │  apiserver-load (demo load generator)       │
- └────────────────────────┼───────────────────┘
-                          ▼
-              Azure Monitor workspace (managed Prometheus)
-                          │  Monitoring Data Reader
-                          ▼
-              Azure Managed Grafana
-               ├─ Kubernetes / API Server  (gallery 20331)
-               └─ Kubernetes / ETCD        (gallery 20330)
+```mermaid
+flowchart TB
+    subgraph CP["AKS-managed control plane"]
+        APISERVER["kube-apiserver"]
+        ETCD["etcd"]
+        SCHED["kube-scheduler"]
+        KCM["kube-controller-manager"]
+        COLLECTOR["Control plane metrics collector<br/>(runs in the managed control plane)"]
+        APISERVER --> COLLECTOR
+        ETCD --> COLLECTOR
+        SCHED --> COLLECTOR
+        KCM --> COLLECTOR
+    end
+
+    subgraph NODES["AKS nodes"]
+        AMA["ama-metrics pods<br/>(node / cluster metrics)"]
+        CM["ama-metrics-settings-configmap<br/>(kube-system)"]
+        LOAD["apiserver-load<br/>(demo load generator)"]
+        CM -. configures .-> AMA
+        CM -. configures .-> COLLECTOR
+        LOAD -- API requests --> APISERVER
+    end
+
+    DCR["Data Collection Endpoint + Rule<br/>(DCE / DCR / DCRA)"]
+    AMW[("Azure Monitor workspace<br/>(managed Prometheus)")]
+
+    subgraph GRAFANA["Azure Managed Grafana"]
+        DASH1["Kubernetes / API Server<br/>(gallery 20331)"]
+        DASH2["Kubernetes / ETCD<br/>(gallery 20330)"]
+    end
+
+    COLLECTOR --> DCR
+    AMA --> DCR
+    DCR --> AMW
+    AMW -- "Monitoring Data Reader" --> GRAFANA
 ```
 
 ## What gets deployed
