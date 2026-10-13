@@ -93,13 +93,17 @@ fi
 # Delete anything left behind (state lost or partial destroy)
 RG_GONE=false
 if command -v az >/dev/null 2>&1; then
-  if [[ "$(az group exists --name "$RESOURCE_GROUP")" == "true" ]]; then
+  if ! RG_EXISTS="$(az group exists --name "$RESOURCE_GROUP" 2>/dev/null)"; then
+    print_warning "Could not query resource group $RESOURCE_GROUP (check 'az login')."
+  elif [[ "$RG_EXISTS" == "true" ]]; then
     print_warning "Resource group $RESOURCE_GROUP still exists. Deleting..."
     if az group delete --name "$RESOURCE_GROUP" --yes; then
       RG_GONE=true
     fi
-  else
+  elif [[ "$RG_EXISTS" == "false" ]]; then
     RG_GONE=true
+  else
+    print_warning "Unexpected response from 'az group exists': '$RG_EXISTS'"
   fi
 else
   print_warning "Azure CLI not found; cannot verify that '$RESOURCE_GROUP' was removed."

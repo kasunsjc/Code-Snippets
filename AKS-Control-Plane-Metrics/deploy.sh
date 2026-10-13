@@ -33,7 +33,7 @@ print_step() { echo -e "\n${BLUE}==> $1${NC}"; }
 
 usage() {
   sed -n '3,10p' "$0"
-  exit 0
+  exit "${1:-0}"
 }
 
 parse_args() {
@@ -44,7 +44,7 @@ parse_args() {
       -h | --help) usage ;;
       *)
         print_error "Unknown option: $1"
-        usage
+        usage 1
         ;;
     esac
     shift
