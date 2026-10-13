@@ -23,7 +23,7 @@ variable "environment" {
 variable "location" {
   description = "Azure region that supports AKS Automatic (requires availability zones)."
   type        = string
-  default     = "northeurope"
+  default     = "swedencentral"
 }
 
 variable "api_server_authorized_ip_ranges" {

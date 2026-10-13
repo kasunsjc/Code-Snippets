@@ -1,6 +1,6 @@
 project     = "gha-runners"
 environment = "dev"
-location    = "northeurope"
+location    = "swedencentral"
 
 # Optional (recommended): restrict the AKS API to your workstation/VPN egress IPs.
 # Leave empty for an unrestricted demo; Entra ID + Azure RBAC still guard access.

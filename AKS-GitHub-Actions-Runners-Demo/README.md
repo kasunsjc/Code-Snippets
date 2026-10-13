@@ -129,7 +129,7 @@ separately scoped identity for any subsequent Azure deployment workflow.
   and a private test repository in an allowed organization. Enterprise and
   organization policies must allow self-hosted runners. For repo/org-only
   experiments, runner administration permission on that scope is enough.
-- A region that supports AKS Automatic (default `northeurope`) and vCPU quota for
+- A region that supports AKS Automatic (default `swedencentral`) and vCPU quota for
   the AKS-managed system nodes plus up to 32 vCPU of D-family runner nodes.
 - Outbound access to GitHub, GHCR, MCR, NuGet and Azure endpoints, including
   node-level SMB TCP 445 access to Azure Files.
@@ -419,6 +419,7 @@ untrusted jobs could poison packages for subsequent builds.
 
 | Symptom | Checks |
 | --------- | -------- |
+| `AKSCapacityHeavyUsage` / `SkuNotAvailable` on create | Managed system node pools are capacity-restricted in that region. Delete the failed cluster/resource group, set another AKS Automatic region in `terraform.tfvars`, and check `az vm list-skus -l REGION --size Standard_D4lds_v5 --query "[].restrictions"` returns empty lists |
 | API timeout / forbidden | Verify public egress CIDR, tenant/login, target subscription, deployer RBAC propagation and `kubelogin` |
 | Helm chart pull 403 / image pull failure | Check GHCR/Docker Hub access, proxy/firewall policies and registry authentication; do not disable TLS verification |
 | Listener fails / 401 / 403 | Inspect controller/listener logs; verify App installation ID, permissions, repository access, PAT expiry and organization policies |
