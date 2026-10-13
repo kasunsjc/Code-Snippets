@@ -109,8 +109,11 @@ capacity, and `consolidationPolicy: WhenEmptyOrUnderutilized` removes idle nodes
 The AKS-managed system nodes and listener stay running even when runners reach
 zero. Runner nodes take a few minutes to provision on the first job.
 `maxRunners: 5` is a runner cap; the NodePool `limits` are the node cap. Each
-runner requests 250m CPU / 512 MiB; each job container requests 500m CPU / 1 GiB.
-Service containers add further resources; tune limits accordingly.
+runner pod requests 750m CPU / 1.5 GiB, which reserves room for itself *and* its job
+pod. The Kubernetes hook pins the job pod to the runner's node with `nodeName`
+(required for the RWO workspace disk), bypassing the scheduler, so the job pod only
+requests 50m / 64 MiB and borrows the runner's reservation (limit 2 CPU / 4 GiB).
+Service containers add further resources; raise the runner requests accordingly.
 
 This is **not a production configuration**. Production needs private API
 connectivity (`private_cluster` or API server VNet integration with
@@ -436,6 +439,7 @@ untrusted jobs could poison packages for subsequent builds.
 | Runner deprecated / cannot receive messages | Runner image too old: bump `ghcr.io/actions/actions-runner` in `arc/runner-values.yaml` and reinstall |
 | Workspace PVC or mount failure | Files CSI enabled; storage RBAC propagation; node TCP 445; quota and Premium share size; inspect PVC/pod events |
 | Jobs sit at **Initialize containers** for many minutes | The work volume is on Azure Files: SMB copies ~600 MB of runner `externals` per job. Confirm `kubernetesModeWorkVolumeClaim` uses `managed-csi` (RWO) and `kubectl get pvc -n arc-runners` shows disk-backed PVCs |
+| Job pod `OutOfmemory` / `OutOfcpu`: `Node didn't have enough resource` | The hook pins job pods to the runner's node, so the kubelet rejects them if runner requests don't cover the job. Keep the runner pod requests sized for runner + job (see `arc/runner-values.yaml`) and the job requests small, then rerun `scripts/install-arc.sh` |
 | `volume "arc-nuget-cache" already bound to a different claim` | The `nuget-cache` PVC was deleted and the Retain PV is `Released` with the old claim UID. Rerun `scripts/install-storage.sh` (it clears the stale `claimRef`). When cleaning up runner volumes, delete only `work`-volume PVCs, never `nuget-cache` |
 | Container job stays Pending | Hook template ConfigMap, runner-pool taint toleration, amd64 images, requests/limits and workspace/cache PVCs |
 | Missing job container / Docker error | Add `container:` to every job; this mode has no Docker daemon |

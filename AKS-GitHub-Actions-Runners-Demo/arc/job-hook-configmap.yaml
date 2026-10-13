@@ -31,10 +31,13 @@ data:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+          # The hook pins this pod to the runner's node (nodeName), bypassing the
+          # scheduler. Its capacity is reserved by the runner pod, so keep requests
+          # small here or the kubelet rejects it with OutOfmemory/OutOfcpu.
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 50m
+              memory: 64Mi
             limits:
               cpu: "2"
               memory: 4Gi

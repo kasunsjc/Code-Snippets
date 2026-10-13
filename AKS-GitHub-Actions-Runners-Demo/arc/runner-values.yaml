@@ -60,10 +60,13 @@ template:
           allowPrivilegeEscalation: false
           capabilities:
             drop: [ALL]
+        # Requests reserve room for the runner (250m/512Mi) AND its job pod
+        # (500m/1Gi). The job pod is pinned to this node, so the scheduler and
+        # Karpenter must account for it when placing the runner.
         resources:
           requests:
-            cpu: 250m
-            memory: 512Mi
+            cpu: 750m
+            memory: 1536Mi
           limits:
             cpu: "1"
             memory: 1Gi
