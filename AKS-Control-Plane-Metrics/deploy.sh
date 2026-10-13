@@ -122,6 +122,17 @@ verify_control_plane_metrics() {
   az aks show --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" \
     --query "azureMonitorProfile.metrics" -o json
 
+  local cp_enabled
+  cp_enabled="$(az aks show --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" \
+    --query "azureMonitorProfile.metrics.controlPlane.enabled" -o tsv 2>/dev/null || echo "")"
+  if [[ "$(echo "$cp_enabled" | tr "[:upper:]" "[:lower:]")" != "true" ]]; then
+    print_error "Control plane metrics are NOT enabled on $CLUSTER_NAME (controlPlane.enabled='${cp_enabled:-<missing>}')."
+    print_error "Re-run with ./deploy.sh --enable-with-cli, or run:"
+    print_error "  az aks update -g $RESOURCE_GROUP -n $CLUSTER_NAME --enable-control-plane-metrics"
+    exit 1
+  fi
+  print_message "Control plane metrics are enabled (controlPlane.enabled=true)."
+
   print_message "Managed Prometheus agent pods (kube-system):"
   kubectl get pods -n kube-system -l rsName=ama-metrics -o wide || true
   print_message "Control plane metrics are collected outside these pods, inside the AKS-managed control plane."

@@ -236,9 +236,10 @@ kubectl delete -f k8s/apiserver-load-generator.yaml   # stop the load
 ```bash
 ./cleanup.sh       # asks for confirmation
 ./cleanup.sh -y    # no prompt
+./cleanup.sh -g rg-cpmetrics-demo   # resource group to delete if Terraform state is lost
 ```
 
-The cleanup script destroys all Terraform-managed resources and deletes the resource group if anything is left behind. It also removes the kubectl context and deletes the local Terraform state, `.terraform` provider folder and lock file.
+The cleanup script destroys all Terraform-managed resources and deletes the resource group if anything is left behind. If `terraform destroy` fails or the state is missing, it falls back to `az group delete` on the resource group (from `-g`, `RESOURCE_GROUP`, or `rg-<project>-<environment>`). Local Terraform state, the `.terraform` provider folder and the lock file are removed only after deletion is confirmed; otherwise the state is kept so you can retry. It also removes the kubectl context.
 
 ## References
 
