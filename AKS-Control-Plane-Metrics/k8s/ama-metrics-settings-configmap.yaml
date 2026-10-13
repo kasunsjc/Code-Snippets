@@ -1,0 +1,120 @@
+# ------------------------------------------------------------------------------
+# ama-metrics-settings-configmap (schema v2)
+# ------------------------------------------------------------------------------
+# This is the ONLY supported way to customize AKS control plane metrics.
+# It's based on the upstream template:
+#   https://github.com/Azure/prometheus-collector/blob/main/otelcollector/configmaps/ama-metrics-settings-configmap.yaml
+#
+# Demo changes compared to the defaults (see the "controlplane-metrics" section):
+#   1. Enable kube-scheduler and kube-controller-manager targets (off by default).
+#   2. Keep the full apiserver_request_duration_seconds histogram family so
+#      p50/p90/p99 latency can be calculated with histogram_quantile().
+#   3. Keep a few extra etcd metrics on top of the minimal ingestion profile.
+#
+# NOTE: The "cluster-metrics" section is unchanged from the upstream defaults.
+# NOTE: Keep the minimal ingestion profile enabled to control ingestion cost.
+#       Anything in the keep list is ingested in addition to the minimal set.
+# ------------------------------------------------------------------------------
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: ama-metrics-settings-configmap
+  namespace: kube-system
+data:
+  schema-version:
+    v2
+  config-version:
+    cpdemo-v1
+  cluster-metrics: |-
+    default-targets-scrape-enabled: |-
+      kubelet = true
+      coredns = true
+      cadvisor = true
+      kubeproxy = true
+      apiserver = false
+      kubestate = true
+      nodeexporter = true
+      windowsexporter = true
+      windowskubeproxy = true
+      kappiebasic = true
+      networkobservabilityRetina = true
+      networkobservabilityHubble = true
+      networkobservabilityCilium = true
+      acstor-capacity-provisioner = true
+      acstor-metrics-exporter = true
+      local-csi-driver = true
+      ztunnel = false
+      istio-cni = false
+      dcgmexporter = true
+      prometheuscollectorhealth = false
+    pod-annotation-based-scraping: |-
+      podannotationnamespaceregex = ""
+    default-targets-metrics-keep-list: |-
+      kubelet = ""
+      coredns = ""
+      cadvisor = ""
+      kubeproxy = ""
+      apiserver = ""
+      kubestate = ""
+      nodeexporter = ""
+      windowsexporter = ""
+      windowskubeproxy = ""
+      podannotations = ""
+      kappiebasic = ""
+      networkobservabilityRetina = ""
+      networkobservabilityHubble = ""
+      networkobservabilityCilium = ""
+      acstor-capacity-provisioner = ""
+      acstor-metrics-exporter = ""
+      local-csi-driver = ""
+      ztunnel = ""
+      istio-cni = ""
+      dcgmexporter = ""
+    minimal-ingestion-profile: |-
+      enabled = true
+    default-targets-scrape-interval-settings: |-
+      kubelet = "30s"
+      coredns = "30s"
+      cadvisor = "30s"
+      kubeproxy = "30s"
+      apiserver = "30s"
+      kubestate = "30s"
+      nodeexporter = "30s"
+      windowsexporter = "30s"
+      windowskubeproxy = "30s"
+      kappiebasic = "30s"
+      networkobservabilityRetina = "30s"
+      networkobservabilityHubble = "30s"
+      networkobservabilityCilium = "30s"
+      acstor-capacity-provisioner = "30s"
+      acstor-metrics-exporter = "30s"
+      local-csi-driver = "30s"
+      ztunnel = "30s"
+      istio-cni = "30s"
+      dcgmexporter = "30s"
+      prometheuscollectorhealth = "30s"
+      podannotations = "30s"
+  controlplane-metrics: |-
+    default-targets-scrape-enabled: |-
+      apiserver = true
+      cluster-autoscaler = false
+      node-auto-provisioning = false
+      kube-scheduler = true
+      kube-controller-manager = true
+      etcd = true
+      istio = false
+    default-targets-metrics-keep-list: |-
+      apiserver = "apiserver_request_duration_seconds_bucket|apiserver_request_duration_seconds_sum|apiserver_request_duration_seconds_count|apiserver_longrunning_requests"
+      cluster-autoscaler = ""
+      node-auto-provisioning = ""
+      kube-scheduler = ""
+      kube-controller-manager = ""
+      etcd = "etcd_network_client_grpc_received_bytes_total|etcd_debugging_mvcc_keys_total"
+      istio = ""
+    minimal-ingestion-profile: |-
+      enabled = true
+  prometheus-collector-settings: |-
+    cluster_alias = ""
+    debug-mode = false
+    https_config = true
+    secrets_access_namespaces = ""
