@@ -69,7 +69,7 @@ template:
             memory: 1536Mi
           limits:
             cpu: "1"
-            memory: 1Gi
+            memory: 2Gi
         volumeMounts:
           - name: hook-extension
             mountPath: /home/runner/container-config
