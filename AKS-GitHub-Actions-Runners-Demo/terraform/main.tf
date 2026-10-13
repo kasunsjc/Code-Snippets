@@ -47,11 +47,12 @@ resource "azurerm_kubernetes_automatic_cluster" "this" {
   tags = local.tags
 }
 
-# Automatic creates the kubelet identity; read it back for Azure Files RBAC.
-data "azurerm_kubernetes_cluster" "this" {
-  name                = azurerm_kubernetes_automatic_cluster.this.name
-  resource_group_name = azurerm_resource_group.this.name
-  depends_on          = [azurerm_kubernetes_automatic_cluster.this]
+# AKS creates the kubelet identity as "<cluster>-agentpool" in the node resource
+# group. azurerm_kubernetes_cluster data sources reject the Automatic SKU, so
+# read the identity directly for Azure Files RBAC.
+data "azurerm_user_assigned_identity" "kubelet" {
+  name                = "${azurerm_kubernetes_automatic_cluster.this.name}-agentpool"
+  resource_group_name = basename(azurerm_kubernetes_automatic_cluster.this.node_resource_group_id)
 }
 
 resource "azurerm_role_assignment" "deployer" {
@@ -105,5 +106,5 @@ resource "azurerm_role_assignment" "files_controller" {
 resource "azurerm_role_assignment" "files_kubelet" {
   scope                = azurerm_storage_account.runners.id
   role_definition_name = "Storage Account Key Operator Service Role"
-  principal_id         = data.azurerm_kubernetes_cluster.this.kubelet_identity[0].object_id
+  principal_id         = data.azurerm_user_assigned_identity.kubelet.principal_id
 }

@@ -20,13 +20,10 @@ mock_provider "azurerm" {
       id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.Storage/storageAccounts/stghademo"
     }
   }
-  mock_data "azurerm_kubernetes_cluster" {
+  mock_data "azurerm_user_assigned_identity" {
     defaults = {
-      kubelet_identity = [{
-        client_id                 = "00000000-0000-0000-0000-000000000006"
-        object_id                 = "00000000-0000-0000-0000-000000000007"
-        user_assigned_identity_id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/MC_rg-gha-runners-dev_aks-gha-runners-dev_northeurope/providers/Microsoft.ManagedIdentity/userAssignedIdentities/aks-gha-runners-dev-agentpool"
-      }]
+      client_id    = "00000000-0000-0000-0000-000000000006"
+      principal_id = "00000000-0000-0000-0000-000000000007"
     }
   }
   mock_data "azurerm_client_config" {
