@@ -45,10 +45,6 @@ mock_provider "azurerm" {
   }
 }
 
-variables {
-  api_server_authorized_ip_ranges = ["198.51.100.20/32"]
-}
-
 run "isolated_demo_defaults" {
   command = apply
 
@@ -57,8 +53,8 @@ run "isolated_demo_defaults" {
     error_message = "AKS Automatic must use the demo's user-assigned control plane identity."
   }
   assert {
-    condition     = azurerm_kubernetes_automatic_cluster.this.api_server_access[0].authorized_ip_ranges == toset(["198.51.100.20/32"])
-    error_message = "AKS API must be restricted to the configured allowlist."
+    condition     = length(azurerm_kubernetes_automatic_cluster.this.api_server_access) == 0
+    error_message = "Demo default must not restrict the AKS API to authorized IP ranges."
   }
   assert {
     condition     = azurerm_role_assignment.deployer.role_definition_name == "Azure Kubernetes Service RBAC Cluster Admin"
@@ -82,6 +78,18 @@ run "isolated_demo_defaults" {
   }
 }
 
+run "optional_api_allowlist" {
+  command = apply
+  variables {
+    api_server_authorized_ip_ranges = ["198.51.100.20/32"]
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_automatic_cluster.this.api_server_access[0].authorized_ip_ranges == toset(["198.51.100.20/32"])
+    error_message = "AKS API must be restricted to the configured allowlist when provided."
+  }
+}
+
 run "reject_undersized_premium_cache" {
   command = plan
   variables {
@@ -94,22 +102,6 @@ run "reject_unrestricted_api" {
   command = plan
   variables {
     api_server_authorized_ip_ranges = ["0.0.0.0/0"]
-  }
-  expect_failures = [var.api_server_authorized_ip_ranges]
-}
-
-run "reject_example_api_address" {
-  command = plan
-  variables {
-    api_server_authorized_ip_ranges = ["203.0.113.10/32"]
-  }
-  expect_failures = [var.api_server_authorized_ip_ranges]
-}
-
-run "reject_empty_api_allowlist" {
-  command = plan
-  variables {
-    api_server_authorized_ip_ranges = []
   }
   expect_failures = [var.api_server_authorized_ip_ranges]
 }

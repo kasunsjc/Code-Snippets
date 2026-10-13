@@ -27,15 +27,16 @@ variable "location" {
 }
 
 variable "api_server_authorized_ip_ranges" {
-  description = "Public IPv4 CIDRs allowed to reach the AKS API, including your workstation's egress IP."
+  description = "Optional public IPv4 CIDRs allowed to reach the AKS API. Empty (default) leaves the API publicly reachable, still protected by Entra ID and Azure RBAC. Restricting it is recommended."
   type        = list(string)
+  default     = []
 
   validation {
-    condition = length(var.api_server_authorized_ip_ranges) > 0 && alltrue([
+    condition = alltrue([
       for cidr in var.api_server_authorized_ip_ranges :
-      can(cidrnetmask(cidr)) && !contains(["0.0.0.0/0", "203.0.113.10/32"], cidr)
+      can(cidrnetmask(cidr)) && cidr != "0.0.0.0/0"
     ])
-    error_message = "Provide real IPv4 CIDRs; do not use unrestricted access or the example placeholder."
+    error_message = "Provide valid IPv4 CIDRs, or leave the list empty to skip restriction. 0.0.0.0/0 is redundant; use an empty list instead."
   }
 }
 

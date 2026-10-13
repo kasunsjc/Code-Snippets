@@ -43,8 +43,12 @@ resource "azurerm_kubernetes_automatic_cluster" "this" {
     identity_ids = [azurerm_user_assigned_identity.cluster.id]
   }
 
-  api_server_access {
-    authorized_ip_ranges = var.api_server_authorized_ip_ranges
+  # Optional: restricting the API to known egress IPs is recommended outside demos.
+  dynamic "api_server_access" {
+    for_each = length(var.api_server_authorized_ip_ranges) > 0 ? [1] : []
+    content {
+      authorized_ip_ranges = var.api_server_authorized_ip_ranges
+    }
   }
 
   tags = local.tags

@@ -49,7 +49,7 @@ connect_cluster() {
     printf 'Waiting for AKS RBAC propagation (%s/30)...\n' "$attempt"
     sleep 10
   done
-  fail "AKS access did not become ready. Check the API allowlist, Azure subscription/tenant and RBAC assignment."
+  fail "AKS access did not become ready. Check the API allowlist (if set), Azure subscription/tenant and RBAC assignment."
 }
 
 validate_github_config() {

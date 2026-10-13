@@ -8,7 +8,7 @@ if [[ "${1:-}" == "--help" && $# == 1 ]]; then
 fi
 [[ $# == 0 ]] || fail "Unknown argument. Use --help."
 require_tools az terraform kubectl kubelogin helm
-[[ -f "$TF_DIR/terraform.tfvars" ]] || fail "Copy terraform.tfvars.example to terraform.tfvars and configure the API allowlist."
+[[ -f "$TF_DIR/terraform.tfvars" ]] || fail "Copy terraform.tfvars.example to terraform.tfvars and review its settings."
 validate_github_config
 select_subscription
 

@@ -145,9 +145,18 @@ az login
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 ```
 
-Edit `terraform/terraform.tfvars`. Replace `203.0.113.10/32` with your
-workstation/VPN's real public egress IPv4 CIDR. Terraform rejects the placeholder
-and unrestricted `0.0.0.0/0`. Choose a region that supports AKS Automatic. There
+Edit `terraform/terraform.tfvars`. For simplicity, the demo leaves the AKS API
+server reachable from any IP (`api_server_authorized_ip_ranges = []`); access is
+still gated by Entra ID and Azure RBAC because AKS Automatic disables local
+accounts.
+
+> **Recommended practice:** restrict the API server to known egress IPs, even for
+> demos. Set `api_server_authorized_ip_ranges = ["<your-public-ip>/32"]` (find it
+> with `curl -s https://api.ipify.org`). Include every IP that runs `kubectl`/Helm
+> against the cluster, such as your workstation, VPN or CI agents. Production
+> clusters should go further and use a private API (see above).
+
+Choose a region that supports AKS Automatic. There
 are no node size or Kubernetes version variables: the runner NodePool controls
 VM selection, and AKS Automatic manages the cluster version.
 
