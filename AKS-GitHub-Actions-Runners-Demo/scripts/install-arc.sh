@@ -18,7 +18,6 @@ kubectl label namespace "$RUNNER_NAMESPACE" pod-security.kubernetes.io/enforce=b
 kubectl apply -f "$DEMO_DIR/arc/runner-nodepool.yaml"
 bash "$DEMO_DIR/scripts/install-storage.sh"
 kubectl apply -f "$DEMO_DIR/arc/job-hook-configmap.yaml"
-kubectl apply -f "$DEMO_DIR/arc/runner-network-policy.yaml"
 
 umask 077
 secret_dir="$(mktemp -d)"

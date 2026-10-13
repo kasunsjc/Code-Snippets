@@ -289,7 +289,7 @@ resources. It then obtains Entra credentials (Azure Kubernetes Service RBAC
 Cluster Admin through `kubelogin`), waits for RBAC propagation, installs
 both pinned charts and waits for the listener to be ready.
 It also applies the runner Karpenter NodePool, the cache PV/PVC, workspace
-StorageClass, Cilium policies and job-hook ConfigMap. Runner namespaces enforce **baseline** Pod Security admission,
+StorageClass and job-hook ConfigMap. Runner namespaces enforce **baseline** Pod Security admission,
 not privileged admission.
 
 For subsequent ARC configuration changes or authentication rotation:
@@ -311,16 +311,17 @@ regularly rather than leaving this demo unattended indefinitely.
 Drain jobs and uninstall the existing `aks-arc-runners` release while leaving the
 controller running before deploying this revision. This changes service-account
 permissions, workspace volumes and job execution behavior, so do not migrate
-active runners in place. Remove the old standard NetworkPolicy after draining:
+active runners in place. Remove any network policies from earlier revisions after draining:
 
 ```bash
 export KUBECONFIG="$PWD/.kube/config"
 helm uninstall aks-arc-runners -n arc-runners --wait --timeout 15m
 kubectl delete networkpolicy runner-egress -n arc-runners --ignore-not-found
+kubectl delete ciliumnetworkpolicy runner-egress job-egress -n arc-runners --ignore-not-found
 bash deploy.sh
 ```
 
-The new Cilium policies allow runner hooks to access the API. Workflows must be
+Workflows must be
 updated to use `container:` before submitting jobs to the new runner set.
 
 ## 4. Run the smoke and scaling workflow
@@ -399,13 +400,13 @@ untrusted jobs could poison packages for subsequent builds.
   This includes access to the GitHub credential secret in `arc-runners`:
   Kubernetes mode is **not safe for untrusted code**. Job pods do not mount
   service-account tokens; the hook template applies placement and resource limits.
-- Cilium policies allow runner access to the Kubernetes API, DNS and external
-  HTTP/HTTPS. Job pods get DNS/external HTTP/HTTPS without the explicit API rule;
-  neither policy allows incoming pod traffic. These are defense in depth, not a
-  sandbox or a complete destination allowlist. Review policy changes for private
-  registries/services. CSI mounts SMB from the node, outside pod egress policy.
-- The listener needs Kubernetes access and is intentionally not selected by
-  the runner egress policy. No node Docker socket or host filesystem is mounted.
+- To keep the demo simple, no network policies are applied. For production,
+  add Cilium egress policies for runner and job pods. Allow the Kubernetes API
+  (runner pods only), DNS and GitHub/registry HTTPS. AKS Automatic enables
+  LocalDNS, so pods resolve via node-local `169.254.10.10/11`. DNS rules must
+  allow that address (for example `toEntities: [host]`), not just `kube-dns`
+  endpoints, or runners can't reach GitHub.
+- No node Docker socket or host filesystem is mounted.
 - Pin actions to reviewed commit SHAs in real workflows. Grant job tokens only
   the minimum permissions and use OIDC rather than long-lived Azure credentials.
 - Logs can contain workflow secrets; restrict Log Analytics access and configure
