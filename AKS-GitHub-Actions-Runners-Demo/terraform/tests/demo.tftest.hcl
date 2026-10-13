@@ -1,11 +1,4 @@
 mock_provider "azurerm" {
-  mock_resource "azurerm_user_assigned_identity" {
-    defaults = {
-      id           = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/demo"
-      client_id    = "00000000-0000-0000-0000-000000000004"
-      principal_id = "00000000-0000-0000-0000-000000000005"
-    }
-  }
   mock_resource "azurerm_kubernetes_automatic_cluster" {
     defaults = {
       id                     = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.ContainerService/managedClusters/aks-gha-runners-dev"
@@ -49,8 +42,8 @@ run "isolated_demo_defaults" {
   command = apply
 
   assert {
-    condition     = azurerm_kubernetes_automatic_cluster.this.identity[0].type == "UserAssigned"
-    error_message = "AKS Automatic must use the demo's user-assigned control plane identity."
+    condition     = azurerm_kubernetes_automatic_cluster.this.identity[0].type == "SystemAssigned"
+    error_message = "AKS Automatic without hosted_system must use a system-assigned identity."
   }
   assert {
     condition     = length(azurerm_kubernetes_automatic_cluster.this.api_server_access) == 0

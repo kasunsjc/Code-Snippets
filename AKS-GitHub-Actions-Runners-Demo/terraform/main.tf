@@ -23,13 +23,6 @@ resource "azurerm_log_analytics_workspace" "this" {
   tags                = local.tags
 }
 
-resource "azurerm_user_assigned_identity" "cluster" {
-  name                = "id-${local.name_prefix}-cluster"
-  location            = azurerm_resource_group.this.location
-  resource_group_name = azurerm_resource_group.this.name
-  tags                = local.tags
-}
-
 # AKS Automatic manages networking (Azure CNI Overlay + Cilium), the system pool,
 # Karpenter node autoprovisioning, Azure RBAC, upgrades and Deployment Safeguards.
 # The node resource group name is AKS-generated and cannot be customised.
@@ -38,9 +31,9 @@ resource "azurerm_kubernetes_automatic_cluster" "this" {
   location            = azurerm_resource_group.this.location
   resource_group_name = azurerm_resource_group.this.name
 
+  # Without hosted_system, AKS Automatic requires a system-assigned identity.
   identity {
-    type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.cluster.id]
+    type = "SystemAssigned"
   }
 
   # Optional: restricting the API to known egress IPs is recommended outside demos.
@@ -106,7 +99,7 @@ resource "azurerm_storage_share" "nuget" {
 resource "azurerm_role_assignment" "files_controller" {
   scope                = azurerm_storage_account.runners.id
   role_definition_name = "Storage Account Contributor"
-  principal_id         = azurerm_user_assigned_identity.cluster.principal_id
+  principal_id         = azurerm_kubernetes_automatic_cluster.this.identity[0].principal_id
 }
 
 resource "azurerm_role_assignment" "files_kubelet" {
