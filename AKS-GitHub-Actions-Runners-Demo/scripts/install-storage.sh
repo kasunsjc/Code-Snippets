@@ -11,6 +11,14 @@ subscription="$(tf_output subscription_id)"
 cache_share="$(tf_output cache_share_name)"
 cache_quota="$(tf_output cache_share_quota_gib)"
 
+# The PV is Retain: if the nuget-cache PVC was deleted, the PV stays Released and pinned
+# to the old claim UID. Clear it so the recreated PVC can bind (share data is kept).
+cache_pv_phase="$(kubectl get pv arc-nuget-cache --ignore-not-found -o jsonpath='{.status.phase}')"
+if [[ "$cache_pv_phase" == "Released" ]]; then
+  kubectl patch pv arc-nuget-cache --type=merge \
+    -p '{"spec":{"claimRef":{"uid":null,"resourceVersion":null}}}'
+fi
+
 kubectl apply -f - <<EOF
 apiVersion: v1
 kind: PersistentVolume

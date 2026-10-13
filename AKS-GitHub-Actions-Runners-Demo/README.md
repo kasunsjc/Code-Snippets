@@ -436,6 +436,7 @@ untrusted jobs could poison packages for subsequent builds.
 | Runner deprecated / cannot receive messages | Runner image too old: bump `ghcr.io/actions/actions-runner` in `arc/runner-values.yaml` and reinstall |
 | Workspace PVC or mount failure | Files CSI enabled; storage RBAC propagation; node TCP 445; quota and Premium share size; inspect PVC/pod events |
 | Jobs sit at **Initialize containers** for many minutes | The work volume is on Azure Files: SMB copies ~600 MB of runner `externals` per job. Confirm `kubernetesModeWorkVolumeClaim` uses `managed-csi` (RWO) and `kubectl get pvc -n arc-runners` shows disk-backed PVCs |
+| `volume "arc-nuget-cache" already bound to a different claim` | The `nuget-cache` PVC was deleted and the Retain PV is `Released` with the old claim UID. Rerun `scripts/install-storage.sh` (it clears the stale `claimRef`). When cleaning up runner volumes, delete only `work`-volume PVCs, never `nuget-cache` |
 | Container job stays Pending | Hook template ConfigMap, runner-pool taint toleration, amd64 images, requests/limits and workspace/cache PVCs |
 | Missing job container / Docker error | Add `container:` to every job; this mode has no Docker daemon |
 | Nodes do not scale down immediately | `consolidateAfter` delay, active jobs, PVC detach and other pods; AKS-managed system nodes intentionally stay running |

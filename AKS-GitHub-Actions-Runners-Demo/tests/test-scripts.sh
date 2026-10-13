@@ -88,6 +88,11 @@ grep -q "persistentVolumeReclaimPolicy: Retain" "$MOCK_MANIFEST"
 expect_absent "kind: StorageClass" "$MOCK_MANIFEST"
 grep -q "kubectl delete storageclass arc-azurefile-premium" "$MOCK_LOG"
 expect_absent "nodeStageSecretRef" "$MOCK_MANIFEST"
+expect_absent "kubectl patch pv" "$MOCK_LOG"
+
+: > "$MOCK_LOG"
+MOCK_PV_RELEASED=1 bash "$fixture/scripts/install-storage.sh" > "$test_dir/output"
+grep -q "kubectl patch pv arc-nuget-cache --type=merge" "$MOCK_LOG"
 
 : > "$MOCK_LOG"
 GITHUB_CONFIG_URL=https://github.com/enterprises/example-enterprise \

@@ -50,6 +50,8 @@ case "$tool" in
     elif [[ "$1 $2" == "get pods" ]]; then
       [[ "$*" == *"--namespace arc-systems"* ]] || exit 1
       echo pod/demo-listener
+    elif [[ "$1 $2 $3" == "get pv arc-nuget-cache" ]]; then
+      [[ "${MOCK_PV_RELEASED:-0}" == "0" ]] || echo Released
     elif [[ "$1 $2" == "create secret" ]]; then
       for argument in "$@"; do
         case "$argument" in
