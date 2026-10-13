@@ -220,7 +220,7 @@ Use your enterprise **URL slug**, not its display name:
 export GITHUB_CONFIG_URL="https://github.com/enterprises/YOUR-ENTERPRISE-SLUG"
 export GITHUB_RUNNER_GROUP="aks-enterprise-runners"
 export GITHUB_AUTH_MODE="pat"
-read -r -s -p "Enterprise runner PAT: " GITHUB_PAT; echo
+printf "Enterprise runner PAT: "; read -rs GITHUB_PAT; echo
 export GITHUB_PAT
 ```
 
@@ -265,7 +265,7 @@ permissions; authorize SSO if your organization requires it.
 export GITHUB_CONFIG_URL="https://github.com/YOUR-OWNER/YOUR-REPOSITORY"
 unset GITHUB_RUNNER_GROUP
 export GITHUB_AUTH_MODE="pat"
-read -r -s -p "GitHub PAT: " GITHUB_PAT; echo
+printf "GitHub PAT: "; read -rs GITHUB_PAT; echo
 export GITHUB_PAT
 ```
 
