@@ -53,8 +53,24 @@ connect_cluster() {
 }
 
 validate_github_config() {
+  local enterprise=false
   [[ "${GITHUB_CONFIG_URL:-}" =~ ^https://github\.com/[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)?$ ]] ||
-    fail "Set GITHUB_CONFIG_URL to https://github.com/OWNER/REPO or https://github.com/ORG (no trailing slash)."
+    fail "Set GITHUB_CONFIG_URL to https://github.com/enterprises/SLUG, /OWNER/REPO or /ORG (no trailing slash)."
+  if [[ "$GITHUB_CONFIG_URL" == "https://github.com/enterprises" || "$GITHUB_CONFIG_URL" == "https://github.com/enterprises/"* ]]; then
+    [[ "$GITHUB_CONFIG_URL" =~ ^https://github\.com/enterprises/[A-Za-z0-9-]+$ ]] ||
+      fail "Enterprise registration requires https://github.com/enterprises/SLUG."
+    enterprise=true
+    [[ "${GITHUB_AUTH_MODE:-app}" == "pat" ]] ||
+      fail "Enterprise runners require GITHUB_AUTH_MODE=pat and a PAT (classic); GitHub App authentication is not supported."
+    [[ -n "${GITHUB_RUNNER_GROUP:-}" ]] ||
+      fail "Set GITHUB_RUNNER_GROUP to an existing enterprise runner group with restricted organization access."
+  fi
+  if [[ -n "${GITHUB_RUNNER_GROUP:-}" ]]; then
+    [[ "$GITHUB_RUNNER_GROUP" =~ ^[A-Za-z0-9][A-Za-z0-9._\ -]{0,99}$ ]] ||
+      fail "GITHUB_RUNNER_GROUP must be 1-100 letters, digits, spaces, dots, underscores or hyphens, starting with a letter or digit."
+    [[ "$GITHUB_CONFIG_URL" != "https://github.com/"*"/"* || "$enterprise" == "true" ]] ||
+      fail "Runner groups apply to organization or enterprise registration, not repository registration."
+  fi
   case "${GITHUB_AUTH_MODE:-app}" in
     app)
       [[ "${GITHUB_APP_ID:-}" =~ ^[0-9]+$ ]] || fail "Set the numeric GITHUB_APP_ID."

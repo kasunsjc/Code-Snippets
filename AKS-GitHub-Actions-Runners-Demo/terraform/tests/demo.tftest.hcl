@@ -1,4 +1,11 @@
 mock_provider "azurerm" {
+  mock_resource "azurerm_user_assigned_identity" {
+    defaults = {
+      id           = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.ManagedIdentity/userAssignedIdentities/demo"
+      client_id    = "00000000-0000-0000-0000-000000000004"
+      principal_id = "00000000-0000-0000-0000-000000000005"
+    }
+  }
   mock_data "azurerm_client_config" {
     defaults = {
       tenant_id       = "00000000-0000-0000-0000-000000000001"
@@ -35,6 +42,30 @@ run "isolated_demo_defaults" {
     condition     = azurerm_kubernetes_cluster.this.default_node_pool[0].only_critical_addons_enabled
     error_message = "System pool must be tainted for critical components."
   }
+  assert {
+    condition     = azurerm_storage_account.runners.account_kind == "FileStorage" && azurerm_storage_account.runners.account_tier == "Premium" && azurerm_storage_account.runners.account_replication_type == "LRS"
+    error_message = "Demo cache must use Premium_LRS Azure Files."
+  }
+  assert {
+    condition     = azurerm_storage_share.nuget.quota == 100 && azurerm_storage_share.nuget.enabled_protocol == "SMB"
+    error_message = "Cache must be a 100 GiB SMB share by default."
+  }
+  assert {
+    condition     = azurerm_role_assignment.files_kubelet.role_definition_name == "Storage Account Key Operator Service Role"
+    error_message = "Kubelet only needs key retrieval permissions, not storage administration."
+  }
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.storage_profile[0].file_driver_enabled
+    error_message = "Azure Files CSI driver must be enabled."
+  }
+}
+
+run "reject_undersized_premium_cache" {
+  command = plan
+  variables {
+    cache_share_quota_gib = 99
+  }
+  expect_failures = [var.cache_share_quota_gib]
 }
 
 run "reject_unrestricted_api" {

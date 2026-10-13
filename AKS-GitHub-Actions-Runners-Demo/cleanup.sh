@@ -16,7 +16,7 @@ resource_group="$(tf_output resource_group_name)"
 node_resource_group="$(tf_output node_resource_group_name)"
 export ARM_SUBSCRIPTION_ID="$subscription"
 
-printf 'This removes ARC and destroys %s and %s.\n' "$resource_group" "$node_resource_group"
+printf 'This removes ARC and destroys %s and %s, including ALL Azure Files cache/workspace data.\n' "$resource_group" "$node_resource_group"
 read -r -p "Stop workflow submissions and wait for running jobs to finish. Type yes to destroy: " confirmation
 [[ "$confirmation" == "yes" ]] || { echo "Cleanup cancelled."; exit 0; }
 

@@ -15,6 +15,9 @@ case "$tool" in
         node_resource_group_name) echo rg-gha-runners-dev-nodes ;;
         aks_cluster_name) echo aks-gha-runners-dev ;;
         portal_url) echo https://portal.azure.com/ ;;
+        storage_account_name) echo stghatest123456 ;;
+        cache_share_name) echo nuget-cache ;;
+        cache_share_quota_gib) echo 100 ;;
         *) exit 1 ;;
       esac
     elif [[ "$*" == *"destroy"* ]]; then
@@ -66,9 +69,19 @@ case "$tool" in
       done
       printf 'apiVersion: v1\nkind: Secret\n'
     elif [[ "$1" == "apply" ]]; then
-      [[ "$*" != *"-f -"* ]] || cat >/dev/null
+      if [[ "$*" == *"-f -"* ]]; then
+        if [[ "$*" == *"--server-side"* ]]; then
+          cat >/dev/null
+        else
+          cat > "$MOCK_MANIFEST"
+        fi
+      fi
     elif [[ "$1" == "wait" ]]; then
-      [[ "$*" == *"--namespace arc-systems"* ]] || exit 1
+      if [[ "$*" == *"pvc/nuget-cache"* ]]; then
+        [[ "$*" == *"--namespace arc-runners"* ]] || exit 1
+      else
+        [[ "$*" == *"--namespace arc-systems"* ]] || exit 1
+      fi
     fi
     ;;
   helm)

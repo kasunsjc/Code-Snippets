@@ -13,8 +13,9 @@ connect_cluster
 
 kubectl create namespace "$CONTROLLER_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace "$RUNNER_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
-# DinD needs privileged admission; never label the controller namespace privileged.
-kubectl label namespace "$RUNNER_NAMESPACE" pod-security.kubernetes.io/enforce=privileged --overwrite
+kubectl label namespace "$RUNNER_NAMESPACE" pod-security.kubernetes.io/enforce=baseline --overwrite
+bash "$DEMO_DIR/scripts/install-storage.sh"
+kubectl apply -f "$DEMO_DIR/arc/job-hook-configmap.yaml"
 kubectl apply -f "$DEMO_DIR/arc/runner-network-policy.yaml"
 
 umask 077
@@ -39,11 +40,15 @@ helm upgrade --install "$CONTROLLER_RELEASE" \
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set-controller \
   --version "$ARC_VERSION" --namespace "$CONTROLLER_NAMESPACE" \
   --values "$DEMO_DIR/arc/controller-values.yaml" --wait --timeout 10m
+runner_config_args=("--set-string" "githubConfigUrl=$GITHUB_CONFIG_URL")
+if [[ -n "${GITHUB_RUNNER_GROUP:-}" ]]; then
+  runner_config_args+=("--set-string" "runnerGroup=$GITHUB_RUNNER_GROUP")
+fi
 helm upgrade --install "$RUNNER_RELEASE" \
   oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set \
   --version "$ARC_VERSION" --namespace "$RUNNER_NAMESPACE" \
   --values "$DEMO_DIR/arc/runner-values.yaml" \
-  --set-string "githubConfigUrl=$GITHUB_CONFIG_URL" --wait --timeout 10m
+  "${runner_config_args[@]}" --wait --timeout 10m
 
 listener_selector="app.kubernetes.io/component=runner-scale-set-listener,actions.github.com/scale-set-name=$RUNNER_RELEASE"
 for attempt in {1..30}; do

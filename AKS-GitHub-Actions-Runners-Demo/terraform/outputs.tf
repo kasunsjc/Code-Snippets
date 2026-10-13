@@ -21,3 +21,15 @@ output "cluster_id" {
 output "portal_url" {
   value = "https://portal.azure.com/#resource${azurerm_kubernetes_cluster.this.id}/overview"
 }
+
+output "storage_account_name" {
+  value = azurerm_storage_account.runners.name
+}
+
+output "cache_share_name" {
+  value = azurerm_storage_share.nuget.name
+}
+
+output "cache_share_quota_gib" {
+  value = var.cache_share_quota_gib
+}

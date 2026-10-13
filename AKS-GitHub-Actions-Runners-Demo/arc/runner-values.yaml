@@ -1,6 +1,7 @@
 # Supplied at install time; credentials are referenced, never embedded.
 githubConfigUrl: ""
 githubConfigSecret: github-auth
+# GITHUB_RUNNER_GROUP is supplied by the installer for enterprise / organization scope.
 runnerScaleSetName: aks-arc-runners
 minRunners: 0
 maxRunners: 5
@@ -26,15 +27,19 @@ listenerTemplate:
             cpu: "1"
             memory: 512Mi
 
-# Explicit native-sidecar DinD configuration allows resource limits on Docker.
-# Leave containerMode empty so the chart does not inject a second Docker daemon.
-containerMode: {}
+containerMode:
+  type: kubernetes
+  kubernetesModeWorkVolumeClaim:
+    accessModes: [ReadWriteMany]
+    storageClassName: arc-azurefile-premium
+    resources:
+      requests:
+        storage: 100Gi
 template:
   metadata:
     labels:
       demo: aks-gha-runner
   spec:
-    automountServiceAccountToken: false
     nodeSelector:
       workload: github-actions
       kubernetes.io/arch: amd64
@@ -43,85 +48,31 @@ template:
         operator: Equal
         value: github-actions
         effect: NoSchedule
-    initContainers:
-      - name: init-dind-externals
-        image: ghcr.io/actions/actions-runner:2.338.0
-        command: [cp, -r, /home/runner/externals/., /home/runner/tmpDir/]
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: "1"
-            memory: 256Mi
-        volumeMounts:
-          - name: dind-externals
-            mountPath: /home/runner/tmpDir
-      - name: dind
-        image: docker:29.9.0-dind
-        restartPolicy: Always
-        args: [dockerd, "--host=unix:///var/run/docker.sock", "--group=$(DOCKER_GROUP_GID)"]
-        env:
-          - name: DOCKER_GROUP_GID
-            value: "123"
-          - name: DOCKER_TLS_CERTDIR
-            value: ""
-        securityContext:
-          privileged: true
-        startupProbe:
-          exec:
-            command: [docker, info]
-          periodSeconds: 5
-          failureThreshold: 60
-        resources:
-          requests:
-            cpu: 500m
-            memory: 1Gi
-            ephemeral-storage: 2Gi
-          limits:
-            cpu: "2"
-            memory: 4Gi
-            ephemeral-storage: 10Gi
-        volumeMounts:
-          - name: work
-            mountPath: /home/runner/_work
-          - name: dind-sock
-            mountPath: /var/run
-          - name: dind-externals
-            mountPath: /home/runner/externals
-          - name: docker-data
-            mountPath: /var/lib/docker
+    securityContext:
+      fsGroup: 123
     containers:
       - name: runner
         image: ghcr.io/actions/actions-runner:2.338.0
         command: [/home/runner/run.sh]
         env:
-          - name: DOCKER_HOST
-            value: unix:///var/run/docker.sock
-          - name: RUNNER_WAIT_FOR_DOCKER_IN_SECONDS
-            value: "300"
+          - name: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE
+            value: /home/runner/container-config/container-podspec.yaml
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
         resources:
           requests:
-            cpu: 500m
-            memory: 1Gi
-            ephemeral-storage: 1Gi
+            cpu: 250m
+            memory: 512Mi
           limits:
-            cpu: "2"
-            memory: 4Gi
-            ephemeral-storage: 5Gi
+            cpu: "1"
+            memory: 1Gi
         volumeMounts:
-          - name: work
-            mountPath: /home/runner/_work
-          - name: dind-sock
-            mountPath: /var/run
+          - name: hook-extension
+            mountPath: /home/runner/container-config
+            readOnly: true
     volumes:
-      - name: work
-        emptyDir:
-          sizeLimit: 5Gi
-      - name: dind-sock
-        emptyDir: {}
-      - name: dind-externals
-        emptyDir: {}
-      - name: docker-data
-        emptyDir:
-          sizeLimit: 10Gi
+      - name: hook-extension
+        configMap:
+          name: hook-extension

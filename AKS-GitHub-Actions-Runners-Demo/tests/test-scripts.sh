@@ -16,11 +16,12 @@ done
 export PATH="$test_dir/bin:$PATH"
 export MOCK_LOG="$test_dir/commands.log"
 export MOCK_DESTROYED="$test_dir/destroyed"
+export MOCK_MANIFEST="$test_dir/storage.yaml"
 export GITHUB_AUTH_MODE=pat
 export GITHUB_CONFIG_URL=https://github.com/example/demo
 export GITHUB_PAT=test-token-not-a-real-credential
 export TMPDIR="$test_dir"
-unset ARM_SUBSCRIPTION_ID GITHUB_APP_ID GITHUB_APP_INSTALLATION_ID GITHUB_APP_PRIVATE_KEY_FILE
+unset ARM_SUBSCRIPTION_ID GITHUB_APP_ID GITHUB_APP_INSTALLATION_ID GITHUB_APP_PRIVATE_KEY_FILE GITHUB_RUNNER_GROUP
 touch "$MOCK_LOG"
 
 expect_failure() {
@@ -31,6 +32,13 @@ expect_failure() {
     exit 1
   fi
   grep -q "$expected" "$test_dir/output" || { cat "$test_dir/output"; exit 1; }
+}
+
+expect_absent() {
+  if grep -q -- "$1" "$2"; then
+    echo "FAIL: unexpected content: $1" >&2
+    exit 1
+  fi
 }
 
 for script in deploy.sh cleanup.sh scripts/install-arc.sh; do
@@ -44,11 +52,22 @@ expect_failure "Set GITHUB_CONFIG_URL" env GITHUB_CONFIG_URL=https://invalid.exa
 expect_failure "Set GITHUB_PAT" env GITHUB_PAT= bash "$fixture/deploy.sh"
 expect_failure "GITHUB_AUTH_MODE must be" env GITHUB_AUTH_MODE=invalid bash "$fixture/deploy.sh"
 expect_failure "Set the numeric GITHUB_APP_ID" env GITHUB_AUTH_MODE=app bash "$fixture/deploy.sh"
+expect_failure "GitHub App authentication is not supported" env \
+  GITHUB_CONFIG_URL=https://github.com/enterprises/example-enterprise GITHUB_AUTH_MODE=app \
+  bash "$fixture/deploy.sh"
+expect_failure "Set GITHUB_RUNNER_GROUP" env \
+  GITHUB_CONFIG_URL=https://github.com/enterprises/example-enterprise \
+  bash "$fixture/deploy.sh"
+expect_failure "not repository registration" env GITHUB_RUNNER_GROUP=aks-enterprise-runners bash "$fixture/deploy.sh"
+expect_failure "Enterprise registration requires" env GITHUB_CONFIG_URL=https://github.com/enterprises bash "$fixture/deploy.sh"
+expect_failure "GITHUB_RUNNER_GROUP must be" env \
+  GITHUB_CONFIG_URL=https://github.com/enterprises/example-enterprise GITHUB_RUNNER_GROUP='invalid,group' \
+  bash "$fixture/deploy.sh"
 [[ ! -s "$MOCK_LOG" ]] || { echo "FAIL: invalid configuration invoked tools"; exit 1; }
 
 bash "$fixture/deploy.sh" <<< no > "$test_dir/output"
-! grep -q "terraform .*apply" "$MOCK_LOG"
-! grep -q "helm " "$MOCK_LOG"
+expect_absent "terraform .*apply" "$MOCK_LOG"
+expect_absent "helm " "$MOCK_LOG"
 
 : > "$MOCK_LOG"
 bash "$fixture/scripts/install-arc.sh" > "$test_dir/output"
@@ -56,8 +75,30 @@ grep -q "helm upgrade --install arc-controller .*--version 0.15.0" "$MOCK_LOG"
 grep -q "helm upgrade --install aks-arc-runners .*--version 0.15.0" "$MOCK_LOG"
 grep -q "kubectl apply --server-side --field-manager=arc-demo" "$MOCK_LOG"
 grep -q "kubectl wait --namespace arc-systems" "$MOCK_LOG"
-! grep -q "$GITHUB_PAT" "$MOCK_LOG"
-! grep -q "$GITHUB_PAT" "$test_dir/output"
+expect_absent "$GITHUB_PAT" "$MOCK_LOG"
+expect_absent "$GITHUB_PAT" "$test_dir/output"
+grep -q "pod-security.kubernetes.io/enforce=baseline" "$MOCK_LOG"
+expect_absent "enforce=privileged" "$MOCK_LOG"
+grep -q "job-hook-configmap.yaml" "$MOCK_LOG"
+grep -q "pvc/nuget-cache" "$MOCK_LOG"
+grep -q 'storageAccount: "stghatest123456"' "$MOCK_MANIFEST"
+grep -q 'storeAccountKey: "false"' "$MOCK_MANIFEST"
+grep -q "persistentVolumeReclaimPolicy: Retain" "$MOCK_MANIFEST"
+grep -q "reclaimPolicy: Delete" "$MOCK_MANIFEST"
+expect_absent "nodeStageSecretRef" "$MOCK_MANIFEST"
+
+: > "$MOCK_LOG"
+GITHUB_CONFIG_URL=https://github.com/enterprises/example-enterprise \
+  GITHUB_RUNNER_GROUP=aks-enterprise-runners \
+  bash "$fixture/scripts/install-arc.sh" > "$test_dir/output"
+grep -q -- "--set-string githubConfigUrl=https://github.com/enterprises/example-enterprise" "$MOCK_LOG"
+grep -q -- "--set-string runnerGroup=aks-enterprise-runners" "$MOCK_LOG"
+expect_absent "$GITHUB_PAT" "$MOCK_LOG"
+
+: > "$MOCK_LOG"
+GITHUB_CONFIG_URL=https://github.com/example-org GITHUB_RUNNER_GROUP=trusted-builds \
+  bash "$fixture/scripts/install-arc.sh" > "$test_dir/output"
+grep -q -- "--set-string runnerGroup=trusted-builds" "$MOCK_LOG"
 
 : > "$MOCK_LOG"
 touch "$test_dir/app.pem"
@@ -65,7 +106,7 @@ GITHUB_AUTH_MODE=app GITHUB_APP_ID=123456 GITHUB_APP_INSTALLATION_ID=654321 \
   GITHUB_APP_PRIVATE_KEY_FILE="$test_dir/app.pem" \
   bash "$fixture/scripts/install-arc.sh" > "$test_dir/output"
 grep -q -- "--from-file=github_app_private_key=" "$MOCK_LOG"
-! grep -q -- "--from-file=github_token=" "$MOCK_LOG"
+expect_absent "--from-file=github_token=" "$MOCK_LOG"
 
 : > "$MOCK_LOG"
 bash "$fixture/deploy.sh" <<< yes > "$test_dir/output"
@@ -77,7 +118,7 @@ expect_failure "No local demo state" bash "$fixture/cleanup.sh"
 touch "$fixture/terraform/terraform.tfstate" "$fixture/terraform/terraform.tfstate.backup"
 : > "$MOCK_LOG"
 bash "$fixture/cleanup.sh" <<< no > "$test_dir/output"
-! grep -q "terraform .*destroy" "$MOCK_LOG"
+expect_absent "terraform .*destroy" "$MOCK_LOG"
 [[ -f "$fixture/terraform/terraform.tfstate" ]]
 
 : > "$MOCK_LOG"
@@ -101,6 +142,6 @@ rm -f "$MOCK_DESTROYED"
 touch "$fixture/terraform/terraform.tfstate"
 : > "$MOCK_LOG"
 MOCK_CLUSTER_GONE=1 bash "$fixture/cleanup.sh" <<< yes > "$test_dir/output"
-! grep -q "helm " "$MOCK_LOG"
+expect_absent "helm " "$MOCK_LOG"
 grep -q "terraform .*destroy" "$MOCK_LOG"
-echo "PASS: configuration guards, secret handling, listener namespace, cancellation, teardown order and failure recovery."
+echo "PASS: enterprise/org/repo registration, configuration guards, Files storage, secret handling, cancellation and teardown recovery."

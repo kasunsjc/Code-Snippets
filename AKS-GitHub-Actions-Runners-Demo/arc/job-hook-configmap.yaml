@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hook-extension
+  namespace: arc-runners
+data:
+  container-podspec.yaml: |
+    metadata:
+      labels:
+        demo: aks-gha-job
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        workload: github-actions
+        kubernetes.io/arch: amd64
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: github-actions
+          effect: NoSchedule
+      securityContext:
+        fsGroup: 123
+      containers:
+        - name: "$job"
+          env:
+            - name: NUGET_PACKAGES
+              value: /nuget/packages
+            - name: NUGET_SCRATCH
+              value: /nuget/scratch
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: nuget-cache
+              mountPath: /nuget
+      volumes:
+        - name: nuget-cache
+          persistentVolumeClaim:
+            claimName: nuget-cache

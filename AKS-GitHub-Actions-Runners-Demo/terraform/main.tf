@@ -23,6 +23,26 @@ resource "azurerm_log_analytics_workspace" "this" {
   tags                = local.tags
 }
 
+resource "azurerm_user_assigned_identity" "cluster" {
+  name                = "id-${local.name_prefix}-cluster"
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
+  tags                = local.tags
+}
+
+resource "azurerm_user_assigned_identity" "kubelet" {
+  name                = "id-${local.name_prefix}-kubelet"
+  location            = azurerm_resource_group.this.location
+  resource_group_name = azurerm_resource_group.this.name
+  tags                = local.tags
+}
+
+resource "azurerm_role_assignment" "kubelet_operator" {
+  scope                = azurerm_user_assigned_identity.kubelet.id
+  role_definition_name = "Managed Identity Operator"
+  principal_id         = azurerm_user_assigned_identity.cluster.principal_id
+}
+
 resource "azurerm_kubernetes_cluster" "this" {
   name                              = "aks-${local.name_prefix}"
   location                          = azurerm_resource_group.this.location
@@ -58,7 +78,14 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   identity {
-    type = "SystemAssigned"
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.cluster.id]
+  }
+
+  kubelet_identity {
+    client_id                 = azurerm_user_assigned_identity.kubelet.client_id
+    object_id                 = azurerm_user_assigned_identity.kubelet.principal_id
+    user_assigned_identity_id = azurerm_user_assigned_identity.kubelet.id
   }
 
   azure_active_directory_role_based_access_control {
@@ -87,7 +114,12 @@ resource "azurerm_kubernetes_cluster" "this" {
     msi_auth_for_monitoring_enabled = true
   }
 
-  tags = local.tags
+  storage_profile {
+    file_driver_enabled = true
+  }
+
+  tags       = local.tags
+  depends_on = [azurerm_role_assignment.kubelet_operator]
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "runners" {
@@ -136,4 +168,39 @@ resource "azurerm_monitor_diagnostic_setting" "control_plane" {
   enabled_log {
     category = "cluster-autoscaler"
   }
+}
+
+resource "azurerm_storage_account" "runners" {
+  name                            = "stgha${substr(sha256("${data.azurerm_client_config.current.subscription_id}/${local.name_prefix}"), 0, 18)}"
+  resource_group_name             = azurerm_resource_group.this.name
+  location                        = azurerm_resource_group.this.location
+  account_kind                    = "FileStorage"
+  account_tier                    = "Premium"
+  account_replication_type        = "LRS"
+  min_tls_version                 = "TLS1_2"
+  https_traffic_only_enabled      = true
+  allow_nested_items_to_be_public = false
+  tags                            = local.tags
+}
+
+resource "azurerm_storage_share" "nuget" {
+  name               = "nuget-cache"
+  storage_account_id = azurerm_storage_account.runners.id
+  quota              = var.cache_share_quota_gib
+  access_tier        = "Premium"
+  enabled_protocol   = "SMB"
+}
+
+# The controller provisions shares; kubelets retrieve SMB keys at mount time.
+# Scope both identities to this dedicated account, not the subscription.
+resource "azurerm_role_assignment" "files_controller" {
+  scope                = azurerm_storage_account.runners.id
+  role_definition_name = "Storage Account Contributor"
+  principal_id         = azurerm_user_assigned_identity.cluster.principal_id
+}
+
+resource "azurerm_role_assignment" "files_kubelet" {
+  scope                = azurerm_storage_account.runners.id
+  role_definition_name = "Storage Account Key Operator Service Role"
+  principal_id         = azurerm_user_assigned_identity.kubelet.principal_id
 }
