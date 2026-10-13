@@ -95,14 +95,8 @@ resource "azurerm_storage_share" "nuget" {
   enabled_protocol   = "SMB"
 }
 
-# The controller provisions shares; kubelets retrieve SMB keys at mount time.
-# Scope both identities to this dedicated account, not the subscription.
-resource "azurerm_role_assignment" "files_controller" {
-  scope                = azurerm_storage_account.runners.id
-  role_definition_name = "Storage Account Contributor"
-  principal_id         = azurerm_kubernetes_automatic_cluster.this.identity[0].principal_id
-}
-
+# Terraform pre-creates the cache share, so kubelets only need to retrieve the
+# SMB key at mount time. Scope the role to this dedicated account.
 resource "azurerm_role_assignment" "files_kubelet" {
   scope                = azurerm_storage_account.runners.id
   role_definition_name = "Storage Account Key Operator Service Role"

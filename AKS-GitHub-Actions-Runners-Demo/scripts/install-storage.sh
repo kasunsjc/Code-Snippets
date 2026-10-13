@@ -12,31 +12,6 @@ cache_share="$(tf_output cache_share_name)"
 cache_quota="$(tf_output cache_share_quota_gib)"
 
 kubectl apply -f - <<EOF
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: arc-azurefile-premium
-provisioner: file.csi.azure.com
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
-allowVolumeExpansion: true
-parameters:
-  skuName: Premium_LRS
-  storageAccount: "$storage_account"
-  resourceGroup: "$resource_group"
-  subscriptionID: "$subscription"
-  protocol: smb
-  storeAccountKey: "false"
-mountOptions:
-  - dir_mode=0770
-  - file_mode=0660
-  - uid=1001
-  - gid=123
-  - mfsymlinks
-  - cache=strict
-  - nosharesock
-  - actimeo=30
----
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -85,4 +60,6 @@ spec:
 EOF
 kubectl wait --namespace "$RUNNER_NAMESPACE" pvc/nuget-cache \
   --for=jsonpath='{.status.phase}'=Bound --timeout=120s
-echo "Azure Files cache bound; runner workspaces will be provisioned per runner."
+# Earlier versions put runner workspaces on this Azure Files class; it is no longer used.
+kubectl delete storageclass arc-azurefile-premium --ignore-not-found
+echo "Azure Files NuGet cache bound; runner workspaces use per-runner managed disks."

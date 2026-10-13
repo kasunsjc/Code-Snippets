@@ -23,12 +23,16 @@ listenerTemplate:
 
 containerMode:
   type: kubernetes
+  # The hook copies ~600 MB / ~9k runner "externals" files into this volume before
+  # every job. SMB Azure Files makes that small-file copy take many minutes, so use
+  # a per-runner managed disk. RWO is enough: the hook schedules the job pod on the
+  # runner's node. Standard SSD works on every D-family size the NodePool may pick.
   kubernetesModeWorkVolumeClaim:
-    accessModes: [ReadWriteMany]
-    storageClassName: arc-azurefile-premium
+    accessModes: [ReadWriteOnce]
+    storageClassName: managed-csi
     resources:
       requests:
-        storage: 100Gi
+        storage: 50Gi
 template:
   metadata:
     labels:

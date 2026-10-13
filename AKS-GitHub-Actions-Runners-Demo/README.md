@@ -1,6 +1,6 @@
 # Enterprise GitHub Actions Runners on AKS Automatic
 
-Run enterprise-scoped GitHub Actions container jobs on AKS Automatic with Actions Runner Controller and Azure Files.
+Run enterprise-scoped GitHub Actions container jobs on AKS Automatic with Actions Runner Controller, managed-disk workspaces and an Azure Files cache.
 
 This experiment follows the AKS blog post
 [GitHub Actions Runner Controller on AKS Automatic](https://blog.aks.azure.com/2026/09/17/github-actions-runner-controller-aks-automatic).
@@ -8,7 +8,7 @@ It provisions an AKS Automatic cluster and Azure Files storage with Terraform, t
 modern **runner scale set** Helm charts. It does not use legacy `RunnerDeployment`
 resources, cert-manager, or GitHub webhook ingress. Following the Microsoft
 Azure Files approach, **Kubernetes container mode** runs workflow jobs in separate
-pods, with Premium SMB shares for runner workspaces and a persistent NuGet cache.
+pods, with a per-runner managed disk workspace and a persistent Premium SMB NuGet cache.
 There is no Docker daemon or privileged Docker-in-Docker (DinD) sidecar.
 The primary walkthrough registers the runner scale set at **GitHub Enterprise
 Cloud scope**, sharing it only with selected organizations and repositories.
@@ -42,8 +42,8 @@ flowchart TB
     end
 
     analytics["Log Analytics workspace"]
+    workspaces["Per-runner workspace<br/>50 GiB managed disk (RWO)"]
     subgraph files["Azure Files: Premium_LRS storage account"]
-        workspaces["Per-runner workspace shares<br/>100 GiB each, dynamically provisioned"]
         cache["Shared NuGet cache<br/>100 GiB persistent SMB share"]
     end
 
@@ -83,8 +83,8 @@ originate from the cluster; no incoming webhook is required.
 | Scaling | ARC scales pods from queued jobs; node autoprovisioning creates/consolidates runner nodes from pending pods |
 | Policy | Deployment Safeguards: every container sets requests/limits, images are pinned (no `latest`) |
 | Container mode | Kubernetes hooks; every workflow job must specify `container:` |
-| Storage | Azure Files CSI; 100 GiB per-runner RWX workspace, plus a persistent 100 GiB NuGet cache |
-| Storage authentication | CSI controller/kubelet managed identities retrieve SMB keys; no account-key Kubernetes secret |
+| Storage | 50 GiB per-runner managed disk workspace (Azure Disk CSI, RWO), plus a persistent 100 GiB Azure Files NuGet cache |
+| Storage authentication | Kubelet managed identity retrieves the cache SMB key; no account-key Kubernetes secret |
 | Versions | ARC charts 0.15.0, runner 2.338.0; AzureRM ~> 5.9 |
 | Observability | AKS Automatic managed monitoring plus diagnostic settings for API server and audit-admin logs |
 
@@ -162,15 +162,19 @@ VM selection, and AKS Automatic manages the cluster version.
 
 Terraform creates a dedicated `FileStorage` Premium_LRS account with a
 `nuget-cache` SMB share. `cache_share_quota_gib` defaults to 100. The installer
-creates a static RWX PV/PVC for this cache and a dedicated
-`arc-azurefile-premium` StorageClass targeting **the same account**. Each runner
-gets its own generic ephemeral PVC and 100 GiB share, shared only with that
-runner's job/action pods. Workspace PVs use `Delete`; the cache PV uses `Retain`
-and survives ARC reinstalls, but **not a full Terraform destroy**.
+creates a static RWX PV/PVC for this cache. The cache PV uses `Retain` and
+survives ARC reinstalls, but **not a full Terraform destroy**.
 
-The Files CSI controller uses the cluster identity (Storage Account Contributor
-on this account) to provision/delete workspace shares. At mount time, kubelets
-use their identity (Storage Account Key Operator Service Role on this account)
+Each runner gets its own generic ephemeral PVC: a 50 GiB `managed-csi` (Standard
+SSD) Azure Disk, shared only with that runner's job/action pods and deleted with
+the runner. The workspace is deliberately **not** on Azure Files: before every
+job the Kubernetes hook copies the runner `externals` directory (~600 MB, ~9k
+files) into the workspace, and that small-file copy over SMB takes many minutes.
+A ReadWriteOnce disk works because the hook schedules job pods on the runner's
+node. Use `managed-csi-premium` only if the NodePool is limited to `s` (premium
+storage capable) VM sizes.
+
+At mount time, kubelets use their identity (Storage Account Key Operator Service Role on this account)
 to retrieve SMB keys. `storeAccountKey: "false"` avoids storing those keys in
 Kubernetes Secrets; this is **not keyless SMB**. RBAC propagation may briefly
 delay the first mount. The account uses an authenticated public storage endpoint
@@ -431,6 +435,7 @@ untrusted jobs could poison packages for subsequent builds.
 | Admission denied by Safeguards | Every container needs CPU/memory requests and limits; images must use a pinned tag, not `latest`. Check `kubectl get events` for the policy name |
 | Runner deprecated / cannot receive messages | Runner image too old: bump `ghcr.io/actions/actions-runner` in `arc/runner-values.yaml` and reinstall |
 | Workspace PVC or mount failure | Files CSI enabled; storage RBAC propagation; node TCP 445; quota and Premium share size; inspect PVC/pod events |
+| Jobs sit at **Initialize containers** for many minutes | The work volume is on Azure Files: SMB copies ~600 MB of runner `externals` per job. Confirm `kubernetesModeWorkVolumeClaim` uses `managed-csi` (RWO) and `kubectl get pvc -n arc-runners` shows disk-backed PVCs |
 | Container job stays Pending | Hook template ConfigMap, runner-pool taint toleration, amd64 images, requests/limits and workspace/cache PVCs |
 | Missing job container / Docker error | Add `container:` to every job; this mode has no Docker daemon |
 | Nodes do not scale down immediately | `consolidateAfter` delay, active jobs, PVC detach and other pods; AKS-managed system nodes intentionally stay running |
@@ -452,9 +457,8 @@ AKS Automatic uses the **Standard** control-plane tier (billed per cluster hour)
 plus AKS-managed system nodes, runner nodes, load balancer/public IP, outbound
 traffic and Log Analytics.
 The 100 GiB Premium cache is billed even with zero runners. Each active runner
-provisions another **100 GiB Premium share**, so five runners plus the default
-cache can provision 600 GiB. Workspace deletion is asynchronous; verify shares
-are removed after runs. ARC removal alone does not delete the persistent cache.
+provisions another **50 GiB managed disk**, deleted with the runner pod; verify
+no `pvc-*` disks remain in the node resource group after runs. ARC removal alone does not delete the persistent cache.
 Do not leave the demo running unnecessarily.
 
 Stop workflow submissions and wait for jobs to finish, then:
@@ -468,7 +472,7 @@ Cleanup requires the local Terraform state and original infrastructure variables
 It confirms the target, uninstalls the runner scale set **before** the controller
 so GitHub registrations can be removed, deletes the runner NodePool so Karpenter
 drains its nodes, destroys all Terraform resources
-(including the entire storage account, cache and any remaining workspace shares), verifies
+(including the entire storage account, cache and any remaining workspace disks in the node resource group), verifies
 both the demo and AKS-generated node resource groups are gone, then removes local state/backups, saved plan,
 provider cache, lockfile and isolated kubeconfig. If an operation fails, state is
 retained: resolve the error and rerun. If the cluster was manually deleted, the
@@ -504,7 +508,8 @@ yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' arc workflows
 - [Microsoft: node autoprovisioning NodePools](https://learn.microsoft.com/en-us/azure/aks/node-autoprovision-node-pools)
 - [AzureRM AKS Automatic resource reference](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_automatic_cluster)
 
-This demo follows the Microsoft Azure Files/Kubernetes-mode storage pattern,
+This demo adapts the Microsoft Azure Files/Kubernetes-mode storage pattern (keeping
+Azure Files for the shared cache but using managed disks for workspaces),
 using Terraform rather than Azure CLI for provisioning. It keeps pinned ARC
 versions, a dedicated Karpenter NodePool and a small dev/test cluster; it does not claim
 the high availability suggested by the reference architecture's title.
