@@ -9,21 +9,47 @@ actions run through a **privileged Docker-in-Docker (DinD)** sidecar.
 
 ## Architecture and defaults
 
-```text
-GitHub repository/organization job queue
-                 |
-                 | outbound HTTPS (no incoming webhook)
-                 v
-Dedicated AKS cluster
-  system pool: 1 node, CriticalAddonsOnly taint
-    arc-systems: ARC controller + listener
-    arc-runners: GitHub authentication secret
-  runner pool: 0-3 nodes, workload=github-actions taint
-    arc-runners: 0-5 ephemeral runner pods + DinD
-                 |
-                 v
-Container Insights + control-plane logs -> Log Analytics
+```mermaid
+flowchart TB
+    github["GitHub repository / organization<br/>Job queue"]
+
+    subgraph aks["Dedicated AKS cluster"]
+        subgraph system["System pool: 1 node<br/>Taint: CriticalAddonsOnly"]
+            subgraph systemsNamespace["Namespace: arc-systems"]
+                controller["ARC controller"]
+                listener["Job listener"]
+            end
+        end
+
+        subgraph runnerPool["Runner pool: 0-3 nodes<br/>Taint: workload=github-actions"]
+            subgraph runnerPods["Namespace: arc-runners"]
+                runners["0-5 ephemeral runner pods<br/>Runner + privileged DinD sidecar"]
+            end
+        end
+
+        secret["Namespace: arc-runners<br/>GitHub App / PAT authentication secret"]
+        autoscaler["AKS cluster autoscaler"]
+        logs["Container Insights + control-plane logs"]
+    end
+
+    analytics["Log Analytics workspace"]
+
+    listener -->|"Outbound HTTPS: poll for jobs"| github
+    runners -->|"Outbound HTTPS: execute jobs / report results"| github
+    secret -.->|"Authenticate"| controller
+    controller -->|"Manage runner lifecycle"| runners
+    listener -->|"Adjust desired runner count"| runners
+    runners -.->|"Pending pods trigger node scaling"| autoscaler
+    autoscaler -->|"Scale node count"| runnerPool
+    controller -.-> logs
+    listener -.-> logs
+    runners -.-> logs
+    logs --> analytics
 ```
+
+Namespace membership and node placement are shown separately: the authentication
+secret is namespace-scoped, not assigned to a node pool. All GitHub connections
+originate from the cluster; no incoming webhook is required.
 
 | Decision | Demo configuration / rationale |
 |----------|-------------------------------|
