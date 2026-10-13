@@ -1,0 +1,30 @@
+fullnameOverride: arc-controller
+serviceAccount:
+  name: arc-controller
+nodeSelector:
+  workload: system
+tolerations:
+  - key: CriticalAddonsOnly
+    operator: Exists
+    effect: NoSchedule
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+flags:
+  logLevel: info
+  logFormat: json
+  watchSingleNamespace: arc-runners
+metrics:
+  controllerManagerAddr: ":8080"
+  listenerAddr: ":8080"
+  listenerEndpoint: /metrics

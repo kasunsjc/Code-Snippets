@@ -1,0 +1,39 @@
+name: AKS ARC runner demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-and-scale:
+    runs-on: aks-arc-runners
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [1, 2, 3, 4, 5]
+    steps:
+      - name: Verify runner and Docker
+        env:
+          DEMO_JOB: ${{ matrix.job }}
+          DEMO_RUNNER: ${{ runner.name }}
+        run: |
+          set -euo pipefail
+          echo "Job $DEMO_JOB on ephemeral runner $DEMO_RUNNER"
+          uname -a
+          docker version
+          docker info
+      - name: Build and run a container
+        env:
+          DEMO_JOB: ${{ matrix.job }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/arc-build"
+          printf 'FROM alpine:3.22\nCMD ["echo", "Built by an AKS GitHub Actions runner"]\n' \
+            > "$RUNNER_TEMP/arc-build/Dockerfile"
+          docker build --tag "arc-demo:$DEMO_JOB" "$RUNNER_TEMP/arc-build"
+          docker run --rm "arc-demo:$DEMO_JOB"
+      - name: Keep jobs running to observe autoscaling
+        run: sleep 60

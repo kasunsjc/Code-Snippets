@@ -1,0 +1,9 @@
+project     = "gha-runners"
+environment = "dev"
+location    = "northeurope"
+
+# Replace with your workstation/VPN's public egress IPv4 address.
+api_server_authorized_ip_ranges = ["203.0.113.10/32"]
+
+node_vm_size          = "Standard_D4as_v5"
+runner_node_max_count = 3
