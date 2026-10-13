@@ -3,7 +3,7 @@ output "resource_group_name" {
 }
 
 output "node_resource_group_name" {
-  value = "rg-${local.name_prefix}-nodes"
+  value = element(split("/", azurerm_kubernetes_automatic_cluster.this.node_resource_group_id), 4)
 }
 
 output "aks_cluster_name" {
@@ -15,11 +15,11 @@ output "subscription_id" {
 }
 
 output "cluster_id" {
-  value = azurerm_kubernetes_cluster.this.id
+  value = azurerm_kubernetes_automatic_cluster.this.id
 }
 
 output "portal_url" {
-  value = "https://portal.azure.com/#resource${azurerm_kubernetes_cluster.this.id}/overview"
+  value = "https://portal.azure.com/#resource${azurerm_kubernetes_automatic_cluster.this.id}/overview"
 }
 
 output "storage_account_name" {

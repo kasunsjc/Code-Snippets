@@ -21,7 +21,7 @@ variable "environment" {
 }
 
 variable "location" {
-  description = "Azure region supporting the selected VM size."
+  description = "Azure region that supports AKS Automatic (requires availability zones)."
   type        = string
   default     = "northeurope"
 }
@@ -39,19 +39,6 @@ variable "api_server_authorized_ip_ranges" {
   }
 }
 
-variable "kubernetes_version" {
-  description = "Optional supported Kubernetes 1.29+ version. Null selects AKS's recommended version."
-  type        = string
-  default     = null
-
-  validation {
-    condition = var.kubernetes_version == null ? true : (
-      can(regex("^1\\.(29|[3-9][0-9])(\\.[0-9]+)?$", var.kubernetes_version))
-    )
-    error_message = "Use a supported Kubernetes 1.29+ version or null."
-  }
-}
-
 variable "cache_share_quota_gib" {
   description = "Persistent Premium SMB NuGet cache capacity, billed even when runners scale to zero."
   type        = number
@@ -60,22 +47,5 @@ variable "cache_share_quota_gib" {
   validation {
     condition     = var.cache_share_quota_gib >= 100 && var.cache_share_quota_gib <= 1024 && floor(var.cache_share_quota_gib) == var.cache_share_quota_gib
     error_message = "Choose an integer from 100 to 1024 GiB (Premium shares require at least 100 GiB)."
-  }
-}
-
-variable "node_vm_size" {
-  description = "Non-burstable x86-64 VM size for both pools; runner images target amd64."
-  type        = string
-  default     = "Standard_D4as_v5"
-}
-
-variable "runner_node_max_count" {
-  description = "Maximum runner nodes. ARC's runner count is configured separately in arc/runner-values.yaml."
-  type        = number
-  default     = 3
-
-  validation {
-    condition     = var.runner_node_max_count >= 1 && var.runner_node_max_count <= 10 && floor(var.runner_node_max_count) == var.runner_node_max_count
-    error_message = "Choose an integer between 1 and 10."
   }
 }

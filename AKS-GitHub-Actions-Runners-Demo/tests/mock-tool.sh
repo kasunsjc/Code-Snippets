@@ -12,7 +12,7 @@ case "$tool" in
       case "$last_argument" in
         subscription_id) echo "00000000-0000-0000-0000-000000000002" ;;
         resource_group_name) echo rg-gha-runners-dev ;;
-        node_resource_group_name) echo rg-gha-runners-dev-nodes ;;
+        node_resource_group_name) echo MC_rg-gha-runners-dev_aks-gha-runners-dev_northeurope ;;
         aks_cluster_name) echo aks-gha-runners-dev ;;
         portal_url) echo https://portal.azure.com/ ;;
         storage_account_name) echo stghatest123456 ;;

@@ -32,6 +32,8 @@ if [[ "$(az group exists --subscription "$subscription" --name "$resource_group"
       helm uninstall "$release" --namespace "$namespace" --wait --timeout 15m
     fi
   done
+  # Let Karpenter drain and delete runner nodes before the cluster is destroyed.
+  kubectl delete nodepools.karpenter.sh github-actions --ignore-not-found --wait=true --timeout=10m
 fi
 
 terraform -chdir="$TF_DIR" destroy -input=false -auto-approve

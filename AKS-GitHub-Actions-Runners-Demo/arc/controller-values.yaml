@@ -1,12 +1,8 @@
 fullnameOverride: arc-controller
 serviceAccount:
   name: arc-controller
-nodeSelector:
-  workload: system
-tolerations:
-  - key: CriticalAddonsOnly
-    operator: Exists
-    effect: NoSchedule
+# AKS Automatic manages system node placement. Deployment Safeguards require
+# resource requests on every container, so keep them explicit.
 resources:
   requests:
     cpu: 100m

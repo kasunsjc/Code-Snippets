@@ -80,6 +80,7 @@ expect_absent "$GITHUB_PAT" "$test_dir/output"
 grep -q "pod-security.kubernetes.io/enforce=baseline" "$MOCK_LOG"
 expect_absent "enforce=privileged" "$MOCK_LOG"
 grep -q "job-hook-configmap.yaml" "$MOCK_LOG"
+grep -q "kubectl apply -f .*/arc/runner-nodepool.yaml" "$MOCK_LOG"
 grep -q "pvc/nuget-cache" "$MOCK_LOG"
 grep -q 'storageAccount: "stghatest123456"' "$MOCK_MANIFEST"
 grep -q 'storeAccountKey: "false"' "$MOCK_MANIFEST"
@@ -127,6 +128,8 @@ expect_failure "" env MOCK_DESTROY_FAIL=1 bash "$fixture/cleanup.sh" <<< yes
 runner_line="$(grep -n "helm uninstall aks-arc-runners" "$MOCK_LOG" | cut -d: -f1)"
 controller_line="$(grep -n "helm uninstall arc-controller" "$MOCK_LOG" | cut -d: -f1)"
 [[ "$runner_line" -lt "$controller_line" ]]
+nodepool_line="$(grep -n "kubectl delete nodepools.karpenter.sh github-actions" "$MOCK_LOG" | cut -d: -f1)"
+[[ "$controller_line" -lt "$nodepool_line" ]]
 
 : > "$MOCK_LOG"
 expect_failure "still exists" env MOCK_GROUP_LEFT=1 bash "$fixture/cleanup.sh" <<< yes
@@ -144,4 +147,4 @@ touch "$fixture/terraform/terraform.tfstate"
 MOCK_CLUSTER_GONE=1 bash "$fixture/cleanup.sh" <<< yes > "$test_dir/output"
 expect_absent "helm " "$MOCK_LOG"
 grep -q "terraform .*destroy" "$MOCK_LOG"
-echo "PASS: enterprise/org/repo registration, configuration guards, Files storage, secret handling, cancellation and teardown recovery."
+echo "PASS: enterprise/org/repo registration, Karpenter NodePool, configuration guards, Files storage, secret handling, cancellation and teardown recovery."

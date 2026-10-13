@@ -6,6 +6,36 @@ mock_provider "azurerm" {
       principal_id = "00000000-0000-0000-0000-000000000005"
     }
   }
+  mock_resource "azurerm_kubernetes_automatic_cluster" {
+    defaults = {
+      id                     = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.ContainerService/managedClusters/aks-gha-runners-dev"
+      node_resource_group_id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/MC_rg-gha-runners-dev_aks-gha-runners-dev_northeurope"
+    }
+  }
+  mock_resource "azurerm_resource_group" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev"
+    }
+  }
+  mock_resource "azurerm_log_analytics_workspace" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.OperationalInsights/workspaces/log-gha-runners-dev"
+    }
+  }
+  mock_resource "azurerm_storage_account" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/rg-gha-runners-dev/providers/Microsoft.Storage/storageAccounts/stghademo"
+    }
+  }
+  mock_data "azurerm_kubernetes_cluster" {
+    defaults = {
+      kubelet_identity = [{
+        client_id                 = "00000000-0000-0000-0000-000000000006"
+        object_id                 = "00000000-0000-0000-0000-000000000007"
+        user_assigned_identity_id = "/subscriptions/00000000-0000-0000-0000-000000000002/resourceGroups/MC_rg-gha-runners-dev_aks-gha-runners-dev_northeurope/providers/Microsoft.ManagedIdentity/userAssignedIdentities/aks-gha-runners-dev-agentpool"
+      }]
+    }
+  }
   mock_data "azurerm_client_config" {
     defaults = {
       tenant_id       = "00000000-0000-0000-0000-000000000001"
@@ -20,27 +50,23 @@ variables {
 }
 
 run "isolated_demo_defaults" {
-  command = plan
+  command = apply
 
   assert {
-    condition     = azurerm_kubernetes_cluster.this.node_resource_group == "rg-gha-runners-dev-nodes"
-    error_message = "AKS must use an explicitly named node resource group."
+    condition     = azurerm_kubernetes_automatic_cluster.this.identity[0].type == "UserAssigned"
+    error_message = "AKS Automatic must use the demo's user-assigned control plane identity."
   }
   assert {
-    condition     = azurerm_kubernetes_cluster.this.local_account_disabled && azurerm_kubernetes_cluster.this.azure_active_directory_role_based_access_control[0].azure_rbac_enabled
-    error_message = "AKS must use Entra/Azure RBAC, not local admin accounts."
+    condition     = azurerm_kubernetes_automatic_cluster.this.api_server_access[0].authorized_ip_ranges == toset(["198.51.100.20/32"])
+    error_message = "AKS API must be restricted to the configured allowlist."
   }
   assert {
-    condition     = azurerm_kubernetes_cluster_node_pool.runners.min_count == 0 && azurerm_kubernetes_cluster_node_pool.runners.max_count == 3 && azurerm_kubernetes_cluster_node_pool.runners.auto_scaling_enabled
-    error_message = "Runner nodes must autoscale from zero to the configured cap."
+    condition     = azurerm_role_assignment.deployer.role_definition_name == "Azure Kubernetes Service RBAC Cluster Admin"
+    error_message = "Deployer needs Azure RBAC cluster admin because Automatic disables local accounts."
   }
   assert {
-    condition     = contains(azurerm_kubernetes_cluster_node_pool.runners.node_taints, "workload=github-actions:NoSchedule")
-    error_message = "Runner pool isolation taint must be present."
-  }
-  assert {
-    condition     = azurerm_kubernetes_cluster.this.default_node_pool[0].only_critical_addons_enabled
-    error_message = "System pool must be tainted for critical components."
+    condition     = output.node_resource_group_name == "MC_rg-gha-runners-dev_aks-gha-runners-dev_northeurope"
+    error_message = "Node resource group output must be derived from the AKS-managed group ID."
   }
   assert {
     condition     = azurerm_storage_account.runners.account_kind == "FileStorage" && azurerm_storage_account.runners.account_tier == "Premium" && azurerm_storage_account.runners.account_replication_type == "LRS"
@@ -51,12 +77,8 @@ run "isolated_demo_defaults" {
     error_message = "Cache must be a 100 GiB SMB share by default."
   }
   assert {
-    condition     = azurerm_role_assignment.files_kubelet.role_definition_name == "Storage Account Key Operator Service Role"
-    error_message = "Kubelet only needs key retrieval permissions, not storage administration."
-  }
-  assert {
-    condition     = azurerm_kubernetes_cluster.this.storage_profile[0].file_driver_enabled
-    error_message = "Azure Files CSI driver must be enabled."
+    condition     = azurerm_role_assignment.files_kubelet.role_definition_name == "Storage Account Key Operator Service Role" && azurerm_role_assignment.files_kubelet.principal_id == "00000000-0000-0000-0000-000000000007"
+    error_message = "The AKS-managed kubelet identity only needs key retrieval permissions."
   }
 }
 
@@ -90,20 +112,4 @@ run "reject_empty_api_allowlist" {
     api_server_authorized_ip_ranges = []
   }
   expect_failures = [var.api_server_authorized_ip_ranges]
-}
-
-run "reject_unbounded_node_count" {
-  command = plan
-  variables {
-    runner_node_max_count = 11
-  }
-  expect_failures = [var.runner_node_max_count]
-}
-
-run "reject_old_kubernetes" {
-  command = plan
-  variables {
-    kubernetes_version = "1.28"
-  }
-  expect_failures = [var.kubernetes_version]
 }

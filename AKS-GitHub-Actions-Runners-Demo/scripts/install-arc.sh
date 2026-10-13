@@ -3,7 +3,7 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 if [[ "${1:-}" == "--help" && $# == 1 ]]; then
-  echo "Usage: bash scripts/install-arc.sh (installs or upgrades ARC on this demo's Terraform cluster)"
+  echo "Usage: bash scripts/install-arc.sh (installs or upgrades ARC on this demo's AKS Automatic cluster)"
   exit 0
 fi
 [[ $# == 0 ]] || fail "Unknown argument. Use --help."
@@ -14,6 +14,8 @@ connect_cluster
 kubectl create namespace "$CONTROLLER_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace "$RUNNER_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl label namespace "$RUNNER_NAMESPACE" pod-security.kubernetes.io/enforce=baseline --overwrite
+# Dedicated Karpenter NodePool: AKS Automatic provisions tainted runner nodes on demand.
+kubectl apply -f "$DEMO_DIR/arc/runner-nodepool.yaml"
 bash "$DEMO_DIR/scripts/install-storage.sh"
 kubectl apply -f "$DEMO_DIR/arc/job-hook-configmap.yaml"
 kubectl apply -f "$DEMO_DIR/arc/runner-network-policy.yaml"

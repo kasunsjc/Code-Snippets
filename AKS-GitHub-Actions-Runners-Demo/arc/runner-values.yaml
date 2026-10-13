@@ -11,12 +11,6 @@ controllerServiceAccount:
 
 listenerTemplate:
   spec:
-    nodeSelector:
-      workload: system
-    tolerations:
-      - key: CriticalAddonsOnly
-        operator: Exists
-        effect: NoSchedule
     containers:
       - name: listener
         resources:
@@ -40,6 +34,7 @@ template:
     labels:
       demo: aks-gha-runner
   spec:
+    # Matches the Karpenter NodePool in arc/runner-nodepool.yaml.
     nodeSelector:
       workload: github-actions
       kubernetes.io/arch: amd64

@@ -1,8 +1,10 @@
-# Enterprise GitHub Actions Runners on AKS
+# Enterprise GitHub Actions Runners on AKS Automatic
 
-Run enterprise-scoped GitHub Actions container jobs on AKS with Actions Runner Controller and Azure Files.
+Run enterprise-scoped GitHub Actions container jobs on AKS Automatic with Actions Runner Controller and Azure Files.
 
-This experiment provisions Azure resources with Terraform, then installs GitHub's
+This experiment follows the AKS blog post
+[GitHub Actions Runner Controller on AKS Automatic](https://blog.aks.azure.com/2026/09/17/github-actions-runner-controller-aks-automatic).
+It provisions an AKS Automatic cluster and Azure Files storage with Terraform, then installs GitHub's
 modern **runner scale set** Helm charts. It does not use legacy `RunnerDeployment`
 resources, cert-manager, or GitHub webhook ingress. Following the Microsoft
 Azure Files approach, **Kubernetes container mode** runs workflow jobs in separate
@@ -19,15 +21,15 @@ flowchart TB
     github["GitHub Enterprise Cloud<br/>Selected organizations / repository job queues"]
     group["Enterprise runner group<br/>aks-enterprise-runners"]
 
-    subgraph aks["Dedicated AKS cluster"]
-        subgraph system["System pool: 1 node<br/>Taint: CriticalAddonsOnly"]
+    subgraph aks["Dedicated AKS Automatic cluster"]
+        subgraph system["AKS-managed system nodes<br/>Deployment Safeguards enforced"]
             subgraph systemsNamespace["Namespace: arc-systems"]
                 controller["ARC controller"]
                 listener["Job listener"]
             end
         end
 
-        subgraph runnerPool["Runner pool: 0-3 nodes<br/>Taint: workload=github-actions"]
+        subgraph runnerPool["Karpenter NodePool github-actions<br/>0-N nodes, Taint: workload=github-actions"]
             subgraph runnerPods["Namespace: arc-runners"]
                 runners["0-5 ephemeral runner pods<br/>Kubernetes container hooks"]
                 jobs["Workflow job pods<br/>Container image specified by workflow"]
@@ -35,7 +37,7 @@ flowchart TB
         end
 
         secret["Namespace: arc-runners<br/>Enterprise PAT authentication secret"]
-        autoscaler["AKS cluster autoscaler"]
+        autoscaler["Node autoprovisioning (Karpenter)"]
         logs["Container Insights + control-plane logs"]
     end
 
@@ -56,8 +58,8 @@ flowchart TB
     jobs -->|"Mount same workspace"| workspaces
     jobs -->|"Restore packages / reuse cache"| cache
     listener -->|"Adjust desired runner count"| runners
-    runners -.->|"Pending pods trigger node scaling"| autoscaler
-    autoscaler -->|"Scale node count"| runnerPool
+    runners -.->|"Pending pods trigger node provisioning"| autoscaler
+    autoscaler -->|"Create / consolidate VMs"| runnerPool
     controller -.-> logs
     listener -.-> logs
     runners -.-> logs
@@ -71,29 +73,48 @@ originate from the cluster; no incoming webhook is required.
 
 | Decision | Demo configuration / rationale |
 | ---------- | ------------------------------- |
-| Cluster type | AKS Standard, Free tier; explicit pools and cluster autoscaler rather than AKS Automatic/NAP |
-| Node resource group | `rg-gha-runners-dev-nodes`, explicitly named and managed by AKS |
-| Nodes | Azure Linux 3, x86-64 `Standard_D4as_v5`; one persistent system node |
-| Networking (Day 0) | Azure CNI Overlay + Cilium, standard load balancer egress, no inbound application service |
+| Cluster type | AKS Automatic (`azurerm_kubernetes_automatic_cluster`); AKS manages system nodes, upgrades, scaling and Safeguards |
+| Node resource group | AKS-generated `MC_<rg>_<cluster>_<region>` (see note below) |
+| Nodes | Karpenter `NodePool` `github-actions`: on-demand amd64 Linux D-family VMs with 2-8 vCPU, capped at 32 vCPU |
+| Networking (Day 0) | AKS Automatic defaults: Azure CNI Overlay + Cilium, managed egress, no inbound application service |
 | API access (Day 0) | Public endpoint restricted to your workstation/VPN IPv4 CIDRs |
 | Azure access | Entra ID + Azure RBAC; local accounts disabled; deploying identity gets cluster admin |
 | GitHub access | Enterprise PAT (classic), explicit enterprise runner group; optional App auth for repo/org scope |
-| Scaling | ARC scales pods from queued jobs; AKS scales runner nodes from pending pods |
+| Scaling | ARC scales pods from queued jobs; node autoprovisioning creates/consolidates runner nodes from pending pods |
+| Policy | Deployment Safeguards: every container sets requests/limits, images are pinned (no `latest`) |
 | Container mode | Kubernetes hooks; every workflow job must specify `container:` |
 | Storage | Azure Files CSI; 100 GiB per-runner RWX workspace, plus a persistent 100 GiB NuGet cache |
 | Storage authentication | CSI controller/kubelet managed identities retrieve SMB keys; no account-key Kubernetes secret |
 | Versions | ARC charts 0.15.0, runner 2.338.0; AzureRM ~> 5.9 |
-| Observability | Container Insights; API server, audit-admin and cluster-autoscaler logs |
+| Observability | AKS Automatic managed monitoring plus diagnostic settings for API server and audit-admin logs |
 
-The system pool and listener stay running even when runners reach zero. Runner
-nodes take several minutes to provision on the first job. `maxRunners: 5` is a
-runner cap, **not** a node cap. Each runner requests 250m CPU / 512 MiB; each job
-container requests 500m CPU / 1 GiB. Both runner and job pods use the tainted
-runner pool. Service containers add further resources; tune limits accordingly.
+**Why AKS Automatic?** As the blog post explains, Automatic removes node pool
+sizing and autoscaler tuning: ARC creates runner pods, and node autoprovisioning
+(Karpenter) picks a fitting VM size, then consolidates empty nodes after jobs
+finish. Automatic also enables Azure RBAC with local accounts disabled, the
+Azure Files CSI driver and the pod readiness SLA by default.
 
-This is **not a production/high-availability configuration**. Production needs
-multiple system nodes, zone redundancy, a paid control-plane tier, private API
-connectivity, controlled egress, durable log collection and tighter governance.
+**Node resource group exception.** This repository normally sets an explicit
+`rg-<project>-<env>-nodes` node resource group. AKS Automatic does not allow a
+custom node resource group name, so Terraform reads the AKS-generated group from
+`node_resource_group_id` and exposes it as the `node_resource_group_name` output.
+Cleanup verifies that group is gone too.
+
+**Runner NodePool.** `arc/runner-nodepool.yaml` defines a dedicated Karpenter
+`NodePool` that labels nodes `workload=github-actions` and taints them
+`workload=github-actions:NoSchedule`. Runner and job pods select and tolerate that
+taint, so builds never land on system nodes. `limits.cpu: 32` caps total runner
+capacity, and `consolidationPolicy: WhenEmptyOrUnderutilized` removes idle nodes.
+
+The AKS-managed system nodes and listener stay running even when runners reach
+zero. Runner nodes take a few minutes to provision on the first job.
+`maxRunners: 5` is a runner cap; the NodePool `limits` are the node cap. Each
+runner requests 250m CPU / 512 MiB; each job container requests 500m CPU / 1 GiB.
+Service containers add further resources; tune limits accordingly.
+
+This is **not a production configuration**. Production needs private API
+connectivity (`private_cluster` or API server VNet integration with
+`hosted_system`), controlled egress, durable log collection and tighter governance.
 API/overlay CIDR choices affect later connectivity and should be planned before
 provisioning. No Azure permissions are granted to jobs: use GitHub OIDC with a
 separately scoped identity for any subsequent Azure deployment workflow.
@@ -108,11 +129,12 @@ separately scoped identity for any subsequent Azure deployment workflow.
   and a private test repository in an allowed organization. Enterprise and
   organization policies must allow self-hosted runners. For repo/org-only
   experiments, runner administration permission on that scope is enough.
-- Enough regional quota for the system node, up to three runner nodes, and upgrade
-  surge nodes. Choose another supported non-burstable **amd64** VM size if needed.
+- A region that supports AKS Automatic (default `northeurope`) and vCPU quota for
+  the AKS-managed system nodes plus up to 32 vCPU of D-family runner nodes.
 - Outbound access to GitHub, GHCR, MCR, NuGet and Azure endpoints, including
   node-level SMB TCP 445 access to Azure Files.
-- A currently supported AKS Kubernetes version >= 1.29.
+- AzureRM provider ~> 5.9 (for `azurerm_kubernetes_automatic_cluster`). AKS
+  Automatic chooses and upgrades the Kubernetes version automatically.
 
 ## 1. Configure infrastructure
 
@@ -125,8 +147,9 @@ cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 
 Edit `terraform/terraform.tfvars`. Replace `203.0.113.10/32` with your
 workstation/VPN's real public egress IPv4 CIDR. Terraform rejects the placeholder
-and unrestricted `0.0.0.0/0`. Choose region and node size as appropriate. Leave
-`kubernetes_version` unset to use AKS's recommended version.
+and unrestricted `0.0.0.0/0`. Choose a region that supports AKS Automatic. There
+are no node size or Kubernetes version variables: the runner NodePool controls
+VM selection, and AKS Automatic manages the cluster version.
 
 Terraform creates a dedicated `FileStorage` Premium_LRS account with a
 `nuget-cache` SMB share. `cache_share_quota_gib` defaults to 100. The installer
@@ -253,10 +276,11 @@ bash deploy.sh
 
 The script validates prerequisites/configuration, initializes and validates
 Terraform, shows a saved plan, and asks for `yes` before creating billable
-resources. It then obtains Entra credentials, waits for RBAC propagation, installs
+resources. It then obtains Entra credentials (Azure Kubernetes Service RBAC
+Cluster Admin through `kubelogin`), waits for RBAC propagation, installs
 both pinned charts and waits for the listener to be ready.
-It also installs the cache PV/PVC, workspace StorageClass, Cilium policies and
-job-hook ConfigMap. Runner namespaces enforce **baseline** Pod Security admission,
+It also applies the runner Karpenter NodePool, the cache PV/PVC, workspace
+StorageClass, Cilium policies and job-hook ConfigMap. Runner namespaces enforce **baseline** Pod Security admission,
 not privileged admission.
 
 For subsequent ARC configuration changes or authentication rotation:
@@ -322,18 +346,21 @@ diagnosing queued jobs.
 export KUBECONFIG="$PWD/.kube/config"
 kubectl get pods -n arc-runners -w
 # In another terminal with the same KUBECONFIG:
-kubectl get nodes -L workload -w
+kubectl get nodes -L workload,karpenter.sh/nodepool,node.kubernetes.io/instance-type -w
+kubectl get nodepools.karpenter.sh github-actions
+kubectl get nodeclaims.karpenter.sh
 kubectl get pods -n arc-systems
 kubectl get autoscalingrunnersets.actions.github.com -n arc-runners
 kubectl get pvc -n arc-runners
 kubectl get pv
 ```
 
-Expected: listener remains on the system pool; ephemeral runners land only on
-the runner pool along with their job pods, complete one job each, then disappear.
+Expected: listener remains on AKS-managed system nodes; Karpenter creates
+`NodeClaims` for the `github-actions` NodePool; ephemeral runners land only on
+those nodes along with their job pods, complete one job each, then disappear.
 Per-runner PVCs/shares are deleted after their owning pods are removed; the
-`nuget-cache` PVC/share remains. After the autoscaler
-idle delay, runner nodes return to zero. No checkout step is needed for this
+`nuget-cache` PVC/share remains. About two minutes after the last job,
+consolidation removes the empty runner nodes. No checkout step is needed for this
 smoke test; the standard runner image is not a full `ubuntu-latest` VM, so install
 your build tools in the workflow's job image for real projects.
 
@@ -388,14 +415,17 @@ untrusted jobs could poison packages for subsequent builds.
 | Listener fails / 401 / 403 | Inspect controller/listener logs; verify App installation ID, permissions, repository access, PAT expiry and organization policies |
 | Enterprise registration fails | Enterprise slug; PAT classic with `manage_runners:enterprise`; enterprise-owner account; existing enterprise group; token/SSO policies |
 | Jobs remain queued | Exact `runs-on` name; correct GitHub URL; runner group access; ready listener |
-| Runner pods Pending | Runner node quota/capacity, autoscaler events, labels/taints, amd64 node size and resource requests |
+| Runner pods Pending | `kubectl describe nodepool github-actions`, NodeClaim events, D-family vCPU quota, NodePool `limits`, labels/taints and resource requests |
+| Admission denied by Safeguards | Every container needs CPU/memory requests and limits; images must use a pinned tag, not `latest`. Check `kubectl get events` for the policy name |
+| Runner deprecated / cannot receive messages | Runner image too old: bump `ghcr.io/actions/actions-runner` in `arc/runner-values.yaml` and reinstall |
 | Workspace PVC or mount failure | Files CSI enabled; storage RBAC propagation; node TCP 445; quota and Premium share size; inspect PVC/pod events |
 | Container job stays Pending | Hook template ConfigMap, runner-pool taint toleration, amd64 images, requests/limits and workspace/cache PVCs |
 | Missing job container / Docker error | Add `container:` to every job; this mode has no Docker daemon |
-| Nodes do not scale down immediately | Autoscaler idle delay, active jobs and other pods; system pool intentionally stays running |
+| Nodes do not scale down immediately | `consolidateAfter` delay, active jobs, PVC detach and other pods; AKS-managed system nodes intentionally stay running |
 
 ```bash
 kubectl logs -n arc-systems deployment/arc-controller --tail=100
+kubectl logs -n arc-systems -l app.kubernetes.io/component=runner-scale-set-listener --tail=100
 kubectl get pods -n arc-runners
 kubectl get events -n arc-runners --sort-by=.lastTimestamp
 # Substitute names from the pod listing:
@@ -406,8 +436,9 @@ kubectl describe pvc -n arc-runners nuget-cache
 
 ## Cleanup and cost
 
-AKS Free tier does **not** mean free nodes. System compute/disks, runner nodes,
-load balancer/public IP, outbound traffic and Log Analytics incur charges.
+AKS Automatic uses the **Standard** control-plane tier (billed per cluster hour)
+plus AKS-managed system nodes, runner nodes, load balancer/public IP, outbound
+traffic and Log Analytics.
 The 100 GiB Premium cache is billed even with zero runners. Each active runner
 provisions another **100 GiB Premium share**, so five runners plus the default
 cache can provision 600 GiB. Workspace deletion is asynchronous; verify shares
@@ -423,9 +454,10 @@ unset GITHUB_PAT
 
 Cleanup requires the local Terraform state and original infrastructure variables.
 It confirms the target, uninstalls the runner scale set **before** the controller
-so GitHub registrations can be removed, destroys all Terraform resources
+so GitHub registrations can be removed, deletes the runner NodePool so Karpenter
+drains its nodes, destroys all Terraform resources
 (including the entire storage account, cache and any remaining workspace shares), verifies
-both resource groups are gone, then removes local state/backups, saved plan,
+both the demo and AKS-generated node resource groups are gone, then removes local state/backups, saved plan,
 provider cache, lockfile and isolated kubeconfig. If an operation fails, state is
 retained: resolve the error and rerun. If the cluster was manually deleted, the
 script skips Helm but still destroys the remaining Terraform resources; remove
@@ -455,9 +487,12 @@ yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' arc workflows
 - [Microsoft: create ARC infrastructure with Azure Files](https://learn.microsoft.com/en-us/azure/aks/github-actions-azure-files-create-infrastructure)
 - [Azure Files CSI driver parameters](https://github.com/kubernetes-sigs/azurefile-csi-driver/blob/master/docs/driver-parameters.md)
 - [GitHub Kubernetes container hook limitations](https://github.com/actions/runner-container-hooks/blob/main/packages/k8s/README.md)
-- [AzureRM AKS resource reference](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster)
+- [AKS blog: GitHub Actions Runner Controller on AKS Automatic](https://blog.aks.azure.com/2026/09/17/github-actions-runner-controller-aks-automatic)
+- [Microsoft: AKS Automatic overview](https://learn.microsoft.com/en-us/azure/aks/intro-aks-automatic)
+- [Microsoft: node autoprovisioning NodePools](https://learn.microsoft.com/en-us/azure/aks/node-autoprovision-node-pools)
+- [AzureRM AKS Automatic resource reference](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_automatic_cluster)
 
 This demo follows the Microsoft Azure Files/Kubernetes-mode storage pattern,
 using Terraform rather than Azure CLI for provisioning. It keeps pinned ARC
-versions, isolated node pools and a small dev/test cluster; it does not claim
+versions, a dedicated Karpenter NodePool and a small dev/test cluster; it does not claim
 the high availability suggested by the reference architecture's title.

@@ -38,7 +38,7 @@ articles linked below.
 | 7 | [AKS-Control-Plane-Metrics](./AKS-Control-Plane-Metrics/) | Enable AKS control plane metrics (API server, etcd, scheduler) and visualize them in Azure Manage... | Kubernetes |
 | 8 | [AKS-Desktop](./AKS-Desktop/) | This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and... | Kubernetes |
 | 9 | [AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/) | A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showc... | Kubernetes |
-| 10 | [AKS-GitHub-Actions-Runners-Demo](./AKS-GitHub-Actions-Runners-Demo/) | Run enterprise-scoped GitHub Actions container jobs on AKS with Actions Runner Controller and Azu... | Kubernetes |
+| 10 | [AKS-GitHub-Actions-Runners-Demo](./AKS-GitHub-Actions-Runners-Demo/) | Run enterprise-scoped GitHub Actions container jobs on AKS Automatic with Actions Runner Controll... | Kubernetes |
 | 11 | [AKS-Harbor-Production-Demo](./AKS-Harbor-Production-Demo/) | No description available | Kubernetes |
 | 12 | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) | A basic Harbor container registry install on AKS via Helm, with Terraform provisioning | Kubernetes |
 | 13 | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) | > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March... | Kubernetes |
@@ -87,8 +87,8 @@ articles linked below.
   - 📄 README: Yes | 📁 Files: 8
 - **[AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/)** — A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showcasing multi-cluster orchestration, resource propagation, and centralized management.
   - 📄 README: Yes | 📁 Files: 22
-- **[AKS-GitHub-Actions-Runners-Demo](./AKS-GitHub-Actions-Runners-Demo/)** — Run enterprise-scoped GitHub Actions container jobs on AKS with Actions Runner Controller and Azure Files.
-  - 📄 README: Yes | 📁 Files: 20
+- **[AKS-GitHub-Actions-Runners-Demo](./AKS-GitHub-Actions-Runners-Demo/)** — Run enterprise-scoped GitHub Actions container jobs on AKS Automatic with Actions Runner Controller and Azure Files.
+  - 📄 README: Yes | 📁 Files: 21
 - **[AKS-Harbor-Production-Demo](./AKS-Harbor-Production-Demo/)** — No description available
   - 📄 README: No | 📁 Files: 1
 - **[AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/)** — A basic Harbor container registry install on AKS via Helm, with Terraform provisioning
