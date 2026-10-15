@@ -167,6 +167,57 @@ also takes time. Do not interpret an early unfiltered row as proof the KQL is wr
 bash test-scenarios.sh
 ```
 
+### Configurable audit data generator
+
+[`generate-data.sh`](generate-data.sh) generates real Kubernetes API requests so
+AKS emits the diagnostic audit events consumed by the workspace DCR. It does not
+insert fabricated rows into Log Analytics or bypass the diagnostic ingestion path.
+`test-scenarios.sh` is a backwards-compatible entry point to the same generator.
+
+After deploying and allowing the DCR to propagate:
+
+```bash
+# Generate 100 reads that should be kept and 100 that should be dropped,
+# one pair per second, then automatically verify both workspaces.
+bash generate-data.sh --rounds 100 --interval 1 --verify
+
+# Generate a small burst without waiting for ingestion.
+bash generate-data.sh --rounds 20 --interval 0
+```
+
+Each run creates two synthetic ConfigMaps, performs the requested number of GETs
+against **each** object, patches the retained object, and creates/deletes an
+unbound Role to supply payload-redaction evidence. Only GETs for `dcr-drop-*`
+match the filter; the `dcr-keep-*` GETs and writes must remain. The Role is never
+bound to an identity, and no workload or image is launched.
+
+Options:
+
+| Option | Default | Limits |
+|---|---|---|
+| `--rounds N` | `10` | 1–1000 read pairs |
+| `--interval N` | `1` | 0–60 whole seconds between pairs |
+| `--verify` | Off | Poll and assert using the existing verifier; nonzero exit on failure |
+| `--help` | — | Print usage without contacting Azure |
+
+Scheduled read duration is limited to one hour to leave ingestion time within the
+verifier's two-hour query window. Higher volume increases API traffic and baseline
+ingestion costs; this is a bounded test generator, not a load/stress test.
+It cannot force AKS-managed components to emit debug/trace records.
+
+The generator prints its run ID, expected outcomes, and a verification command
+including `EXPECTED_READS=N`. Copy that command when verifying separately so the
+minimum retained/baseline read counts match the generated volume:
+
+```bash
+EXPECTED_READS=20 bash verify.sh <run-id>
+```
+
+With `--verify`, the read count is passed automatically. Namespace deletion is
+requested before polling; Kubernetes may still be terminating it, so wait for
+deletion before starting another run. Failures do not leave the namespace
+intentionally running.
+
 The script retrieves credentials into a private temporary kubeconfig, never your
 default kubeconfig. It creates the fixed `aks-dcr-demo` namespace and refuses to
 reuse an existing namespace, avoiding accidental deletion of someone else's
@@ -308,7 +359,14 @@ terraform -chdir=terraform init -backend=false -input=false
 terraform -chdir=terraform validate
 terraform -chdir=terraform test
 shellcheck -S warning -e SC2034,SC2046,SC2207 ./*.sh
+shellcheck -S warning -e SC2034,SC2046,SC2207 tests/*.sh
+bash tests/test-generator.sh
 ```
+
+The Bash generator test mocks Terraform, Azure CLI, and `kubectl`: it checks
+argument limits, equal kept/dropped read generation, configurable count
+verification, rejection of unfiltered data, temporary kubeconfig cleanup, and
+refusal to delete a pre-existing namespace. It does not require Azure credentials.
 
 `terraform test` requires Terraform **1.7+** for mocked providers. Its tests apply
 only mocked resources (no Azure calls), checking table streams, KQL wiring,

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 RUN_ID="${1:-}"
 if [[ ! "$RUN_ID" =~ ^[0-9]{14}-[0-9]+$ ]]; then
-  echo "Usage: bash $0 <run-id printed by test-scenarios.sh>" >&2
+  echo "Usage: EXPECTED_READS=10 bash $0 <run-id printed by generate-data.sh>" >&2
   exit 1
 fi
 for tool in terraform az jq; do
@@ -18,6 +18,11 @@ CLUSTER_ID="$(terraform -chdir="$TF_DIR" output -raw cluster_id)"
 SUBSCRIPTION_ID="$(terraform -chdir="$TF_DIR" output -raw subscription_id)"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-40}"
 POLL_SECONDS="${POLL_SECONDS:-30}"
+EXPECTED_READS="${EXPECTED_READS:-10}"
+if [[ ! "$EXPECTED_READS" =~ ^[1-9][0-9]{0,3}$ ]] || ((EXPECTED_READS > 1000)); then
+  echo "EXPECTED_READS must be an integer between 1 and 1000." >&2
+  exit 1
+fi
 if [[ ! "$MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ || ! "$POLL_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "MAX_ATTEMPTS and POLL_SECONDS must be positive integers." >&2
   exit 1
@@ -59,9 +64,9 @@ for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
   jq -c '.tables[0].rows[0]' <<< "$baseline"
   jq -c '.tables[0].rows[0]' <<< "$transformed"
 
-  if jq -e '.tables[0].rows[0] | .[0] >= 10 and .[1] >= 10 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] > 0 and .[6] >= 1 and .[7] > 0' \
+  if jq -e --argjson reads "$EXPECTED_READS" '.tables[0].rows[0] | .[0] >= $reads and .[1] >= $reads and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] > 0 and .[6] >= 1 and .[7] > 0' \
     <<< "$baseline" >/dev/null &&
-    jq -e '.tables[0].rows[0] | .[0] >= 10 and .[1] == 0 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] == 0 and .[6] >= 1 and .[7] == 0' \
+    jq -e --argjson reads "$EXPECTED_READS" '.tables[0].rows[0] | .[0] >= $reads and .[1] == 0 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] == 0 and .[6] >= 1 and .[7] == 0' \
       <<< "$transformed" >/dev/null; then
     baseline_control="$(query_workspace "$BASELINE_ID" "$CONTROL_QUERY")"
     transformed_control="$(query_workspace "$TRANSFORMED_ID" "$CONTROL_QUERY")"

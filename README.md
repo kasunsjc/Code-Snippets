@@ -68,7 +68,7 @@ articles linked below.
 - **[AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/)** — End-to-end Terraform automation that deploys [Argo CD](https://argo-cd.readthedocs.io/) on Azure Kubernetes Service (AKS) using the **`Microsoft.ArgoCD` cluster extension**, with Microsoft Entra ID single sign-on, group-based RBAC, TLS from Azure Key Vault, and automatic DNS via the App Routing add-on — all in a single `./deploy.sh` invocation.
   - 📄 README: Yes | 📁 Files: 25
 - **[AKS-Control-Plane-Logs-DCR](./AKS-Control-Plane-Logs-DCR/)** — Filter and redact AKS control plane logs at ingestion using an Azure Monitor workspace transformation DCR.
-  - 📄 README: Yes | 📁 Files: 14
+  - 📄 README: Yes | 📁 Files: 16
 - **[AKS-Control-Plane-Metrics](./AKS-Control-Plane-Metrics/)** — Enable AKS control plane metrics (API server, etcd, scheduler) and visualize them in Azure Managed Grafana.
   - 📄 README: Yes | 📁 Files: 10
 - **[AKS-Desktop](./AKS-Desktop/)** — This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and manage applications. We use an **AKS Automatic** cluster because Managed Projects only work with AKS Automatic.
