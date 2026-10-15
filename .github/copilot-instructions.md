@@ -37,6 +37,7 @@ invoking the relevant skill over re-deriving these workflows from scratch:
 
 ## IaC Tools
 - Use **Terraform** for infrastructure provisioning and management.
+- Add a short purpose comment immediately above each Terraform `resource` block, following the descriptive section-comment style in `AKS-Control-Plane-Metrics/terraform/main.tf`. Explain important dependencies or lifecycle behavior when relevant.
 - When cleaning up, use `terraform destroy` or the provided cleanup script to avoid orphaned resources. 
 - Use `terraform fmt` to format Terraform files before committing.
 - Use `terraform validate` to check for syntax errors and configuration issues.

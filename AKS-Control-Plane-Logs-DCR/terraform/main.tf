@@ -13,12 +13,18 @@ locals {
   }
 }
 
+# ------------------------------------------------------------
+# Dedicated resource group for the AKS log transformation demo
+# ------------------------------------------------------------
 resource "azurerm_resource_group" "this" {
   name     = "rg-${local.name_prefix}"
   location = var.location
   tags     = local.tags
 }
 
+# ------------------------------------------------------------
+# Baseline and transformed workspaces for comparing ingested logs
+# ------------------------------------------------------------
 resource "azurerm_log_analytics_workspace" "this" {
   for_each = toset(["baseline", "transformed"])
 
@@ -35,6 +41,10 @@ resource "azurerm_log_analytics_workspace" "this" {
   }
 }
 
+# ------------------------------------------------------------
+# Prepare built-in audit and control plane tables in both workspaces.
+# Apply-only PUT avoids unsupported built-in table DELETEs on destroy.
+# ------------------------------------------------------------
 resource "azapi_resource_action" "table" {
   for_each = local.tables
 
@@ -53,6 +63,10 @@ resource "azapi_resource_action" "table" {
   }
 }
 
+# ------------------------------------------------------------
+# Workspace transformation DCR: filter marked reads and noisy levels,
+# and remove audit payloads before storing transformed logs
+# ------------------------------------------------------------
 resource "azurerm_monitor_data_collection_rule" "transform" {
   name                = "dcr-${local.name_prefix}"
   location            = azurerm_resource_group.this.location
@@ -79,6 +93,10 @@ resource "azurerm_monitor_data_collection_rule" "transform" {
   depends_on = [azapi_resource_action.table]
 }
 
+# ------------------------------------------------------------
+# Activate the DCR through the transformed workspace's default-DCR
+# property; an AKS DCR association does not enable this log path
+# ------------------------------------------------------------
 resource "azapi_update_resource" "workspace_transform" {
   type        = "Microsoft.OperationalInsights/workspaces@2022-10-01"
   resource_id = azurerm_log_analytics_workspace.this["transformed"].id
@@ -89,6 +107,9 @@ resource "azapi_update_resource" "workspace_transform" {
   }
 }
 
+# ------------------------------------------------------------
+# Clear the workspace's DCR link on destroy before deleting the DCR
+# ------------------------------------------------------------
 resource "azapi_resource_action" "unlink_workspace_transform" {
   type        = "Microsoft.OperationalInsights/workspaces@2022-10-01"
   resource_id = azurerm_log_analytics_workspace.this["transformed"].id
@@ -103,6 +124,10 @@ resource "azapi_resource_action" "unlink_workspace_transform" {
   depends_on = [azapi_update_resource.workspace_transform]
 }
 
+# ------------------------------------------------------------
+# Single-node AKS cluster with restricted API access and a custom
+# node resource group; supplies real diagnostic logs for the demo
+# ------------------------------------------------------------
 resource "azurerm_kubernetes_cluster" "this" {
   name                              = "aks-${local.name_prefix}"
   location                          = azurerm_resource_group.this.location
@@ -137,6 +162,10 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 }
 
+# ------------------------------------------------------------
+# Send identical AKS log categories to both workspaces using
+# resource-specific tables, after the transformation link is set
+# ------------------------------------------------------------
 resource "azurerm_monitor_diagnostic_setting" "aks" {
   for_each = azurerm_log_analytics_workspace.this
 
