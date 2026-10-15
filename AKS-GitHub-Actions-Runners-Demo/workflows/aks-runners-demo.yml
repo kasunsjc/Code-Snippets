@@ -8,7 +8,8 @@ permissions:
 
 jobs:
   container-and-cache:
-    runs-on: aks-arc-runners
+    runs-on:
+      group: aks-enterprise-runners
     timeout-minutes: 20
     container:
       image: mcr.microsoft.com/dotnet/sdk:8.0
