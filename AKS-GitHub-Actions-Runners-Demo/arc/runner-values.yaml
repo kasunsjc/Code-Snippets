@@ -1,0 +1,80 @@
+# Supplied at install time; credentials are referenced, never embedded.
+githubConfigUrl: ""
+githubConfigSecret: github-auth
+# GITHUB_RUNNER_GROUP is supplied by the installer for enterprise / organization scope.
+runnerScaleSetName: aks-arc-runners
+minRunners: 0
+maxRunners: 5
+controllerServiceAccount:
+  namespace: arc-systems
+  name: arc-controller
+
+listenerTemplate:
+  spec:
+    containers:
+      - name: listener
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: "1"
+            memory: 512Mi
+
+containerMode:
+  type: kubernetes
+  # The hook copies ~600 MB / ~9k runner "externals" files into this volume before
+  # every job. SMB Azure Files makes that small-file copy take many minutes, so use
+  # a per-runner managed disk. RWO is enough: the hook schedules the job pod on the
+  # runner's node. Standard SSD works on every D-family size the NodePool may pick.
+  kubernetesModeWorkVolumeClaim:
+    accessModes: [ReadWriteOnce]
+    storageClassName: managed-csi
+    resources:
+      requests:
+        storage: 50Gi
+template:
+  metadata:
+    labels:
+      demo: aks-gha-runner
+  spec:
+    # Matches the Karpenter NodePool in arc/runner-nodepool.yaml.
+    nodeSelector:
+      workload: github-actions
+      kubernetes.io/arch: amd64
+    tolerations:
+      - key: workload
+        operator: Equal
+        value: github-actions
+        effect: NoSchedule
+    securityContext:
+      fsGroup: 123
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:2.338.0
+        command: [/home/runner/run.sh]
+        env:
+          - name: ACTIONS_RUNNER_CONTAINER_HOOK_TEMPLATE
+            value: /home/runner/container-config/container-podspec.yaml
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
+        # Requests reserve room for the runner (250m/512Mi) AND its job pod
+        # (500m/1Gi). The job pod is pinned to this node, so the scheduler and
+        # Karpenter must account for it when placing the runner.
+        resources:
+          requests:
+            cpu: 750m
+            memory: 1536Mi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+        volumeMounts:
+          - name: hook-extension
+            mountPath: /home/runner/container-config
+            readOnly: true
+    volumes:
+      - name: hook-extension
+        configMap:
+          name: hook-extension

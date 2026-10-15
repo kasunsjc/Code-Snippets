@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hook-extension
+  namespace: arc-runners
+data:
+  container-podspec.yaml: |
+    metadata:
+      labels:
+        demo: aks-gha-job
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        workload: github-actions
+        kubernetes.io/arch: amd64
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: github-actions
+          effect: NoSchedule
+      securityContext:
+        fsGroup: 123
+      containers:
+        - name: "$job"
+          env:
+            - name: NUGET_PACKAGES
+              value: /nuget/packages
+            - name: NUGET_SCRATCH
+              value: /nuget/scratch
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          # The hook pins this pod to the runner's node (nodeName), bypassing the
+          # scheduler. Its capacity is reserved by the runner pod, so keep requests
+          # small here or the kubelet rejects it with OutOfmemory/OutOfcpu.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: nuget-cache
+              mountPath: /nuget
+      volumes:
+        - name: nuget-cache
+          persistentVolumeClaim:
+            claimName: nuget-cache

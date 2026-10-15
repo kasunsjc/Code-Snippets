@@ -1,0 +1,49 @@
+name: AKS ARC Azure Files demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-and-cache:
+    runs-on:
+      group: aks-enterprise-runners
+    timeout-minutes: 20
+    container:
+      image: mcr.microsoft.com/dotnet/sdk:8.0
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [1, 2, 3, 4, 5]
+    steps:
+      - name: Verify job container and shared cache
+        env:
+          DEMO_JOB: ${{ matrix.job }}
+          DEMO_RUNNER: ${{ runner.name }}
+        run: |
+          set -eu
+          echo "Job $DEMO_JOB assigned to ephemeral runner $DEMO_RUNNER"
+          dotnet --info
+          test "$NUGET_PACKAGES" = /nuget/packages
+          test "$NUGET_SCRATCH" = /nuget/scratch
+          mkdir -p "$NUGET_PACKAGES" "$NUGET_SCRATCH"
+          test -w "$NUGET_PACKAGES"
+      - name: Restore and build using Azure Files
+        run: |
+          set -eu
+          dotnet new console --name ArcSmoke --output "$GITHUB_WORKSPACE/ArcSmoke"
+          dotnet add "$GITHUB_WORKSPACE/ArcSmoke/ArcSmoke.csproj" package Newtonsoft.Json --version 13.0.3
+          test -f "$NUGET_PACKAGES/newtonsoft.json/13.0.3/newtonsoft.json.nuspec"
+          dotnet build "$GITHUB_WORKSPACE/ArcSmoke/ArcSmoke.csproj" --no-restore
+          dotnet run --project "$GITHUB_WORKSPACE/ArcSmoke/ArcSmoke.csproj" --no-build
+      - name: Verify persistent markers and observe autoscaling
+        env:
+          DEMO_JOB: ${{ matrix.job }}
+        run: |
+          set -eu
+          mkdir -p /nuget/demo-markers
+          printf 'Run %s, job %s\n' "$GITHUB_RUN_ID" "$DEMO_JOB" > "/nuget/demo-markers/$GITHUB_RUN_ID-$DEMO_JOB.txt"
+          ls -l /nuget/demo-markers
+          sleep 60
