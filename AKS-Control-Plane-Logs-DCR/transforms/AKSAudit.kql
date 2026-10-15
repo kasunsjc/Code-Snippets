@@ -1,3 +1,3 @@
 source
 | where not(Verb =~ "get" and RequestUri startswith "/api/v1/namespaces/aks-dcr-demo/configmaps/dcr-drop-")
-| extend RequestObject = dynamic(null), ResponseObject = dynamic(null)
+| extend RequestObject = parse_json('null'), ResponseObject = parse_json('null')

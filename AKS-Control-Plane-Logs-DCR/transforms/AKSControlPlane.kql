@@ -1,2 +1,2 @@
 source
-| where Level !in~ ("debug", "trace")
+| where Level !~ "debug" and Level !~ "trace"

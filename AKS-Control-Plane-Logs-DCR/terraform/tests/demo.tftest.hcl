@@ -55,9 +55,30 @@ run "demo_contract" {
   assert {
     condition = alltrue([
       for flow in azurerm_monitor_data_collection_rule.transform.data_flow :
-      flow.transform_kql == trimspace(file("${path.module}/../transforms/${trimprefix(one(flow.streams), "Microsoft-Table-")}.kql"))
+      flow.transform_kql == join(" ", [
+        for line in split("\n", trimspace(file("${path.module}/../transforms/${trimprefix(one(flow.streams), "Microsoft-Table-")}.kql"))) :
+        trimspace(line) if trimspace(line) != ""
+      ])
     ])
     error_message = "DCR policies must come directly from the reviewed KQL files."
+  }
+
+  assert {
+    condition = alltrue([
+      for flow in azurerm_monitor_data_collection_rule.transform.data_flow :
+      length(regexall("[\\r\\n]|dynamic\\s*\\(|!in~", flow.transform_kql)) == 0
+    ])
+    error_message = "Submitted KQL must be single-line and avoid dynamic literals and case-insensitive set operators."
+  }
+
+  assert {
+    condition = alltrue([
+      for flow in azurerm_monitor_data_collection_rule.transform.data_flow :
+      !contains(flow.streams, "Microsoft-Table-AKSAudit") ||
+      (strcontains(flow.transform_kql, "RequestObject = parse_json('null')") &&
+      strcontains(flow.transform_kql, "ResponseObject = parse_json('null')"))
+    ])
+    error_message = "Audit payload removal must preserve dynamic null types using parse_json."
   }
 
   assert {

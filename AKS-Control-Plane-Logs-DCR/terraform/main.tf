@@ -84,9 +84,13 @@ resource "azurerm_monitor_data_collection_rule" "transform" {
   dynamic "data_flow" {
     for_each = toset(["AKSAudit", "AKSControlPlane"])
     content {
-      streams       = ["Microsoft-Table-${data_flow.value}"]
-      destinations  = ["transformed"]
-      transform_kql = trimspace(file("${path.module}/../transforms/${data_flow.value}.kql"))
+      streams      = ["Microsoft-Table-${data_flow.value}"]
+      destinations = ["transformed"]
+      # The DCR API expects single-line KQL; keep source files readable.
+      transform_kql = join(" ", [
+        for line in split("\n", trimspace(file("${path.module}/../transforms/${data_flow.value}.kql"))) :
+        trimspace(line) if trimspace(line) != ""
+      ])
     }
   }
 

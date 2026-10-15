@@ -95,6 +95,10 @@ workspaces removes their data.
 
 The deployable KQL is in [`transforms/`](transforms/), loaded directly by Terraform.
 It uses documented table columns, not generic `AzureDiagnostics` fields.
+Terraform joins the readable KQL lines into a single-line `transformKql` value
+for the DCR API. Ingestion transformations support a subset of query-time KQL:
+payloads use `parse_json('null')` instead of a `dynamic(null)` literal, and
+case-insensitive level filtering uses two `!~` comparisons instead of `!in~`.
 
 | Table | Transformation | Intended result |
 |---|---|---|
@@ -344,12 +348,34 @@ Restore the original transform and reapply afterward.
 | Existing scenario namespace | Inspect it, delete only if it belongs to an earlier run, then rerun; scripts deliberately refuse to reuse it |
 | No AKS-prefixed tables/logs | Check both diagnostic settings are enabled and use `Dedicated`, not legacy `AzureDiagnostics` |
 | Table or transformation creation fails | Inspect the ARM error and table schema; built-in table availability may vary; do not replace built-in schemas with custom columns |
+| DCR creation returns `400 InvalidPayload` | Use the updated ingestion-compatible KQL and single-line serialization; see partial-deployment recovery below |
 | DCR exists but filtering does not occur | Check workspace default DCR ID, table stream names, and propagation; a DCR association is not sufficient |
 | Query API returns 403 | Confirm Logs query access to both workspaces and the selected Azure tenant/subscription |
 | Baseline reads missing | Use a new run ID, wait for ingestion, check `kube-audit` (not only `kube-audit-admin`), and ensure the scenario completed |
 | Transformed records contain payloads/marked GETs | Records may predate activation; wait for propagation and generate a new run |
 | Verification times out | Inspect printed counters and manual queries; check resource IDs, two-hour window, policy, ingestion latency, and diagnostic delivery |
 | Interrupted namespace deletion | Retry `kubectl delete namespace aks-dcr-demo` using a kubeconfig for this demo cluster |
+
+### Recover after DCR creation fails
+
+If AKS was created but the DCR returned `InvalidPayload`, keep your existing
+Terraform state and configuration. Get these fixes, then rerun `bash deploy.sh`
+with the same variables. Review the plan: Terraform should reuse the existing
+cluster and retry the missing DCR, workspace link, and diagnostic settings.
+Do not destroy the cluster or delete state merely to retry the DCR.
+
+The original transform used `dynamic(null)` rather than the documented
+`parse_json` approach for dynamic literals, and `!in~` rather than operators in
+the ingestion-transform support list. It also preserved embedded newlines instead
+of following the documented single-line DCR format. The corrected version uses
+documented equivalents without changing the intended filtering or redaction
+policy. The generic error alone does not identify which expression Azure rejected;
+these compatibility fixes still need confirmation through a live deployment.
+
+If the generic error persists, inspect the failed DCR operation in the resource
+group's Azure Activity Log for nested error details. Terraform configuration
+validation and mocked tests do not invoke Azure's ingestion KQL compiler. Avoid
+sharing raw provider debug logs, which may contain sensitive information.
 
 ## Cleanup
 
