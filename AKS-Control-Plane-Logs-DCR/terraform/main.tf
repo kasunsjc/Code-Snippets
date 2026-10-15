@@ -125,7 +125,7 @@ resource "azapi_resource_action" "unlink_workspace_transform" {
 }
 
 # ------------------------------------------------------------
-# Single-node AKS cluster with restricted API access and a custom
+# Single-node AKS cluster with optional API IP restrictions and a custom
 # node resource group; supplies real diagnostic logs for the demo
 # ------------------------------------------------------------
 resource "azurerm_kubernetes_cluster" "this" {

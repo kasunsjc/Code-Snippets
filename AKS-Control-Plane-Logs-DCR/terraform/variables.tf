@@ -22,14 +22,16 @@ variable "node_vm_size" {
 }
 
 variable "api_server_authorized_ip_ranges" {
-  description = "Required public client CIDRs permitted to reach the demo's Kubernetes API."
+  description = "Optional public client CIDRs permitted to reach the Kubernetes API. Empty disables IP restrictions; Kubernetes authentication is still required."
   type        = list(string)
+  default     = []
+  nullable    = false
 
   validation {
-    condition = length(var.api_server_authorized_ip_ranges) > 0 && alltrue([
+    condition = alltrue([
       for cidr in var.api_server_authorized_ip_ranges :
       can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) >= 24, false)
     ])
-    error_message = "Specify at least one IPv4 CIDR with prefix /24 or narrower, preferably your public IP/32."
+    error_message = "Use an empty list to disable IP restrictions, or IPv4 CIDRs with prefix /24 or narrower, preferably your public IP/32."
   }
 }

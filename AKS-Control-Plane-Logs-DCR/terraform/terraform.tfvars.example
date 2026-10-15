@@ -1,5 +1,6 @@
 project                         = "dcrlogs"
 location                        = "eastus2"
 node_vm_size                    = "Standard_D2s_v5"
-# Replace this documentation-only address with your client's public egress IP.
-api_server_authorized_ip_ranges = ["203.0.113.10/32"]
+# Optional: [] disables IP restrictions (Kubernetes authentication still applies).
+# To restrict access, use your client's public egress IP, e.g. ["203.0.113.10/32"].
+api_server_authorized_ip_ranges = []

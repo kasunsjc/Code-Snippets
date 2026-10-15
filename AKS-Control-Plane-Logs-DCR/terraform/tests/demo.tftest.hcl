@@ -26,12 +26,11 @@ mock_provider "azurerm" {
 
 mock_provider "azapi" {}
 
-variables {
-  api_server_authorized_ip_ranges = ["203.0.113.10/32"]
-}
-
 run "demo_contract" {
   command = apply
+  variables {
+    api_server_authorized_ip_ranges = ["203.0.113.10/32"]
+  }
 
   assert {
     condition = length(azapi_resource_action.table) == 4 && alltrue([
@@ -90,10 +89,39 @@ run "demo_contract" {
   }
 }
 
+run "default_ip_ranges_optional" {
+  command = plan
+
+  assert {
+    condition     = length(var.api_server_authorized_ip_ranges) == 0 && length(azurerm_kubernetes_cluster.this.api_server_access_profile[0].authorized_ip_ranges) == 0
+    error_message = "Omitting authorized IP ranges must disable IP restrictions."
+  }
+}
+
+run "empty_ip_ranges_optional" {
+  command = plan
+  variables {
+    api_server_authorized_ip_ranges = []
+  }
+
+  assert {
+    condition     = length(azurerm_kubernetes_cluster.this.api_server_access_profile[0].authorized_ip_ranges) == 0
+    error_message = "An explicit empty list must disable IP restrictions."
+  }
+}
+
 run "reject_open_api" {
   command = plan
   variables {
     api_server_authorized_ip_ranges = ["0.0.0.0/0"]
+  }
+  expect_failures = [var.api_server_authorized_ip_ranges]
+}
+
+run "reject_invalid_cidr" {
+  command = plan
+  variables {
+    api_server_authorized_ip_ranges = ["not-a-cidr"]
   }
   expect_failures = [var.api_server_authorized_ip_ranges]
 }

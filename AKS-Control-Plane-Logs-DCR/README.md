@@ -134,9 +134,12 @@ by this workspace transformation path.
   `Microsoft.OperationalInsights`, and `Microsoft.Insights`.
 - Connectivity to the public AKS API and Azure Monitor Logs query endpoint.
 
-The Kubernetes API is restricted to your supplied public IPv4 CIDRs. Prefer your
-current egress IP `/32`; do not use `0.0.0.0/0`. Configuration rejects prefixes
-broader than `/24`. No public application or Kubernetes workload image is deployed.
+Kubernetes API IP restrictions are **optional**. Omit
+`api_server_authorized_ip_ranges` or set it to `[]` (the default) to allow public
+network access to the API without an IP allowlist; Kubernetes authentication and
+RBAC still apply. For tighter network security, supply your public egress IP `/32`.
+When supplied, CIDRs must be IPv4 with a `/24` or narrower prefix; do not use
+`0.0.0.0/0`. No public application or Kubernetes workload image is deployed.
 
 ## Deploy
 
@@ -149,8 +152,9 @@ cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 
 Edit the ignored `terraform/terraform.tfvars` file:
 
-- Replace `203.0.113.10/32` with the actual public egress IP of the machine running
-  the scenarios. The example address is documentation-only and will not connect.
+- Leave `api_server_authorized_ip_ranges = []` for no API IP restrictions, or
+  supply the actual public egress IP of the scenario machine, for example
+  `["203.0.113.10/32"]` with the documentation address replaced by your real IP.
 - Set a unique `project` if another deployment uses the default names.
 - Change `location` and `node_vm_size` if necessary for capacity/quota.
 
@@ -387,8 +391,9 @@ refusal to delete a pre-existing namespace. It does not require Azure credential
 
 `terraform test` requires Terraform **1.7+** for mocked providers. Its tests apply
 only mocked resources (no Azure calls), checking table streams, KQL wiring,
-identical diagnostic categories, restricted API access, and workspace link/unlink
-configuration. A negative test rejects an internet-wide API CIDR.
+identical diagnostic categories, optional API IP restrictions (omitted, empty, and
+explicit CIDRs), and workspace link/unlink configuration. Negative tests reject
+malformed and internet-wide API CIDRs.
 
 They do not execute Azure's ingestion KQL compiler or prove end-to-end telemetry
 delivery. Deploy and run the scenarios in an authorized Azure subscription for
