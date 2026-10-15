@@ -21,18 +21,35 @@ endpoint (DCE), or Logs Ingestion API is needed.
 
 ## Architecture and resources
 
-```text
-AKS cluster (one system node; explicit rg-<project>-demo-nodes)
-  |
-  +-- diagnostic setting: Dedicated --> baseline Log Analytics workspace
-  |                                      AKSAudit + AKSControlPlane (unaltered)
-  |
-  +-- diagnostic setting: Dedicated --> transformed Log Analytics workspace
-                                         defaultDataCollectionRuleResourceId
-                                           |
-                                         DCR: kind = WorkspaceTransforms
-                                           +-- Microsoft-Table-AKSAudit
-                                           +-- Microsoft-Table-AKSControlPlane
+```mermaid
+flowchart TD
+    generator["generate-data.sh<br/>Paired keep/drop GETs and synthetic writes"]
+    aks["AKS cluster<br/>One system node; custom node resource group"]
+    baselineDiagnostics["Baseline diagnostic setting<br/>Dedicated / resource-specific"]
+    transformedDiagnostics["Transformed diagnostic setting<br/>Dedicated / resource-specific"]
+
+    subgraph baseline["Baseline Log Analytics workspace"]
+        raw["AKSAudit + AKSControlPlane<br/>Unaltered records"]
+    end
+
+    subgraph transformed["Transformed Log Analytics workspace"]
+        dcr["Workspace transformation DCR<br/>kind: WorkspaceTransforms"]
+        audit["Microsoft-Table-AKSAudit<br/>Drop marked GETs; null request/response payloads"]
+        control["Microsoft-Table-AKSControlPlane<br/>Drop debug/trace records"]
+        filtered["AKSAudit + AKSControlPlane<br/>Retained records"]
+        dcr --> audit --> filtered
+        dcr --> control --> filtered
+    end
+
+    link["Workspace property<br/>defaultDataCollectionRuleResourceId"]
+    verifier["verify.sh<br/>Compare baseline and transformed results"]
+
+    generator -->|"Kubernetes API requests"| aks
+    aks --> baselineDiagnostics --> raw
+    aks --> transformedDiagnostics --> dcr
+    link -.->|"Activates DCR on transformed workspace"| dcr
+    raw -->|"Query"| verifier
+    filtered -->|"Query"| verifier
 ```
 
 Terraform creates:
