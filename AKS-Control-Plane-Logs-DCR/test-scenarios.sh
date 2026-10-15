@@ -38,6 +38,10 @@ for _ in {1..10}; do
 done
 kubectl -n "$NAMESPACE" patch configmap "dcr-keep-$RUN_ID" --type merge \
   -p '{"data":{"message":"synthetic-after"}}'
+# AKS audits ConfigMaps at Metadata level. An unbound Role supplies a payload
+# without granting permissions to any identity or launching a workload.
+kubectl -n "$NAMESPACE" create role "dcr-payload-$RUN_ID" --verb=get --resource=configmaps
+kubectl -n "$NAMESPACE" delete role "dcr-payload-$RUN_ID"
 kubectl -n "$NAMESPACE" delete configmap "dcr-keep-$RUN_ID" "dcr-drop-$RUN_ID"
 
 printf '\nScenario run ID: %s\n' "$RUN_ID"

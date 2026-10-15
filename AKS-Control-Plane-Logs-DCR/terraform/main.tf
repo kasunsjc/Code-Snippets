@@ -35,12 +35,13 @@ resource "azurerm_log_analytics_workspace" "this" {
   }
 }
 
-resource "azapi_resource" "table" {
+resource "azapi_resource_action" "table" {
   for_each = local.tables
 
-  type      = "Microsoft.OperationalInsights/workspaces/tables@2022-10-01"
-  name      = each.value.table
-  parent_id = azurerm_log_analytics_workspace.this[each.value.workspace].id
+  type        = "Microsoft.OperationalInsights/workspaces/tables@2022-10-01"
+  resource_id = "${azurerm_log_analytics_workspace.this[each.value.workspace].id}/tables/${each.value.table}"
+  method      = "PUT"
+  when        = "apply"
   body = {
     properties = {
       plan            = "Analytics"
@@ -75,7 +76,7 @@ resource "azurerm_monitor_data_collection_rule" "transform" {
     }
   }
 
-  depends_on = [azapi_resource.table]
+  depends_on = [azapi_resource_action.table]
 }
 
 resource "azapi_update_resource" "workspace_transform" {

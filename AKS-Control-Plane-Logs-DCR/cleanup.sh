@@ -16,7 +16,7 @@ NODE_RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw node_resource_grou
 SUBSCRIPTION_ID="$(terraform -chdir="$TF_DIR" output -raw subscription_id)"
 # Terraform prompts for approval unless the caller explicitly passes -auto-approve.
 terraform -chdir="$TF_DIR" init -input=false
-terraform -chdir="$TF_DIR" destroy -input=false "$@"
+terraform -chdir="$TF_DIR" destroy "$@"
 
 for group in "$RESOURCE_GROUP" "$NODE_RESOURCE_GROUP"; do
   exists="$(az group exists --subscription "$SUBSCRIPTION_ID" --name "$group" --output tsv)"

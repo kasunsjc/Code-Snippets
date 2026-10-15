@@ -34,6 +34,14 @@ run "demo_contract" {
   command = apply
 
   assert {
+    condition = length(azapi_resource_action.table) == 4 && alltrue([
+      for table in azapi_resource_action.table :
+      table.method == "PUT" && table.when == "apply"
+    ])
+    error_message = "Prepare built-in tables without attempting unsupported table DELETEs on destroy."
+  }
+
+  assert {
     condition     = azurerm_monitor_data_collection_rule.transform.kind == "WorkspaceTransforms"
     error_message = "Diagnostic ingestion requires a workspace transformation DCR."
   }

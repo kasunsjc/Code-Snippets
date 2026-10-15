@@ -70,6 +70,9 @@ competing ownership and a workspace/DCR dependency cycle. All resources share a
 region. The baseline workspace has no transformation DCR.
 An explicit destroy-time workspace PATCH clears the link before Terraform removes
 the DCR; deleting an AzAPI update resource alone does not revert that property.
+Table preparation uses apply-time PUT actions, not table resources with a DELETE
+lifecycle: built-in tables cannot be individually deleted. Destroying the
+workspaces removes their data.
 
 ## Transformation policies
 
@@ -104,8 +107,8 @@ by this workspace transformation path.
 - Permission to create/delete resource groups, AKS, diagnostic settings,
   Log Analytics workspaces/tables, and DCRs. Contributor on the demo subscription
   is sufficient for resource deployment; no role assignments are created.
-- Permission to obtain the AKS cluster-user kubeconfig and run namespace/configmap
-  operations. The disposable cluster uses Kubernetes RBAC with local cluster-user
+- Permission to obtain the AKS cluster-user kubeconfig and run namespace,
+  ConfigMap, and unbound Role operations. The disposable cluster uses Kubernetes RBAC with local cluster-user
   credentials; production deployments should use Microsoft Entra integration and
   disable local accounts according to their access policy.
 - Query access to both workspaces, for example Log Analytics Reader (Contributor
@@ -175,7 +178,7 @@ exact verification command. Concurrent runs against this cluster are not support
 | Retained writes | Create two synthetic ConfigMaps, patch the keep ConfigMap, delete both | At least two creates, one patch, two deletes | Same write operations retained |
 | Retained read control | GET `dcr-keep-<run-id>` ten times | At least ten GET records | At least ten GET records |
 | Filtered read control | GET `dcr-drop-<run-id>` ten times | At least ten GET records | Zero matching GET records |
-| Payload removal | Inspect the same create/patch responses | At least one non-null request/response payload | No non-null request/response payloads |
+| Payload removal | Create/delete a run-tagged, read-only Role without any binding | At least one non-null request/response payload | No non-null request/response payloads |
 | Component log ingestion | AKS emits API server/controller/scheduler logs | Nonzero control plane records | Nonzero control plane records |
 | Component severity filter | Compare `Level` distributions | May include debug/trace | No debug/trace |
 
@@ -183,6 +186,12 @@ Debug/trace emission is controlled by AKS; this demo does not change managed
 control plane verbosity. If the baseline has no such records, severity filtering
 is **observational**, not a demonstrated positive/negative test. The marked audit
 GETs provide the deterministic filtering comparison.
+
+AKS audits ConfigMaps at Metadata level, so their payloads alone cannot prove
+redaction. The additional Role is never bound to an identity and grants no actual
+access; its request/response audit payload supplies the positive redaction control.
+If a different AKS audit policy suppresses that payload too, verification fails
+instead of claiming that empty input proves successful redaction.
 
 Create audit records commonly use a collection URI without the object name.
 Verification therefore matches the run ID in either `RequestUri` or
