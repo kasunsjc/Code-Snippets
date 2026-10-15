@@ -42,7 +42,9 @@ AUDIT_QUERY="AKSAudit
     Creates=countif(Verb =~ 'create'),
     Patches=countif(Verb =~ 'patch'),
     Deletes=countif(Verb =~ 'delete'),
-    Payloads=countif(isnotnull(RequestObject) or isnotnull(ResponseObject))"
+    Payloads=countif(isnotnull(RequestObject) or isnotnull(ResponseObject)),
+    RoleCreates=countif(Verb =~ 'create' and Stage =~ 'ResponseComplete' and tostring(ObjectRef.name) == 'dcr-payload-$RUN_ID'),
+    RolePayloads=countif(Verb =~ 'create' and Stage =~ 'ResponseComplete' and tostring(ObjectRef.name) == 'dcr-payload-$RUN_ID' and (isnotnull(RequestObject) or isnotnull(ResponseObject)))"
 CONTROL_QUERY="AKSControlPlane
 | where _ResourceId =~ '$CLUSTER_ID'
 | summarize Total=count(), Noisy=countif(Level in~ ('debug', 'trace'))"
@@ -53,13 +55,13 @@ for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
   # A partial query result must never be mistaken for a passing negative test.
   jq -e 'has("error") | not' <<< "$baseline" >/dev/null
   jq -e 'has("error") | not' <<< "$transformed" >/dev/null
-  echo "Attempt $attempt: audit counts [keep reads, drop reads, creates, patches, deletes, payloads]"
+  echo "Attempt $attempt: audit counts [keep reads, drop reads, creates, patches, deletes, payloads, completed Role creates, Role payloads]"
   jq -c '.tables[0].rows[0]' <<< "$baseline"
   jq -c '.tables[0].rows[0]' <<< "$transformed"
 
-  if jq -e '.tables[0].rows[0] | .[0] >= 10 and .[1] >= 10 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] > 0' \
+  if jq -e '.tables[0].rows[0] | .[0] >= 10 and .[1] >= 10 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] > 0 and .[6] >= 1 and .[7] > 0' \
     <<< "$baseline" >/dev/null &&
-    jq -e '.tables[0].rows[0] | .[0] >= 10 and .[1] == 0 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] == 0' \
+    jq -e '.tables[0].rows[0] | .[0] >= 10 and .[1] == 0 and .[2] >= 2 and .[3] >= 1 and .[4] >= 2 and .[5] == 0 and .[6] >= 1 and .[7] == 0' \
       <<< "$transformed" >/dev/null; then
     baseline_control="$(query_workspace "$BASELINE_ID" "$CONTROL_QUERY")"
     transformed_control="$(query_workspace "$TRANSFORMED_ID" "$CONTROL_QUERY")"

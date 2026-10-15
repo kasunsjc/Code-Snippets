@@ -210,7 +210,10 @@ Verification queries both workspaces via `az rest` and the Logs Query API; no
 Azure CLI extension is required. It scopes audit assertions to this AKS resource
 and run ID, requires **positive baseline and retained-event evidence**, and checks
 that filtered reads and payloads are absent in the transformed copy. Missing
-telemetry alone can never pass the audit tests. HTTP/query errors and partial query
+telemetry alone can never pass the audit tests. In particular, the same run-tagged
+Role create must reach `ResponseComplete` in both workspaces, with payload evidence
+in the baseline; ConfigMap records alone cannot pass the redaction assertion.
+HTTP/query errors and partial query
 errors fail rather than being interpreted as empty results.
 
 By default it polls 40 times, 30 seconds apart, querying a two-hour window:
