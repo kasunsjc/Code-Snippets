@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Generate paired audit reads and payload-bearing writes; optionally verify ingestion.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,6 +8,7 @@ ROUNDS=10
 INTERVAL_SECONDS=1
 VERIFY=false
 
+# Print supported options and limits without contacting Azure or Kubernetes.
 usage() {
   cat <<EOF
 Usage: bash $0 [--rounds 1-1000] [--interval 0-60] [--verify]
@@ -68,6 +70,7 @@ TEMP_DIR="$(mktemp -d)"
 export KUBECONFIG="$TEMP_DIR/config"
 CREATED_NAMESPACE=false
 
+# On exit, delete only a namespace created by this run and remove its temporary kubeconfig.
 cleanup() {
   if [[ "$CREATED_NAMESPACE" == true ]]; then
     kubectl delete namespace "$NAMESPACE" --wait=false >/dev/null || echo "Delete namespace $NAMESPACE manually." >&2

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Destroy the demo; remove local state/cache only after both resource groups are confirmed absent.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

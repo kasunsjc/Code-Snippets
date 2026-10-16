@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Initialize and apply the demo infrastructure without approval prompts; forward Terraform arguments.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

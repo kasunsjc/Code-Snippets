@@ -26,6 +26,7 @@ invoking the relevant skill over re-deriving these workflows from scratch:
 - Keep changes focused — one logical change per branch/PR.
 - Do not commit secrets, credentials, or sensitive values. Use environment variables or parameter files.
 - Ensure shell scripts use `set -e` for strict error handling.
+- Add a brief purpose comment near the top of each shell script and immediately above each function. Explain non-obvious arguments, output, side effects, and cleanup or failure behavior where relevant; avoid narrating obvious commands.
 - Test scripts and templates locally before committing when possible.
 - Use consistent indentation (spaces, not tabs) across all file types.
 

@@ -240,6 +240,19 @@ minimum retained/baseline read counts match the generated volume:
 EXPECTED_READS=20 bash verify.sh <run-id>
 ```
 
+The run ID is only a test-correlation aid, not a custom log field. The generator
+includes it in Kubernetes object names such as `dcr-drop-<run-id>` and
+`dcr-keep-<run-id>`; AKS records those requests through normal audit logging.
+Verification uses the ID to separate one run from earlier runs, including events
+ingested before the DCR became active. The DCR filter does **not** depend on the
+ID: it matches GET requests with the `dcr-drop-` URI prefix in the demo namespace.
+Normal AKS audit collection and payload removal do not require run IDs.
+
+For a manual test, fixed names such as `dcr-drop-test` and `dcr-keep-test` can be
+used with a recent query time window instead. Repeated runs can then overlap,
+making count comparisons less reliable. The provided generator, run-scoped KQL,
+and verification script continue to use run IDs for isolation.
+
 With `--verify`, the read count is passed automatically. Namespace deletion is
 requested before polling; Kubernetes may still be terminating it, so wait for
 deletion before starting another run. Failures do not leave the namespace
@@ -277,6 +290,36 @@ Verification therefore matches the run ID in either `RequestUri` or
 delivery behavior can produce additional records; exact counts are not a promise.
 
 ## Verify
+
+### Manual KQL check
+
+For a quick check without the verification script, generate a fresh run without
+`--verify`, then open **Logs** in each workspace. Run the first block in
+[`queries/inspect.kql`](queries/inspect.kql), including the `let` statement,
+replacing `RUN_ID` with the ID printed by the generator. Use the same ID in both
+workspaces and compare:
+
+| Counter | Baseline workspace | Transformed workspace |
+|---|---|---|
+| `KeptGETs` | At least the requested `--rounds` (default 10) | At least the requested `--rounds` |
+| `DroppedGETs` | At least the requested `--rounds` | `0` |
+| `RecordsWithPayload` | Greater than `0` | `0` |
+| `CompletedRoleCreates` | At least `1` | At least `1` |
+| `CompletedRoleCreatesWithPayload` | At least `1` | `0` |
+
+`DroppedGETs` counts requests targeted by the filter, not records Azure reports
+as discarded. Positive baseline counts and retained GETs in the transformed
+workspace are essential: zeros everywhere mean missing telemetry, not proof of
+filtering. The completed Role event supplies evidence that a payload-bearing
+event was retained with its payload removed.
+
+Allow time for ingestion and rerun the query if counts are incomplete. If the DCR
+was just enabled or changed, allow up to 60 minutes for propagation before
+generating a new run. Old records are not rewritten. The remaining query blocks
+show individual events, component severity levels, and stored volume; no baseline
+debug/trace events means the severity filter cannot be demonstrated by comparison.
+
+### Automated verification
 
 Use the run ID printed above:
 

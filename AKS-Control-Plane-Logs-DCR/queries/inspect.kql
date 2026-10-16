@@ -1,4 +1,15 @@
 // Run each block separately in either workspace. Replace RUN_ID with the scenario run ID.
+let RunId = "RUN_ID";
+AKSAudit
+| where TimeGenerated > ago(2h)
+| where RequestUri contains RunId or tostring(ObjectRef.name) contains RunId
+| summarize
+	KeptGETs = countif(Verb =~ "get" and RequestUri startswith "/api/v1/namespaces/aks-dcr-demo/configmaps/dcr-keep-"),
+	DroppedGETs = countif(Verb =~ "get" and RequestUri startswith "/api/v1/namespaces/aks-dcr-demo/configmaps/dcr-drop-"),
+	RecordsWithPayload = countif(isnotnull(RequestObject) or isnotnull(ResponseObject)),
+	CompletedRoleCreates = countif(Verb =~ "create" and Stage =~ "ResponseComplete" and tostring(ObjectRef.name) == strcat("dcr-payload-", RunId)),
+	CompletedRoleCreatesWithPayload = countif(Verb =~ "create" and Stage =~ "ResponseComplete" and tostring(ObjectRef.name) == strcat("dcr-payload-", RunId) and (isnotnull(RequestObject) or isnotnull(ResponseObject)))
+
 AKSAudit
 | where TimeGenerated > ago(2h)
 | where RequestUri contains "RUN_ID" or tostring(ObjectRef.name) contains "RUN_ID"

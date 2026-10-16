@@ -10,6 +10,10 @@ Terraform-based demo folder.
 
 ## Authoring
 
+- In deployment, cleanup, and helper shell scripts, add a brief purpose comment
+  near the top and immediately above each function. Explain non-obvious arguments,
+  output, side effects, and cleanup or failure behavior where relevant; avoid
+  narrating obvious commands.
 - Add a short comment immediately above each Terraform `resource` block explaining
   its purpose in the demo. Follow the descriptive section-comment style in
   `AKS-Control-Plane-Metrics/terraform/main.tf`; mention important dependencies

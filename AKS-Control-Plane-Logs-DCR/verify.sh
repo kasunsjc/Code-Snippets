@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Poll both workspaces for a run ID and compare retained events, filtering, and payloads.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,6 +29,8 @@ if [[ ! "$MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ || ! "$POLL_SECONDS" =~ ^[1-9][0-9]*$ ]
   exit 1
 fi
 
+# Query workspace ID ($1) with KQL ($2), returning API JSON for a two-hour window.
+# HTTP failures propagate to the caller; callers also reject partial query errors.
 query_workspace() {
   local workspace_id="$1"
   local query="$2"
