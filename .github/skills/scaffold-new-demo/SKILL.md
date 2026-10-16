@@ -45,6 +45,9 @@ Pick a prefix that matches the intended category, or update `categorize()` in
   `set -euo pipefail`) for strict error handling — `lint-shell-scripts` in
   `pr-validation.yml` runs `shellcheck -S warning -e SC2034,SC2046,SC2207` on every
   `*.sh` file that has a shebang.
+- Add a brief purpose comment near the top of each shell script and immediately
+  above each function. Explain non-obvious arguments, output, side effects, and
+  cleanup or failure behavior where relevant; avoid narrating obvious commands.
 - YAML files are linted with `yamllint` (relaxed ruleset, 200 char line length) —
   see the `validate-yaml` job in `.github/workflows/pr-validation.yml`.
 - Bicep files are validated with `bicep build`; Terraform files are checked with

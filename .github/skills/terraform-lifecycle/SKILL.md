@@ -10,6 +10,14 @@ Terraform-based demo folder.
 
 ## Authoring
 
+- In deployment, cleanup, and helper shell scripts, add a brief purpose comment
+  near the top and immediately above each function. Explain non-obvious arguments,
+  output, side effects, and cleanup or failure behavior where relevant; avoid
+  narrating obvious commands.
+- Add a short comment immediately above each Terraform `resource` block explaining
+  its purpose in the demo. Follow the descriptive section-comment style in
+  `AKS-Control-Plane-Metrics/terraform/main.tf`; mention important dependencies
+  or lifecycle behavior when relevant, rather than merely repeating the resource type.
 - Set an explicit `node_resource_group` for every AKS cluster resource —
   never rely on the AKS-generated default (`MC_<rg>_<cluster>_<region>`).
   Follow the naming pattern `rg-<project>-<env>-nodes`, e.g.

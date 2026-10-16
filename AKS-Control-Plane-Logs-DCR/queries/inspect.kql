@@ -1,0 +1,34 @@
+// Run each block separately in either workspace. Replace RUN_ID with the scenario run ID.
+let RunId = "RUN_ID";
+AKSAudit
+| where TimeGenerated > ago(2h)
+| where RequestUri contains RunId or tostring(ObjectRef.name) contains RunId
+| summarize
+	KeptGETs = countif(Verb =~ "get" and RequestUri startswith "/api/v1/namespaces/aks-dcr-demo/configmaps/dcr-keep-"),
+	DroppedGETs = countif(Verb =~ "get" and RequestUri startswith "/api/v1/namespaces/aks-dcr-demo/configmaps/dcr-drop-"),
+	RecordsWithPayload = countif(isnotnull(RequestObject) or isnotnull(ResponseObject)),
+	CompletedRoleCreates = countif(Verb =~ "create" and Stage =~ "ResponseComplete" and tostring(ObjectRef.name) == strcat("dcr-payload-", RunId)),
+	CompletedRoleCreatesWithPayload = countif(Verb =~ "create" and Stage =~ "ResponseComplete" and tostring(ObjectRef.name) == strcat("dcr-payload-", RunId) and (isnotnull(RequestObject) or isnotnull(ResponseObject)))
+
+AKSAudit
+| where TimeGenerated > ago(2h)
+| where RequestUri contains "RUN_ID" or tostring(ObjectRef.name) contains "RUN_ID"
+| project TimeGenerated, Verb, RequestUri, ObjectRef, RequestObject, ResponseObject
+| order by TimeGenerated asc
+
+// In the transformed workspace this must be empty; baseline should contain marked GETs.
+AKSAudit
+| where TimeGenerated > ago(2h)
+| where RequestUri contains "RUN_ID"
+| where Verb =~ "get" and RequestUri contains "dcr-drop-"
+
+// Inspect retained control plane levels and categories in both workspaces.
+AKSControlPlane
+| where TimeGenerated > ago(2h)
+| summarize Records=count(), StoredBytes=sum(_BilledSize) by Category, Level
+| order by Records desc
+
+// Per-table ingestion size is illustrative, not a billing/savings assertion.
+union withsource=TableName AKSAudit, AKSControlPlane
+| where TimeGenerated > ago(2h)
+| summarize Records=count(), StoredMiB=sum(_BilledSize) / 1024.0 / 1024.0 by TableName
