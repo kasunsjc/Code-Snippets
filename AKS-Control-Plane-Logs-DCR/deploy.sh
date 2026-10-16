@@ -9,5 +9,5 @@ az account show --output none
 : "${ARM_SUBSCRIPTION_ID:?Export ARM_SUBSCRIPTION_ID for the target Azure subscription.}"
 
 terraform -chdir="$SCRIPT_DIR/terraform" init -input=false
-terraform -chdir="$SCRIPT_DIR/terraform" apply "$@"
+terraform -chdir="$SCRIPT_DIR/terraform" apply -auto-approve -input=false "$@"
 echo "Resources deployed. Allow diagnostics to initialize, then run: bash $SCRIPT_DIR/test-scenarios.sh"

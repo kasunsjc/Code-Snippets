@@ -166,7 +166,9 @@ Edit the ignored `terraform/terraform.tfvars` file:
 bash deploy.sh
 ```
 
-Review the interactive Terraform plan before approving. `deploy.sh` forwards
+`deploy.sh` uses `-auto-approve -input=false` and creates resources without an
+approval prompt. Review a separate `terraform -chdir=terraform plan` first if
+needed. `deploy.sh` forwards
 additional arguments to `terraform apply`, such as `-var-file=...`. Keep the same
 variable arguments when destroying. Authentication uses your Azure CLI login or
 standard provider `ARM_*` credentials; no credentials are committed.
@@ -383,7 +385,9 @@ sharing raw provider debug logs, which may contain sensitive information.
 bash cleanup.sh
 ```
 
-Review and approve the Terraform destroy plan. If you used additional variable
+**Cleanup destroys the demo without an approval prompt**, using
+`-auto-approve -input=false`. Review a separate
+`terraform -chdir=terraform plan -destroy` first if needed. If you used additional variable
 files or overrides, pass the same arguments, for example
 `bash cleanup.sh -var-file=terraform.tfvars`. The script runs `terraform destroy`,
 verifies that **both the dedicated and managed node resource groups are absent**,
