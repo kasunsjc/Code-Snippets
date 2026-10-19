@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target-app
+  namespace: k6-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: target-app
+  template:
+    metadata:
+      labels:
+        app: target-app
+    spec:
+      containers:
+        - name: target-app
+          image: ghcr.io/mccutchen/go-httpbin:2.26.0
+          env:
+            - name: MAX_DURATION
+              value: "5s"
+            - name: MAX_BODY_SIZE
+              value: "1048576"
+            - name: ALLOWED_REDIRECT_DOMAINS
+              value: "example.com"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /status/200
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /status/200
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: target-app
+  namespace: k6-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: target-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
