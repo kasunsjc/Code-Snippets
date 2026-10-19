@@ -59,7 +59,7 @@ metadata:
   name: target-app
   namespace: k6-demo
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: target-app
   ports:

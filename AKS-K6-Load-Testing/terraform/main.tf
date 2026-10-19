@@ -5,6 +5,8 @@ resource "azurerm_resource_group" "demo" {
 }
 
 resource "azurerm_kubernetes_cluster" "demo" {
+  depends_on = [azurerm_public_ip.ingress]
+
   name                = var.cluster_name
   location            = azurerm_resource_group.demo.location
   resource_group_name = azurerm_resource_group.demo.name
@@ -14,6 +16,10 @@ resource "azurerm_kubernetes_cluster" "demo" {
   sku_tier            = "Free"
 
   role_based_access_control_enabled = true
+  oidc_issuer_enabled               = true
+  workload_identity_enabled         = true
+
+  monitor_metrics {}
 
   default_node_pool {
     name       = "system"

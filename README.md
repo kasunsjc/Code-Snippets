@@ -44,7 +44,7 @@ articles linked below.
 | 13 | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) | A basic Harbor container registry install on AKS via Helm, with Terraform provisioning | Kubernetes |
 | 14 | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) | > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March... | Kubernetes |
 | 15 | [AKS-Istio-Service-Mesh-Demo](./AKS-Istio-Service-Mesh-Demo/) | No description available | Kubernetes |
-| 16 | [AKS-K6-Load-Testing](./AKS-K6-Load-Testing/) | Deploy httpbin to AKS and exercise HTTP behavior with local or distributed k6 load tests. | Kubernetes |
+| 16 | [AKS-K6-Load-Testing](./AKS-K6-Load-Testing/) | Load test httpbin through Traefik HTTPS ingress on AKS with Azure DNS, managed Prometheus, and Gr... | Kubernetes |
 | 17 | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) | A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on | Kubernetes |
 | 18 | [AKS-Monitoring](./AKS-Monitoring/) | This guide provides an overview of how to monitor Azure Kubernetes Service (AKS) using Azure Moni... | Kubernetes |
 | 19 | [AKS-Nginx-Add-on](./AKS-Nginx-Add-on/) | Deploy the NGINX Ingress Controller as a native AKS add-on with SSL/TLS termination support. | Kubernetes |
@@ -101,8 +101,8 @@ articles linked below.
   - 📄 README: Yes | 📁 Files: 10
 - **[AKS-Istio-Service-Mesh-Demo](./AKS-Istio-Service-Mesh-Demo/)** — No description available
   - 📄 README: No | 📁 Files: 2
-- **[AKS-K6-Load-Testing](./AKS-K6-Load-Testing/)** — Deploy httpbin to AKS and exercise HTTP behavior with local or distributed k6 load tests.
-  - 📄 README: Yes | 📁 Files: 15
+- **[AKS-K6-Load-Testing](./AKS-K6-Load-Testing/)** — Load test httpbin through Traefik HTTPS ingress on AKS with Azure DNS, managed Prometheus, and Grafana.
+  - 📄 README: Yes | 📁 Files: 22
 - **[AKS-KEDA-Demo](./AKS-KEDA-Demo/)** — A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on
   - 📄 README: Yes | 📁 Files: 88
 - **[AKS-Monitoring](./AKS-Monitoring/)** — This guide provides an overview of how to monitor Azure Kubernetes Service (AKS) using Azure Monitor, integrate with Azure Managed Grafana, and set up Azure Alerts with Azure Monitor recording and alert rules.

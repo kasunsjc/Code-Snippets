@@ -22,3 +22,58 @@ output "cluster_id" {
   description = "Azure resource ID of the AKS cluster."
   value       = azurerm_kubernetes_cluster.demo.id
 }
+
+output "httpbin_fqdn" {
+  description = "Public hostname for httpbin."
+  value       = "${var.httpbin_subdomain}.${var.dns_zone_name}"
+}
+
+output "ingress_public_ip" {
+  description = "Static IPv4 address assigned to Traefik."
+  value       = azurerm_public_ip.ingress.ip_address
+}
+
+output "ingress_public_ip_name" {
+  description = "Public IP resource name used by the AKS LoadBalancer annotation."
+  value       = azurerm_public_ip.ingress.name
+}
+
+output "dns_zone_name" {
+  description = "Existing Azure DNS zone."
+  value       = data.azurerm_dns_zone.existing.name
+}
+
+output "dns_zone_resource_group" {
+  description = "Existing DNS zone resource group, retained during cleanup."
+  value       = var.dns_zone_resource_group
+}
+
+output "dns_record_name" {
+  description = "DNS A record owned by this demo and removed by Terraform destroy."
+  value       = azurerm_dns_a_record.httpbin.name
+}
+
+output "acme_email" {
+  description = "ACME contact email."
+  value       = var.acme_email
+}
+
+output "cert_manager_client_id" {
+  description = "Workload identity client ID for cert-manager."
+  value       = azurerm_user_assigned_identity.cert_manager.client_id
+}
+
+output "grafana_name" {
+  description = "Azure Managed Grafana resource name."
+  value       = azurerm_dashboard_grafana.demo.name
+}
+
+output "grafana_endpoint" {
+  description = "Azure Managed Grafana browser endpoint."
+  value       = azurerm_dashboard_grafana.demo.endpoint
+}
+
+output "prometheus_query_endpoint" {
+  description = "Managed Prometheus query endpoint for Grafana."
+  value       = azurerm_monitor_workspace.prometheus.query_endpoint
+}

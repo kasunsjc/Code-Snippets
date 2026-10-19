@@ -50,6 +50,41 @@ variable "node_count" {
   }
 }
 
+variable "dns_zone_name" {
+  description = "Existing, publicly delegated Azure DNS zone; never created or deleted by this demo."
+  type        = string
+  default     = "kasunrajapakse.xyz"
+}
+
+variable "dns_zone_resource_group" {
+  description = "Resource group containing the existing DNS zone in the same subscription."
+  type        = string
+  default     = "rg-dns-zones"
+}
+
+variable "httpbin_subdomain" {
+  description = "DNS record owned by this demo within the existing zone."
+  type        = string
+  default     = "httpbin"
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", var.httpbin_subdomain))
+    error_message = "httpbin_subdomain must be a single valid lowercase DNS label."
+  }
+}
+
+variable "acme_email" {
+  description = "Contact email for the Let's Encrypt ACME account."
+  type        = string
+  default     = "contact@kasunrajapakse.xyz"
+}
+
+variable "grafana_admin_object_id" {
+  description = "Entra object ID receiving Grafana Admin; deploy.sh detects the signed-in user if empty."
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   description = "Tags applied to the demo infrastructure."
   type        = map(string)

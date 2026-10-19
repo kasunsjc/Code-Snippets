@@ -1,0 +1,78 @@
+{
+  "id": null,
+  "uid": "aks-k6-traefik",
+  "title": "AKS k6 - Traefik Ingress",
+  "description": "Traefik ingress metrics scraped per pod by Azure Monitor managed Prometheus. HTTP errors and slow requests are expected during the k6 failure profile.",
+  "tags": ["aks", "traefik", "k6"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {"from": "now-30m", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Traefik Pods Successfully Scraped",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "aks-k6-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(up{job=\"traefik\"})", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 2,
+      "title": "Backend Requests Per Second",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 8, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "aks-k6-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum(rate(traefik_service_requests_total{job=\"traefik\"}[$__rate_interval]))", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 3,
+      "title": "Backend 5xx Percentage",
+      "type": "stat",
+      "gridPos": {"h": 5, "w": 8, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "aks-k6-prometheus"},
+      "targets": [{"refId": "A", "expr": "100 * (sum(rate(traefik_service_requests_total{job=\"traefik\",code=~\"5..\"}[$__rate_interval])) or vector(0)) / clamp_min(sum(rate(traefik_service_requests_total{job=\"traefik\"}[$__rate_interval])), 0.001)", "instant": true}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "values": false}}
+    },
+    {
+      "id": 4,
+      "title": "Requests by HTTP Status",
+      "type": "timeseries",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "aks-k6-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (code) (rate(traefik_service_requests_total{job=\"traefik\"}[$__rate_interval]))", "legendFormat": "HTTP {{code}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 5,
+      "title": "Backend Latency p50 / p95 / p99",
+      "type": "timeseries",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "aks-k6-prometheus"},
+      "targets": [
+        {"refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"traefik\"}[$__rate_interval])))", "legendFormat": "p50"},
+        {"refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"traefik\"}[$__rate_interval])))", "legendFormat": "p95"},
+        {"refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{job=\"traefik\"}[$__rate_interval])))", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 6,
+      "title": "Requests by Backend Service",
+      "type": "timeseries",
+      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "aks-k6-prometheus"},
+      "targets": [{"refId": "A", "expr": "sum by (service) (rate(traefik_service_requests_total{job=\"traefik\"}[$__rate_interval]))", "legendFormat": "{{service}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "min": 0}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    }
+  ]
+}

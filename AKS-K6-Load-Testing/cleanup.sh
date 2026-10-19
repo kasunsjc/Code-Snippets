@@ -40,8 +40,12 @@ terraform_destroy() {
   NODE_RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw node_resource_group_name)"
   CLUSTER_NAME="$(terraform -chdir="$TF_DIR" output -raw cluster_name)"
   SUBSCRIPTION_ID="$(terraform -chdir="$TF_DIR" output -raw subscription_id)"
+  DNS_ZONE_NAME="$(terraform -chdir="$TF_DIR" output -raw dns_zone_name)"
+  DNS_ZONE_RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw dns_zone_resource_group)"
+  DNS_RECORD_NAME="$(terraform -chdir="$TF_DIR" output -raw dns_record_name)"
 
   print_warning "This will destroy cluster $CLUSTER_NAME, all its workloads, and resource groups $RESOURCE_GROUP and $NODE_RESOURCE_GROUP."
+  print_warning "Managed Prometheus, Grafana, the ingress IP, and $DNS_RECORD_NAME.$DNS_ZONE_NAME will also be removed. The DNS zone itself is retained."
   read -r -p "Continue? (y/N) " confirm
   if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     print_message "Aborted."
@@ -66,6 +70,15 @@ verify_cleanup() {
       exit 1
     fi
   done
+
+  local remaining_records
+  remaining_records="$(az network dns record-set a list --subscription "$SUBSCRIPTION_ID" \
+    --resource-group "$DNS_ZONE_RESOURCE_GROUP" --zone-name "$DNS_ZONE_NAME" \
+    --query "[?name=='$DNS_RECORD_NAME'] | length(@)" -o tsv)"
+  if [[ "$remaining_records" != "0" ]]; then
+    print_error "The demo DNS record still exists. Keeping local state; verify Azure cleanup."
+    exit 1
+  fi
 }
 
 cleanup_local_files() {
