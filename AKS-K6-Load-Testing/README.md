@@ -446,17 +446,9 @@ If panels are empty, query `up{job="traefik"}` in Grafana Explore. Missing serie
 
 ### k6 client-side metrics
 
-The Traefik dashboard does not ingest k6 custom metrics. Local summaries and operator runner logs remain the source for client-side checks and thresholds.
+k6 results are available in the local terminal summary and operator runner logs, including checks, thresholds, request counts, latency, and custom metrics. The Grafana dashboard in this demo shows Traefik's ingress metrics, not k6 client-side results.
 
-The local run prints the standard k6 summary, including tagged thresholds, the `normal_latency` Trend, and (for the failure profile) the `expected_error_responses` Counter. To send metrics to a Prometheus-compatible remote-write endpoint, configure its endpoint and authentication and run:
-
-```bash
-BASE_URL="https://httpbin.kasunrajapakse.xyz" \
-K6_PROMETHEUS_RW_SERVER_URL="<remote-write-endpoint>" \
-  k6 run --out experimental-prometheus-rw k6/load-test.js
-```
-
-For Azure Monitor Managed Prometheus, configure the supported remote-write ingestion endpoint and Azure authentication for the runner, then view the workspace as a data source in Azure Managed Grafana. Do not put credentials in the manifests. The operator runners need the same remote-write output configuration; the default manifests only show the k6 CLI summary.
+Adding k6 metric ingestion and Grafana dashboards is tracked separately in [issue #56](https://github.com/kasunsjc/Code-Snippets/issues/56).
 
 ## Costs and demo limitations
 

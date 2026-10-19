@@ -1,5 +1,3 @@
-data "azurerm_client_config" "current" {}
-
 resource "azurerm_monitor_workspace" "prometheus" {
   name                = "amw-${var.cluster_name}"
   location            = azurerm_resource_group.demo.location
@@ -77,25 +75,4 @@ resource "azurerm_role_assignment" "grafana_admin" {
   scope                = azurerm_dashboard_grafana.demo.id
   role_definition_name = "Grafana Admin"
   principal_id         = var.grafana_admin_object_id
-}
-
-resource "azurerm_user_assigned_identity" "k6_metrics" {
-  name                = "id-${var.cluster_name}-k6-metrics"
-  location            = azurerm_resource_group.demo.location
-  resource_group_name = azurerm_resource_group.demo.name
-  tags                = var.tags
-}
-
-resource "azurerm_federated_identity_credential" "k6_metrics" {
-  name                      = "k6-metrics"
-  user_assigned_identity_id = azurerm_user_assigned_identity.k6_metrics.id
-  audience                  = ["api://AzureADTokenExchange"]
-  issuer                    = azurerm_kubernetes_cluster.demo.oidc_issuer_url
-  subject                   = "system:serviceaccount:k6-demo:k6-metrics"
-}
-
-resource "azurerm_role_assignment" "k6_metrics_publisher" {
-  scope                = azurerm_monitor_data_collection_rule.prometheus.id
-  role_definition_name = "Monitoring Metrics Publisher"
-  principal_id         = azurerm_user_assigned_identity.k6_metrics.principal_id
 }

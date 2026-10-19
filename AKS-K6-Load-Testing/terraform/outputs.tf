@@ -77,18 +77,3 @@ output "prometheus_query_endpoint" {
   description = "Managed Prometheus query endpoint for Grafana."
   value       = azurerm_monitor_workspace.prometheus.query_endpoint
 }
-
-output "k6_metrics_client_id" {
-  description = "Workload identity client ID used by the k6 metrics relay."
-  value       = azurerm_user_assigned_identity.k6_metrics.client_id
-}
-
-output "tenant_id" {
-  description = "Entra tenant used for workload identity authentication."
-  value       = data.azurerm_client_config.current.tenant_id
-}
-
-output "prometheus_remote_write_endpoint" {
-  description = "Authenticated Azure remote-write endpoint for the demo's DCR."
-  value       = "${azurerm_monitor_data_collection_endpoint.prometheus.metrics_ingestion_endpoint}/dataCollectionRules/${azurerm_monitor_data_collection_rule.prometheus.immutable_id}/streams/Microsoft-PrometheusMetrics/api/v1/write?api-version=2023-04-24"
-}
