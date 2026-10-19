@@ -5,6 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/terraform"
 TRAEFIK_CHART_VERSION="42.0.0"
 CERT_MANAGER_CHART_VERSION="v1.21.2"
+# Grafana.com "Traefik Official Kubernetes Dashboard"
+TRAEFIK_DASHBOARD_ID="17347"
+TRAEFIK_DASHBOARD_UID="n5bu_kv4k"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -18,7 +21,7 @@ print_warning() { printf "${YELLOW}WARNING:${NC} %s\n" "$1"; }
 check_prerequisites() {
   print_message "Checking prerequisites..."
 
-  for tool in terraform az kubectl helm envsubst jq curl; do
+  for tool in terraform az kubectl helm envsubst curl; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       print_error "$tool is not installed. Please install it first."
       exit 1
@@ -70,7 +73,6 @@ get_credentials() {
   ACME_EMAIL="$(terraform -chdir="$TF_DIR" output -raw acme_email)"
   GRAFANA_NAME="$(terraform -chdir="$TF_DIR" output -raw grafana_name)"
   GRAFANA_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw grafana_endpoint)"
-  PROMETHEUS_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw prometheus_query_endpoint)"
   export RESOURCE_GROUP SUBSCRIPTION_ID HTTPBIN_FQDN INGRESS_PUBLIC_IP_NAME
   export DNS_ZONE_NAME DNS_ZONE_RESOURCE_GROUP CERT_MANAGER_CLIENT_ID ACME_EMAIL
 
@@ -124,30 +126,14 @@ configure_monitoring() {
   kubectl --context "$CLUSTER_NAME" delete configmap ama-metrics-prometheus-config -n kube-system --ignore-not-found
   kubectl --context "$CLUSTER_NAME" rollout status deployment/ama-metrics -n kube-system --timeout=300s
 
-  print_message "Configuring Grafana data source and importing the Traefik dashboard..."
-  local data_sources definition source_count
-  if ! data_sources="$(az grafana data-source list --subscription "$SUBSCRIPTION_ID" \
-    --resource-group "$RESOURCE_GROUP" --name "$GRAFANA_NAME" -o json)"; then
-    print_error "Grafana access failed. Confirm Grafana Admin for the CLI caller; if RBAC is still propagating, rerun deploy.sh."
+  print_message "Importing the official Traefik dashboard ($TRAEFIK_DASHBOARD_ID) from Grafana.com..."
+  # Data source input maps to the Prometheus source Managed Grafana creates for the linked workspace.
+  if ! az grafana dashboard import --subscription "$SUBSCRIPTION_ID" \
+    --resource-group "$RESOURCE_GROUP" --name "$GRAFANA_NAME" \
+    --definition "$TRAEFIK_DASHBOARD_ID" --overwrite true --output none; then
+    print_error "Dashboard import failed. Confirm Grafana Admin for the CLI caller; if RBAC is still propagating, rerun deploy.sh."
     return 1
   fi
-  source_count="$(jq '[.[] | select(.uid == "aks-k6-prometheus")] | length' <<< "$data_sources")"
-  definition="$(jq -n --arg endpoint "$PROMETHEUS_ENDPOINT" '{
-    name: "AKS k6 Managed Prometheus", uid: "aks-k6-prometheus", type: "prometheus",
-    access: "proxy", url: $endpoint,
-    jsonData: {httpMethod: "POST", timeInterval: "30s", azureCredentials: {authType: "msi"}}
-  }')"
-  if [[ "$source_count" == "0" ]]; then
-    az grafana data-source create --subscription "$SUBSCRIPTION_ID" \
-      --resource-group "$RESOURCE_GROUP" --name "$GRAFANA_NAME" --definition "$definition" --output none
-  else
-    az grafana data-source update --subscription "$SUBSCRIPTION_ID" \
-      --resource-group "$RESOURCE_GROUP" --name "$GRAFANA_NAME" \
-      --data-source aks-k6-prometheus --definition "$definition" --output none
-  fi
-  az grafana dashboard import --subscription "$SUBSCRIPTION_ID" \
-    --resource-group "$RESOURCE_GROUP" --name "$GRAFANA_NAME" \
-    --definition "@$SCRIPT_DIR/monitoring/traefik-dashboard.json" --overwrite true --output none
 }
 
 show_summary() {
@@ -155,7 +141,7 @@ show_summary() {
   print_message "Deployment complete!"
   printf '\n  Resource group : %s\n  AKS cluster    : %s\n\n' "$RESOURCE_GROUP" "$CLUSTER_NAME"
   printf '  httpbin        : https://%s\n' "$HTTPBIN_FQDN"
-  printf '  Grafana        : %s/d/aks-k6-traefik\n\n' "${GRAFANA_ENDPOINT%/}"
+  printf '  Grafana        : %s/d/%s\n\n' "${GRAFANA_ENDPOINT%/}" "$TRAEFIK_DASHBOARD_UID"
   printf 'Run: BASE_URL=https://%s TEST_TYPE=smoke k6 run %s/k6/load-test.js\n' "$HTTPBIN_FQDN" "$SCRIPT_DIR"
   print_warning "Allow a few minutes for metrics to appear. In-cluster tests must use the HTTPS hostname to generate Traefik traffic."
 }

@@ -58,7 +58,7 @@ flowchart TB
 
 Terraform owns the demo's Azure resources and `httpbin` A record, but the existing DNS zone is only a data source: it is never created or deleted. The static IP is in the demo resource group; AKS attaches it to Traefik's load-balancer Service through Azure annotations and the cluster identity's Network Contributor role. The node resource group contains the managed load balancer and nodes. Teardown removes AKS before releasing the public IP.
 
-`deploy.sh` installs httpbin, Traefik chart `42.0.0`, and cert-manager chart `v1.21.2`; waits for a valid certificate; applies Azure Monitor settings and the Azure-specific ServiceMonitor; then creates/updates the Grafana data source and imports the dashboard. The k6 Operator remains optional. httpbin uses `ghcr.io/mccutchen/go-httpbin:2.26.0` as non-root with a read-only filesystem. Responses are limited to 1 MiB, delays to five seconds, and redirects to `example.com`. Traefik's admin dashboard and metrics port are not exposed publicly.
+`deploy.sh` installs httpbin, Traefik chart `42.0.0`, and cert-manager chart `v1.21.2`; waits for a valid certificate; applies Azure Monitor settings and the Azure-specific ServiceMonitor; then imports the official Traefik dashboard from Grafana.com. The k6 Operator remains optional. httpbin uses `ghcr.io/mccutchen/go-httpbin:2.26.0` as non-root with a read-only filesystem. Responses are limited to 1 MiB, delays to five seconds, and redirects to `example.com`. Traefik's admin dashboard and metrics port are not exposed publicly.
 
 ## Files
 
@@ -73,14 +73,13 @@ Terraform owns the demo's Azure resources and `httpbin` A record, but the existi
 | `k8s/k6-test-run.yaml` | Optional distributed operator test |
 | `monitoring/ama-metrics-settings-configmap-v2.yaml` | Schema-v2 Azure Monitor agent settings, matching the Harbor pattern |
 | `monitoring/traefik-azure-monitor-servicemonitor.yaml` | Azure-specific ServiceMonitor selecting Traefik's metrics Service |
-| `monitoring/traefik-dashboard.json` | Grafana dashboard imported by deploy.sh |
 | `k6/load-test.js` | Shared script with selectable smoke/load/spike/failure profiles |
 
 ## Prerequisites
 
 - An Azure subscription with permission to create resource groups, AKS, managed Prometheus/Grafana, and role assignments (for example Contributor plus User Access Administrator at the appropriate scopes). Register `Microsoft.ContainerService`, `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Monitor`, `Microsoft.Insights`, `Microsoft.Dashboard`, and `Microsoft.ManagedIdentity` if needed.
 - The existing, publicly delegated Azure DNS zone `kasunrajapakse.xyz` in `rg-dns-zones`, in the same subscription. The deployer must be able to read the zone, manage the demo A record, and assign DNS Zone Contributor to cert-manager's identity.
-- Azure CLI >= 2.75 with the `amg` extension, Terraform >= 1.6, `kubectl`, Helm, `jq`, `curl`, and `envsubst` (from gettext; on macOS: `brew install gettext`). Helm is required for ingress/TLS even without the operator.
+- Azure CLI >= 2.75 with the `amg` extension, Terraform >= 1.6, `kubectl`, Helm, `curl`, and `envsubst` (from gettext; on macOS: `brew install gettext`). Helm is required for ingress/TLS even without the operator.
 - Regional quota and VM availability for two `Standard_D2s_v5` nodes (four vCPUs), plus one temporary node during upgrades.
 - [k6](https://grafana.com/docs/k6/latest/set-up/install-k6/) for local execution.
 - Kubernetes >= 1.30 for the pinned Traefik chart. Leave `kubernetes_version` unset for the AKS regional default, or explicitly choose a supported compatible version.
@@ -327,11 +326,11 @@ The earlier raw `ama-metrics-prometheus-config` job is no longer used; deploymen
 terraform -chdir=terraform output -raw grafana_endpoint
 ```
 
-Open that URL, sign in as the configured Grafana administrator, and select **Dashboards > AKS k6 - Traefik Ingress**. The deployment summary prints a direct link to dashboard UID `aks-k6-traefik`. The script imports `monitoring/traefik-dashboard.json` and creates/updates data source `AKS k6 Managed Prometheus` (`aks-k6-prometheus`) using Grafana's managed identity. No API key or client secret is used. Manual dashboard changes are overwritten on redeployment; edit the checked-in JSON to persist them.
+Open that URL, sign in as the configured Grafana administrator, and select **Dashboards > Traefik Official Kubernetes Dashboard**. The deployment summary prints a direct link (UID `n5bu_kv4k`). The script imports Grafana.com dashboard [17347](https://grafana.com/grafana/dashboards/17347-traefik-official-kubernetes-dashboard/) with `az grafana dashboard import --definition 17347`, binding it to the `Managed_Prometheus_<workspace>` data source that Managed Grafana creates for the linked Azure Monitor workspace. No API key, client secret, or extra data source is used. Manual dashboard changes are overwritten on redeployment.
 
 Run the `load` profile against the HTTPS hostname, select **Last 30 minutes**, and use **30s refresh**. Allow several minutes for configuration reload/ingestion and at least two scrapes for rates. A 10-second smoke test is a functional check, not enough for a sustained throughput graph.
 
-Panels show successfully scraped Traefik endpoints (normally two), backend RPS, 5xx percentage, HTTP status breakdown, p50/p95/p99 backend latency, and traffic by Service. The failure profile deliberately produces errors and delays: these appear in Traefik even when k6 passes its expected-behavior checks. Server-side histogram latency is not the same measurement as k6's `normal_latency`, which excludes intentional delays.
+The dashboard shows entrypoint and per-service request rates, HTTP status codes, Apdex, latency, open connections, and request/response bytes; filter with the **entrypoint** and **service** variables. Its Apdex panels use Traefik's default `0.3`/`1.2` second latency buckets, so `k8s/traefik-values.yaml.tpl` keeps the default buckets. The failure profile deliberately produces errors and delays: these appear in Traefik even when k6 passes its expected-behavior checks. Server-side latency is not the same measurement as k6's `normal_latency`, which excludes intentional delays.
 
 ### Troubleshoot ingress and metrics
 
