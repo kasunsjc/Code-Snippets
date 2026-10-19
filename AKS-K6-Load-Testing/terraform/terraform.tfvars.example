@@ -1,0 +1,6 @@
+location                 = "northeurope"
+resource_group_name      = "rg-k6-demo-dev"
+cluster_name             = "aks-k6-demo-dev"
+node_resource_group_name = "rg-k6-demo-dev-nodes"
+node_vm_size             = "Standard_D2s_v5"
+node_count               = 2
