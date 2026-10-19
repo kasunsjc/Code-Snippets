@@ -2,35 +2,88 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TERRAFORM_DIR="$SCRIPT_DIR/terraform"
+TF_DIR="$SCRIPT_DIR/terraform"
 
-for tool in terraform az; do
-  command -v "$tool" >/dev/null 2>&1 || { printf 'Required command not found: %s\n' "$tool" >&2; exit 1; }
-done
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-export TF_VAR_subscription_id="${TF_VAR_subscription_id:-$(az account show --query id -o tsv)}"
-terraform -chdir="$TERRAFORM_DIR" init -input=false
+print_message() { printf "${GREEN}==>${NC} %s\n" "$1"; }
+print_error() { printf "${RED}ERROR:${NC} %s\n" "$1" >&2; }
+print_warning() { printf "${YELLOW}WARNING:${NC} %s\n" "$1"; }
 
-RESOURCE_GROUP="$(terraform -chdir="$TERRAFORM_DIR" output -raw resource_group_name)"
-NODE_RESOURCE_GROUP="$(terraform -chdir="$TERRAFORM_DIR" output -raw node_resource_group_name)"
-SUBSCRIPTION_ID="$(terraform -chdir="$TERRAFORM_DIR" output -raw subscription_id)"
+check_prerequisites() {
+  print_message "Checking prerequisites..."
 
-printf 'This destroys the demo cluster, all its workloads, and resource groups %s and %s.\n' \
-  "$RESOURCE_GROUP" "$NODE_RESOURCE_GROUP"
-terraform -chdir="$TERRAFORM_DIR" destroy "$@"
+  for tool in terraform az; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      print_error "$tool is not installed. Please install it first."
+      exit 1
+    fi
+  done
 
-if [[ -n "$(terraform -chdir="$TERRAFORM_DIR" state list)" ]]; then
-  printf 'Terraform state is not empty. Keeping local state for recovery.\n' >&2
-  exit 1
-fi
-
-for resource_group in "$RESOURCE_GROUP" "$NODE_RESOURCE_GROUP"; do
-  if [[ "$(az group exists --subscription "$SUBSCRIPTION_ID" --name "$resource_group")" != "false" ]]; then
-    printf 'Resource group %s still exists. Keeping local state; verify Azure cleanup.\n' "$resource_group" >&2
+  if ! az account show --output none; then
+    print_error "Not logged in to Azure. Please run 'az login' first."
     exit 1
   fi
-done
 
-rm -rf "$TERRAFORM_DIR/.terraform"
-rm -f "$TERRAFORM_DIR/terraform.tfstate" "$TERRAFORM_DIR/terraform.tfstate.backup"
-printf 'Azure resources removed; local Terraform state and provider cache removed.\n'
+  TF_VAR_subscription_id="${TF_VAR_subscription_id:-$(az account show --query id -o tsv)}"
+  export TF_VAR_subscription_id
+  az account show --subscription "$TF_VAR_subscription_id" --output none
+}
+
+terraform_destroy() {
+  terraform -chdir="$TF_DIR" init -input=false
+
+  RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw resource_group_name)"
+  NODE_RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw node_resource_group_name)"
+  CLUSTER_NAME="$(terraform -chdir="$TF_DIR" output -raw cluster_name)"
+  SUBSCRIPTION_ID="$(terraform -chdir="$TF_DIR" output -raw subscription_id)"
+
+  print_warning "This will destroy cluster $CLUSTER_NAME, all its workloads, and resource groups $RESOURCE_GROUP and $NODE_RESOURCE_GROUP."
+  read -r -p "Continue? (y/N) " confirm
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    print_message "Aborted."
+    exit 0
+  fi
+
+  print_message "Destroying infrastructure with Terraform..."
+  terraform -chdir="$TF_DIR" destroy -auto-approve "$@"
+}
+
+verify_cleanup() {
+  print_message "Verifying Azure resource cleanup..."
+
+  if [[ -n "$(terraform -chdir="$TF_DIR" state list)" ]]; then
+    print_error "Terraform state is not empty. Keeping local state for recovery."
+    exit 1
+  fi
+
+  for resource_group in "$RESOURCE_GROUP" "$NODE_RESOURCE_GROUP"; do
+    if [[ "$(az group exists --subscription "$SUBSCRIPTION_ID" --name "$resource_group")" != "false" ]]; then
+      print_error "Resource group $resource_group still exists. Keeping local state; verify Azure cleanup."
+      exit 1
+    fi
+  done
+}
+
+cleanup_local_files() {
+  if command -v kubectl >/dev/null 2>&1; then
+    print_message "Removing kubeconfig context..."
+    kubectl config delete-context "$CLUSTER_NAME" 2>/dev/null || true
+    kubectl config delete-cluster "$CLUSTER_NAME" 2>/dev/null || true
+  else
+    print_warning "kubectl not found; skipping local kubeconfig cleanup."
+  fi
+
+  print_message "Removing local Terraform state and provider files..."
+  find "$TF_DIR" -maxdepth 1 -type f \( -name '*.tfstate' -o -name '*.tfstate.*' \) -delete
+  rm -rf "$TF_DIR/.terraform"
+  print_message "Cleanup complete!"
+}
+
+check_prerequisites
+terraform_destroy "$@"
+verify_cleanup
+cleanup_local_files

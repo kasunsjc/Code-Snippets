@@ -73,7 +73,7 @@ cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 bash deploy.sh
 ```
 
-Edit `terraform/terraform.tfvars` before deploying to change the region, cluster names, VM size, or node count. If deploying multiple copies, give each resource group, cluster, and node resource group a unique name. Kubernetes defaults to the region's supported version unless `kubernetes_version` is set. The script reads the active Azure subscription, runs Terraform init/validate/apply, prompts for approval, configures kubeconfig, and waits for the API rollout. It can be rerun after a failure without recreating existing resources.
+Edit `terraform/terraform.tfvars` before deploying to change the region, cluster names, VM size, or node count. If deploying multiple copies, give each resource group, cluster, and node resource group a unique name. Kubernetes defaults to the region's supported version unless `kubernetes_version` is set. Following the other demo scripts, the script reads the active Azure subscription, runs Terraform init/validate/apply with automatic approval, configures kubeconfig, and waits for the API rollout. Use the Terraform-only workflow below to review a plan and approve changes interactively. It can be rerun after a failure without recreating existing resources.
 
 Terraform-only provisioning is also available:
 
@@ -171,7 +171,7 @@ The API is deliberately exposed over unauthenticated public HTTP. Do not use rea
 bash cleanup.sh
 ```
 
-The script prompts through `terraform destroy`, removes the cluster and both resource groups (including its workloads, managed disks, load balancer, and public IPs), verifies both groups are absent in Azure, then removes local state and `.terraform/`. If deletion or verification fails, state is retained for recovery: fix the error and rerun cleanup. If provisioning failed before Terraform produced outputs, run `terraform -chdir=terraform destroy` directly and verify resource deletion before removing local state/cache. Remove the stale kubeconfig context separately with `kubectl config delete-context <cluster-name>`.
+The script asks `Continue? (y/N)` before running `terraform destroy -auto-approve`, removes the cluster and both resource groups (including its workloads, managed disks, load balancer, and public IPs), verifies both groups are absent in Azure, then removes the kubeconfig context/cluster entries, local state, and `.terraform/`. If deletion or verification fails, state is retained for recovery: fix the error and rerun cleanup. If provisioning failed before Terraform produced outputs, run `terraform -chdir=terraform destroy` directly and verify resource deletion before removing local state/cache.
 
 ### Existing cluster: remove demo resources only
 
