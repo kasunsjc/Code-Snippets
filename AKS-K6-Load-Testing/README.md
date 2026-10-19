@@ -73,10 +73,12 @@ Terraform owns the demo's Azure resources and `httpbin` A record, but the existi
 | `k8s/httpbin-ingress.yaml.tpl` | Azure DNS ClusterIssuer, Certificate, and HTTPS Ingress |
 | `k8s/k6-test-run.yaml` | Optional distributed operator test |
 | `k8s/k6-stress-test-run.yaml` | Optional distributed operator stress test |
+| `k8s/k6-slo-breach-test-run.yaml` | Operator test generating sustained 300 ms and 1200 ms latency breaches |
 | `monitoring/ama-metrics-settings-configmap-v2.yaml` | Schema-v2 Azure Monitor metrics agent settings |
 | `monitoring/traefik-azure-monitor-servicemonitor.yaml` | Azure-specific ServiceMonitor selecting Traefik's metrics Service |
 | `k6/load-test.js` | Shared script with selectable smoke/load/spike/failure profiles |
 | `k6/stress-test.js` | Aggressive fixed-rate stress test that ramps up to `PEAK_RPS` requests per second |
+| `k6/slo-breach-test.js` | Low-rate delayed requests to populate the Traefik SLO tiles |
 
 ## Prerequisites
 
@@ -365,6 +367,44 @@ Set `HTTPBIN_BASE_URL` and `PEAK_RPS` before running the block; the patch replac
 
 Expect the default two-node cluster to show stress: httpbin pods are limited to 250m CPU each, and runners share nodes with httpbin and Traefik. Rising latency, Traefik 5xx responses, or an automatic abort are useful results, not test bugs. At peak, about 10% of requests return 64 KiB, so a 300 requests-per-second run sends roughly 2 MB/s of outbound traffic, which Azure bills as egress.
 
+## Option D: Populate the SLO tiles
+
+Use this test to populate **Services failing SLO of 300ms** and **Services failing SLO of 1200ms** in the official Traefik dashboard without overwhelming the cluster. It sends two requests per second to `/delay/0.5` and two per second to `/delay/2` for six minutes. Both return HTTP 200; the ten-second client timeout lets them complete rather than producing intentional 499 client cancellations.
+
+### Run the SLO test locally
+
+```bash
+BASE_URL="https://httpbin.kasunrajapakse.xyz" k6 run k6/slo-breach-test.js
+```
+
+### Run the SLO test with the operator
+
+```bash
+HTTPBIN_BASE_URL="https://httpbin.kasunrajapakse.xyz"
+SLO_DURATION="6m"
+
+kubectl create configmap k6-slo-breach-script \
+  --from-file=slo-breach.js=k6/slo-breach-test.js \
+  --namespace k6-demo \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl patch --local -f k8s/k6-slo-breach-test-run.yaml --type=merge \
+  -p "{\"spec\":{\"runner\":{\"env\":[{\"name\":\"BASE_URL\",\"value\":\"$HTTPBIN_BASE_URL\"},{\"name\":\"DURATION\",\"value\":\"$SLO_DURATION\"}]}}}" \
+  -o yaml | kubectl apply -f -
+
+kubectl get testrun httpbin-slo-breach -n k6-demo -w
+```
+
+This uses one runner. Delete `httpbin-slo-breach` before repeating the operator run, as with the other tests. To cancel, run `kubectl delete testrun httpbin-slo-breach -n k6-demo`.
+
+### View the violations
+
+Run this test by itself. In Grafana, select the httpbin backend (`k6-demo-target-app-80`), **Last 15 minutes**, an **interval of 1m**, and **30s refresh**. Allow several minutes for Azure ingestion and multiple scrapes, then expand the **SLO** row. The 500 ms group breaches only 300 ms; the two-second group breaches both limits. In a steady window containing only this traffic, expect approximately 100% of GET requests above 300 ms and 50% above 1200 ms. Other requests in the same window dilute these percentages.
+
+These panels filter out zero-violation series, so **No data** can mean no violating series in the selected window, not necessarily a collection failure. Traefik must expose histogram buckets `le="0.3"` and `le="1.2"`, which the chart's default buckets provide. The previous failure profile's deliberate 500 ms timeout generates 499s and cannot reliably demonstrate completed requests slower than 1200 ms.
+
+k6 passes when the intended delays occur, HTTP errors stay below 1%, and no iterations are dropped. Its latency thresholds deliberately require p95 **above** the SLO limits; this is a controlled latency-injection demo, not evidence of cluster saturation or a passing production SLO. Do not run it against infrastructure you do not own.
+
 ## Metrics and observability
 
 ### Azure Monitor metrics collection
@@ -442,7 +482,7 @@ Do **not** run `cleanup.sh` against an existing/shared cluster. Check your Kuber
 
 ```bash
 kubectl delete -f k8s/k6-test-run.yaml --ignore-not-found
-kubectl delete testrun httpbin-smoke httpbin-load httpbin-spike httpbin-failure httpbin-stress \
+kubectl delete testrun httpbin-smoke httpbin-load httpbin-spike httpbin-failure httpbin-stress httpbin-slo-breach \
   -n k6-demo --ignore-not-found
 kubectl delete namespace k6-demo
 helm uninstall k6-operator --namespace k6-operator-system
