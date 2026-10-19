@@ -122,7 +122,7 @@ Terraform-only commands provision Azure resources, not Helm releases, certificat
 
 ### Use an existing cluster instead
 
-Skip Terraform and `deploy.sh` if you already have a cluster. Verify `kubectl config current-context` points to the intended cluster, then deploy only the sample API:
+Skip Terraform and `deploy.sh` if you already have a cluster. Verify `kubectl config current-context` points to the intended cluster, then deploy only httpbin:
 
 ```bash
 kubectl create namespace k6-demo --dry-run=client -o yaml | kubectl apply -f -
@@ -130,8 +130,6 @@ kubectl apply -f k8s/target-app.yaml
 kubectl rollout status deployment/target-app -n k6-demo
 kubectl get service target-app -n k6-demo
 ```
-
-If upgrading from this demo's earlier Node.js target, reapply `k8s/target-app.yaml`, wait for the rollout above, then remove its unused source ConfigMap with `kubectl delete configmap target-app -n k6-demo --ignore-not-found`. The Deployment and Service names stay unchanged.
 
 This existing-cluster path deploys only a ClusterIP backend. Use port-forwarding below for local tests, or set operator `BASE_URL` to `http://target-app.k6-demo.svc.cluster.local`. It does not install ingress/TLS or provision monitoring. Do not use `deploy.sh` to attach resources to an arbitrary shared cluster: it owns a new cluster through Terraform.
 
@@ -318,7 +316,7 @@ The full deployment provisions Managed Prometheus and Grafana; Log Analytics/Con
 
 Traefik's chart-generated `monitoring.coreos.com/v1` ServiceMonitor is explicitly disabled. Instead, the deployment waits for `servicemonitors.azmonitoring.coreos.com` to be established, then applies `monitoring/traefik-azure-monitor-servicemonitor.yaml` using **`azmonitoring.coreos.com/v1`**. Its selector matches only the internal metrics Service's `azure-monitor-job: traefik` label and its named `metrics` port. The Azure collector discovers individual Service endpoints, scrapes every 30 seconds, and forwards through the DCR to the managed workspace. `jobLabel` preserves `job="traefik"` for dashboard queries. Label limits follow the Harbor monitor.
 
-The earlier raw `ama-metrics-prometheus-config` job is no longer used; deployment removes that demo-owned ConfigMap to avoid double scraping. No OSS Prometheus Operator is needed. On a shared cluster, do not replace global agent settings or delete someone else's custom scrape configuration; the full script is for this Terraform-owned demo cluster.
+No OSS Prometheus Operator is needed. On a shared cluster, do not replace global agent settings or delete someone else's custom scrape configuration; the full script is for this Terraform-owned demo cluster.
 
 ### Open the imported Traefik dashboard
 

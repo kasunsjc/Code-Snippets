@@ -40,7 +40,7 @@ variable "node_vm_size" {
 }
 
 variable "node_count" {
-  description = "Number of nodes shared by the sample API and optional k6 runners."
+  description = "Number of nodes shared by httpbin, Traefik, and optional k6 runners."
   type        = number
   default     = 2
 

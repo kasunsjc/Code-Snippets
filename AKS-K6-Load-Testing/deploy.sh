@@ -83,7 +83,7 @@ get_credentials() {
 }
 
 deploy_sample_app() {
-  print_message "Deploying the sample API..."
+  print_message "Deploying httpbin..."
   kubectl --context "$CLUSTER_NAME" create namespace k6-demo --dry-run=client -o yaml | \
     kubectl --context "$CLUSTER_NAME" apply -f -
   kubectl --context "$CLUSTER_NAME" apply -f "$SCRIPT_DIR/k8s/target-app.yaml"
@@ -123,7 +123,6 @@ configure_monitoring() {
   kubectl --context "$CLUSTER_NAME" wait --for=condition=Established \
     crd/servicemonitors.azmonitoring.coreos.com --timeout=180s
   kubectl --context "$CLUSTER_NAME" apply -f "$SCRIPT_DIR/monitoring/traefik-azure-monitor-servicemonitor.yaml"
-  kubectl --context "$CLUSTER_NAME" delete configmap ama-metrics-prometheus-config -n kube-system --ignore-not-found
   kubectl --context "$CLUSTER_NAME" rollout status deployment/ama-metrics -n kube-system --timeout=300s
 
   print_message "Importing the official Traefik dashboard ($TRAEFIK_DASHBOARD_ID) from Grafana.com..."
