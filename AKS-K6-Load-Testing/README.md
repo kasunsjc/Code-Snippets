@@ -11,6 +11,7 @@ Load test httpbin through Traefik HTTPS ingress on AKS with Azure DNS, managed P
 - Let's Encrypt TLS using cert-manager with Azure DNS DNS-01 and workload identity, not a client secret.
 - Azure managed Prometheus and Managed Grafana, with the Azure-specific ServiceMonitor and an automatically imported Traefik dashboard.
 - Selectable smoke, load, spike, and failure-path tests with checks, isolated thresholds, and custom metrics.
+- A separate, more aggressive fixed-rate stress test with automatic abort on high error rates.
 - Optionally, the official Grafana k6 Operator to run the test from inside AKS.
 
 ## Architecture
@@ -71,9 +72,11 @@ Terraform owns the demo's Azure resources and `httpbin` A record, but the existi
 | `k8s/traefik-values.yaml.tpl` | Static ingress IP, HTTPS redirect, metrics, and replica settings |
 | `k8s/httpbin-ingress.yaml.tpl` | Azure DNS ClusterIssuer, Certificate, and HTTPS Ingress |
 | `k8s/k6-test-run.yaml` | Optional distributed operator test |
+| `k8s/k6-stress-test-run.yaml` | Optional distributed operator stress test |
 | `monitoring/ama-metrics-settings-configmap-v2.yaml` | Schema-v2 Azure Monitor metrics agent settings |
 | `monitoring/traefik-azure-monitor-servicemonitor.yaml` | Azure-specific ServiceMonitor selecting Traefik's metrics Service |
 | `k6/load-test.js` | Shared script with selectable smoke/load/spike/failure profiles |
+| `k6/stress-test.js` | Aggressive fixed-rate stress test that ramps up to `PEAK_RPS` requests per second |
 
 ## Prerequisites
 
@@ -308,6 +311,53 @@ kubectl delete testrun "$RUN_NAME" -n k6-demo --ignore-not-found --wait=true
 
 Deleting an active TestRun cancels its managed jobs/pods. Run one profile at a time; leave the operator and ConfigMap installed for subsequent runs.
 
+## Option C: Stress test
+
+`k6/stress-test.js` is a separate, more aggressive test. The profiles above use virtual users that wait for each response and sleep for a second, so they slow down when the server slows down. The stress test uses k6's `ramping-arrival-rate` executor instead: it starts new requests at a fixed rate whether or not earlier ones have finished, so a struggling server sees growing pressure rather than relief. Use it to find where httpbin and Traefik start to degrade, and watch the Traefik dashboard while it runs.
+
+| Stage | Duration | Target requests per second |
+| --- | --- | --- |
+| Warm-up | 1m | 25% of `PEAK_RPS` |
+| Ramp | 2m | 50% of `PEAK_RPS` |
+| Ramp | 2m | `PEAK_RPS` |
+| Sustain | 3m | `PEAK_RPS` |
+| Ramp down | 1m | 0 |
+
+`PEAK_RPS` defaults to 300. Each iteration is one request: 50% `GET /get`, 20% `POST /post`, 20% `/bytes/1024`, and 10% `/bytes/65536`. Response bodies are discarded to keep the load generator light, so the checks only verify HTTP 200.
+
+| Threshold | Meaning |
+| --- | --- |
+| `http_req_failed` rate < 5% | The test **aborts automatically** once errors pass 5%, evaluated after the first minute |
+| `http_req_duration` p95 < 500 ms, p99 < 1.5 s | Latency stays acceptable under load |
+| `checks` rate > 95% | Requests return HTTP 200 |
+| `dropped_iterations` rate < 1/s | k6 could keep up with the target rate; dropped iterations mean every virtual user was stuck waiting on slow responses |
+
+The test requires `BASE_URL` and has no default, so it can't be pointed at the wrong target by accident. Only run it against infrastructure you own.
+
+### Run locally
+
+```bash
+BASE_URL="https://httpbin.kasunrajapakse.xyz" k6 run k6/stress-test.js
+BASE_URL="https://httpbin.kasunrajapakse.xyz" PEAK_RPS=500 k6 run k6/stress-test.js
+```
+
+From a laptop, your own bandwidth and connection may become the bottleneck before the cluster does. If `dropped_iterations` climbs while server-side latency in Grafana stays flat, the load generator is the limit; use the operator instead.
+
+### Run with the k6 Operator
+
+```bash
+kubectl create configmap k6-stress-script \
+  --from-file=stress.js=k6/stress-test.js \
+  --namespace k6-demo \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/k6-stress-test-run.yaml
+kubectl get testrun httpbin-stress -n k6-demo -w
+```
+
+The TestRun uses two runners. With an arrival-rate executor the target rate is split between runners, so each sends half of `PEAK_RPS`. Each runner requests 500m CPU and 256 MiB memory. Change `PEAK_RPS` in the manifest to push harder. Inspect results, rerun, and cancel exactly as in Option B steps 4 and 5, using `httpbin-stress` as the run name. Don't run the stress test at the same time as another TestRun.
+
+Expect the default two-node cluster to show stress: httpbin pods are limited to 250m CPU each, and runners share nodes with httpbin and Traefik. Rising latency, Traefik 5xx responses, or an automatic abort are useful results, not test bugs. At peak, about 10% of requests return 64 KiB, so a 300 requests-per-second run sends roughly 2 MB/s of outbound traffic, which Azure bills as egress.
+
 ## Metrics and observability
 
 ### Azure Monitor metrics collection
@@ -385,7 +435,7 @@ Do **not** run `cleanup.sh` against an existing/shared cluster. Check your Kuber
 
 ```bash
 kubectl delete -f k8s/k6-test-run.yaml --ignore-not-found
-kubectl delete testrun httpbin-smoke httpbin-load httpbin-spike httpbin-failure \
+kubectl delete testrun httpbin-smoke httpbin-load httpbin-spike httpbin-failure httpbin-stress \
   -n k6-demo --ignore-not-found
 kubectl delete namespace k6-demo
 helm uninstall k6-operator --namespace k6-operator-system
