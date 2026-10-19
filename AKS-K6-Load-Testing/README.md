@@ -346,15 +346,22 @@ From a laptop, your own bandwidth and connection may become the bottleneck befor
 ### Run with the k6 Operator
 
 ```bash
+HTTPBIN_BASE_URL="https://httpbin.kasunrajapakse.xyz"
+PEAK_RPS=300
+
 kubectl create configmap k6-stress-script \
   --from-file=stress.js=k6/stress-test.js \
   --namespace k6-demo \
   --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -f k8s/k6-stress-test-run.yaml
+
+kubectl patch --local -f k8s/k6-stress-test-run.yaml --type=merge \
+  -p "{\"spec\":{\"runner\":{\"env\":[{\"name\":\"BASE_URL\",\"value\":\"$HTTPBIN_BASE_URL\"},{\"name\":\"PEAK_RPS\",\"value\":\"$PEAK_RPS\"}]}}}" \
+  -o yaml | kubectl apply -f -
+
 kubectl get testrun httpbin-stress -n k6-demo -w
 ```
 
-The TestRun uses two runners. With an arrival-rate executor the target rate is split between runners, so each sends half of `PEAK_RPS`. Each runner requests 500m CPU and 256 MiB memory. Change `PEAK_RPS` in the manifest to push harder. Inspect results, rerun, and cancel exactly as in Option B steps 4 and 5, using `httpbin-stress` as the run name. Don't run the stress test at the same time as another TestRun.
+Set `HTTPBIN_BASE_URL` and `PEAK_RPS` before running the block; the patch replaces the manifest's defaults without editing the file. The TestRun uses two runners. With an arrival-rate executor the target rate is split between runners, so each sends half of `PEAK_RPS`. Each runner requests 500m CPU and 256 MiB memory. Inspect results, rerun, and cancel exactly as in Option B steps 4 and 5, using `httpbin-stress` as the run name. Don't run the stress test at the same time as another TestRun.
 
 Expect the default two-node cluster to show stress: httpbin pods are limited to 250m CPU each, and runners share nodes with httpbin and Traefik. Rising latency, Traefik 5xx responses, or an automatic abort are useful results, not test bugs. At peak, about 10% of requests return 64 KiB, so a 300 requests-per-second run sends roughly 2 MB/s of outbound traffic, which Azure bills as egress.
 
