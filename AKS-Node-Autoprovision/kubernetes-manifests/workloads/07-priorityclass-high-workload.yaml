@@ -1,0 +1,42 @@
+# High-priority workload. If the cluster/NodePool limits are exhausted, kube-scheduler
+# preempts nap-demo-low-priority pods first; if there's still no room, NAP provisions a
+# new node ahead of any still-pending low-priority pods. These pods are pinned to the
+# priority-zone-restricted NodePool via required nodeAffinity.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: priority-high-demo
+  labels:
+    app: priority-high-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: priority-high-demo
+  template:
+    metadata:
+      labels:
+        app: priority-high-demo
+    spec:
+      priorityClassName: nap-demo-high-priority
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: workload-type
+                    operator: In
+                    values: ["priority-zone-restricted"]
+                  - key: topology.kubernetes.io/zone
+                    operator: In
+                    values: ["northeurope-1"] # this demo currently supports the default location only
+      containers:
+        - name: critical
+          image: nginx:1.27-alpine
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "1"
+              memory: 1Gi
