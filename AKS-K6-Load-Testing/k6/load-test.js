@@ -14,6 +14,7 @@ export const options = {
     { duration: '30s', target: 0 },
   ],
   thresholds: {
+    checks: ['rate>0.99'],
     http_req_duration: ['p(95)<200'],
     http_req_failed: ['rate<0.01'],
     product_latency: ['p(95)<200'],

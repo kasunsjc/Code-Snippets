@@ -36,7 +36,7 @@ BASE_URL="http://<EXTERNAL-IP>" k6 run k6/load-test.js
 
 For a `ClusterIP` service accessed through the port-forward alternative, run the port-forward command in another terminal and set `BASE_URL="http://localhost:8080"`.
 
-The default k6 summary is printed in the terminal. The test fails if the 95th percentile request latency reaches 200 ms or the HTTP failure rate reaches 1%.
+The default k6 summary is printed in the terminal. The test fails if the 95th percentile request latency reaches 200 ms, the HTTP failure rate reaches 1%, or fewer than 99% of checks pass.
 
 ## Option B: Run with the k6 Operator
 
