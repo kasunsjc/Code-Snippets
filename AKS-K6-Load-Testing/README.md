@@ -71,7 +71,7 @@ Terraform owns the demo's Azure resources and `httpbin` A record, but the existi
 | `k8s/traefik-values.yaml.tpl` | Static ingress IP, HTTPS redirect, metrics, and replica settings |
 | `k8s/httpbin-ingress.yaml.tpl` | Azure DNS ClusterIssuer, Certificate, and HTTPS Ingress |
 | `k8s/k6-test-run.yaml` | Optional distributed operator test |
-| `monitoring/ama-metrics-settings-configmap-v2.yaml` | Schema-v2 Azure Monitor agent settings, matching the Harbor pattern |
+| `monitoring/ama-metrics-settings-configmap-v2.yaml` | Schema-v2 Azure Monitor metrics agent settings |
 | `monitoring/traefik-azure-monitor-servicemonitor.yaml` | Azure-specific ServiceMonitor selecting Traefik's metrics Service |
 | `k6/load-test.js` | Shared script with selectable smoke/load/spike/failure profiles |
 
@@ -310,11 +310,11 @@ Deleting an active TestRun cancels its managed jobs/pods. Run one profile at a t
 
 ## Metrics and observability
 
-### Azure Monitor collection, matching the Harbor demo
+### Azure Monitor metrics collection
 
-The full deployment provisions Managed Prometheus and Grafana; Log Analytics/Container Insights are not included. Like `AKS-Harbor-Registry-Demo`, it applies `ama-metrics-settings-configmap` with **schema v2**, nested cluster/control-plane settings, the minimal ingestion profile, and collector settings. This is an Azure Monitor agent settings ConfigMap, not a self-hosted Prometheus configuration.
+The full deployment provisions Managed Prometheus and Grafana; Log Analytics/Container Insights are not included. It applies `ama-metrics-settings-configmap` with **schema v2**, nested cluster/control-plane settings, the minimal ingestion profile, and collector settings. This is an Azure Monitor agent settings ConfigMap, not a self-hosted Prometheus configuration.
 
-Traefik's chart-generated `monitoring.coreos.com/v1` ServiceMonitor is explicitly disabled. Instead, the deployment waits for `servicemonitors.azmonitoring.coreos.com` to be established, then applies `monitoring/traefik-azure-monitor-servicemonitor.yaml` using **`azmonitoring.coreos.com/v1`**. Its selector matches only the internal metrics Service's `azure-monitor-job: traefik` label and its named `metrics` port. The Azure collector discovers individual Service endpoints, scrapes every 30 seconds, and forwards through the DCR to the managed workspace. `jobLabel` preserves `job="traefik"` for dashboard queries. Label limits follow the Harbor monitor.
+Traefik's chart-generated `monitoring.coreos.com/v1` ServiceMonitor is explicitly disabled. Instead, the deployment waits for `servicemonitors.azmonitoring.coreos.com` to be established, then applies `monitoring/traefik-azure-monitor-servicemonitor.yaml` using **`azmonitoring.coreos.com/v1`**. Its selector matches only the internal metrics Service's `azure-monitor-job: traefik` label and its named `metrics` port. The Azure collector discovers individual Service endpoints, scrapes every 30 seconds, and forwards through the DCR to the managed workspace. `jobLabel` sets `job="traefik"` on the scraped series. The label limits are the values Azure's ServiceMonitor templates require so targets aren't dropped.
 
 No OSS Prometheus Operator is needed. On a shared cluster, do not replace global agent settings or delete someone else's custom scrape configuration; the full script is for this Terraform-owned demo cluster.
 
