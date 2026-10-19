@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: target-app
+  namespace: k6-demo
+data:
+  server.js: |
+    const http = require('node:http');
+
+    const server = http.createServer((request, response) => {
+      response.setHeader('Content-Type', 'application/json');
+
+      if (request.url === '/health') {
+        response.writeHead(200);
+        response.end(JSON.stringify({ status: 'ok' }));
+        return;
+      }
+
+      if (request.url === '/' || request.url === '/api/products') {
+        response.writeHead(200);
+        response.end(JSON.stringify({
+          service: 'k6-demo-api',
+          products: [{ id: 1, name: 'sample' }],
+        }));
+        return;
+      }
+
+      response.writeHead(404);
+      response.end(JSON.stringify({ error: 'not found' }));
+    });
+
+    server.listen(8080, '0.0.0.0');
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: target-app
+  namespace: k6-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: target-app
+  template:
+    metadata:
+      labels:
+        app: target-app
+    spec:
+      containers:
+        - name: target-app
+          image: node:22-alpine
+          command: ["node", "/app/server.js"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+          volumeMounts:
+            - name: app
+              mountPath: /app
+              readOnly: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: app
+          configMap:
+            name: target-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: target-app
+  namespace: k6-demo
+spec:
+  type: LoadBalancer
+  selector:
+    app: target-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
