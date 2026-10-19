@@ -5,6 +5,10 @@ metadata:
   namespace: k6-demo
 spec:
   parallelism: 4
+  runner:
+    env:
+      - name: TEST_TYPE
+        value: "load"
   script:
     configMap:
       name: k6-test-script

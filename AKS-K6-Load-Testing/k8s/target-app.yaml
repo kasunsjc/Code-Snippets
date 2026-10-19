@@ -1,36 +1,3 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: target-app
-  namespace: k6-demo
-data:
-  server.js: |
-    const http = require('node:http');
-
-    const server = http.createServer((request, response) => {
-      response.setHeader('Content-Type', 'application/json');
-
-      if (request.url === '/health') {
-        response.writeHead(200);
-        response.end(JSON.stringify({ status: 'ok' }));
-        return;
-      }
-
-      if (request.url === '/' || request.url === '/api/products') {
-        response.writeHead(200);
-        response.end(JSON.stringify({
-          service: 'k6-demo-api',
-          products: [{ id: 1, name: 'sample' }],
-        }));
-        return;
-      }
-
-      response.writeHead(404);
-      response.end(JSON.stringify({ error: 'not found' }));
-    });
-
-    server.listen(8080, '0.0.0.0');
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -48,18 +15,24 @@ spec:
     spec:
       containers:
         - name: target-app
-          image: node:22-alpine
-          command: ["node", "/app/server.js"]
+          image: ghcr.io/mccutchen/go-httpbin:2.26.0
+          env:
+            - name: MAX_DURATION
+              value: "5s"
+            - name: MAX_BODY_SIZE
+              value: "1048576"
+            - name: ALLOWED_REDIRECT_DOMAINS
+              value: "example.com"
           ports:
             - name: http
               containerPort: 8080
           readinessProbe:
             httpGet:
-              path: /health
+              path: /status/200
               port: http
           livenessProbe:
             httpGet:
-              path: /health
+              path: /status/200
               port: http
           resources:
             requests:
@@ -75,18 +48,10 @@ spec:
                 - ALL
             readOnlyRootFilesystem: true
             runAsNonRoot: true
-            runAsUser: 1000
-          volumeMounts:
-            - name: app
-              mountPath: /app
-              readOnly: true
+            runAsUser: 65532
       securityContext:
         seccompProfile:
           type: RuntimeDefault
-      volumes:
-        - name: app
-          configMap:
-            name: target-app
 ---
 apiVersion: v1
 kind: Service
