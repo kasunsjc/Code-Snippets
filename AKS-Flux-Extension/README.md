@@ -218,7 +218,8 @@ Keep local Terraform settings and state out of Git.
 
 ### Use The Bundled Sample
 
-The optional [gitops](gitops) directory contains a two-replica Podinfo Deployment,
+The optional [gitops](gitops) directory contains a Podinfo Deployment with a
+Kustomize override setting three replicas,
 a ClusterIP Service on port 9898, and the `flux-demo` namespace. Its root
 [kustomization.yaml](gitops/kustomization.yaml) includes both `infra` and `apps`,
 so they are reconciled by the existing single `apps` Flux Kustomization.
@@ -247,9 +248,12 @@ kubectl port-forward -n flux-demo service/podinfo 9898:9898
 
 Open <http://localhost:9898> while the port-forward is running. For the Git-change
 and drift walkthroughs below, use `APP_NAMESPACE="flux-demo"` and
-`APP_DEPLOYMENT="podinfo"`. Change the replica count or `PODINFO_UI_MESSAGE` in
-[gitops/apps/deployment.yaml](gitops/apps/deployment.yaml) and publish the change
-to the configured Git source. No public application endpoint is created by this sample.
+`APP_DEPLOYMENT="podinfo"`. Change `replicas[].count` in
+[gitops/apps/kustomization.yaml](gitops/apps/kustomization.yaml) to adjust the replica
+count; this overrides `spec.replicas` in the Deployment manifest. Change
+`PODINFO_UI_MESSAGE` in [gitops/apps/deployment.yaml](gitops/apps/deployment.yaml)
+to update the message. Publish changes to the configured Git source. No public
+application endpoint is created by this sample.
 
 ## 2. Configure And Deploy
 
