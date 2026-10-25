@@ -6,7 +6,7 @@ Configure AKS with the managed Flux extension and demonstrate GitOps reconciliat
 
 Terraform creates a small AKS cluster, installs the Azure-managed `microsoft.flux`
 extension, and connects it to your external public application repository.
-No application manifests are bundled in this demo. Git is the workload source of truth:
+An optional Podinfo sample is included under [gitops](gitops). Git is the workload source of truth:
 changes are pulled into AKS, and manual changes are corrected automatically.
 
 See [Architecture](#architecture) for the diagram, resource ownership, networking,
@@ -89,7 +89,8 @@ from self-managed Flux installation.
 
 Terraform's explicit dependency ensures the configuration is destroyed before
 the extension. The cluster is destroyed only after its configuration and extension.
-The infrastructure demo adds no application resources itself. Your external repo
+Terraform does not apply application manifests directly. Flux deploys either the
+bundled sample or resources from your external repo. Your external repo
 can provision resources with their own cleanup requirements, including Helm
 releases, public load balancers and retained persistent disks. Review those
 lifecycles separately; do not assume deleting this demo removes retained resources
@@ -123,9 +124,10 @@ The AKS control plane uses a system-assigned managed identity. The public Git
 source needs no Git credentials. Cluster-scoped reconciliation supports resources
 across namespaces but grants powerful cluster-wide permissions: only trusted
 contributors should be able to modify the tracked source. Apply workload security
-controls, probes and resource limits in your application repository. No sample
-application or namespace security policy is bundled here. Image automation is not
-enabled; image-version changes must be reviewed and committed to Git.
+controls, probes and resource limits in your application repository. The optional
+Podinfo sample includes non-root execution, a read-only root filesystem, resource
+limits, probes, and a namespace enforcing restricted Pod Security. Image automation
+is not enabled; image-version changes must be reviewed and committed to Git.
 
 For production, evaluate a private/restricted API endpoint, Entra ID and Azure
 RBAC with local accounts disabled, namespace-scoped tenant configurations,
@@ -143,6 +145,15 @@ AKS-Flux-Extension/
   README.md
   deploy.sh
   cleanup.sh
+  gitops/
+    kustomization.yaml
+    infra/
+      kustomization.yaml
+      namespace.yaml
+    apps/
+      kustomization.yaml
+      deployment.yaml
+      service.yaml
   terraform/
     versions.tf
     variables.tf
@@ -198,12 +209,47 @@ the application resources. A Helm chart alone is not sufficient: use appropriate
 Flux HelmRepository/HelmRelease resources if your application is Helm-based.
 
 Include any required Namespace manifests and application prerequisites in the
-selected configuration, or ensure they already exist. The demo no longer creates
-an application namespace or assumes an `infra/apps` directory layout. Avoid
+selected configuration, or ensure they already exist. For external applications,
+the demo does not assume a namespace or an `infra/apps` directory layout. Avoid
 pointing Flux at a broad directory containing unrelated or non-Kubernetes YAML.
 
 Flux cannot read uncommitted files or a branch that only exists locally.
 Keep local Terraform settings and state out of Git.
+
+### Use The Bundled Sample
+
+The optional [gitops](gitops) directory contains a two-replica Podinfo Deployment,
+a ClusterIP Service on port 9898, and the `flux-demo` namespace. Its root
+[kustomization.yaml](gitops/kustomization.yaml) includes both `infra` and `apps`,
+so they are reconciled by the existing single `apps` Flux Kustomization.
+
+Publish these files to your public repository and branch first. To use a fork of
+this repository, set these values in your ignored Terraform variables file:
+
+```hcl
+git_repository_url = "https://github.com/YOUR-ACCOUNT/Code-Snippets.git"
+git_branch         = "main"
+gitops_path        = "./AKS-Flux-Extension/gitops"
+```
+
+Alternatively, place the entire `gitops` directory in your separate application
+repository and set `gitops_path = "./gitops"`. Select the root directory, not only
+`gitops/apps`, so Flux also creates the namespace. Use your published feature branch
+in `git_branch` if the files are not yet available on `main`.
+
+After deployment, with the demo's `KUBECONFIG` exported:
+
+```bash
+kubectl wait --for=create deployment/podinfo -n flux-demo --timeout=600s
+kubectl rollout status deployment/podinfo -n flux-demo --timeout=300s
+kubectl port-forward -n flux-demo service/podinfo 9898:9898
+```
+
+Open <http://localhost:9898> while the port-forward is running. For the Git-change
+and drift walkthroughs below, use `APP_NAMESPACE="flux-demo"` and
+`APP_DEPLOYMENT="podinfo"`. Change the replica count or `PODINFO_UI_MESSAGE` in
+[gitops/apps/deployment.yaml](gitops/apps/deployment.yaml) and publish the change
+to the configured Git source. No public application endpoint is created by this sample.
 
 ## 2. Configure And Deploy
 
@@ -378,6 +424,8 @@ terraform -chdir=terraform fmt -check
 terraform -chdir=terraform init -backend=false -input=false
 terraform -chdir=terraform validate
 shellcheck -S warning -e SC2034,SC2046,SC2207 deploy.sh cleanup.sh
+yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' gitops
+kubectl kustomize gitops
 ```
 
 Validate your external application manifests in their own repository before
@@ -390,3 +438,4 @@ publishing, using its existing lint, Kustomize, or Helm checks.
 - [AKS cluster extensions](https://learn.microsoft.com/azure/aks/cluster-extensions)
 - [Terraform Flux configuration](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_flux_configuration)
 - [Terraform cluster extension](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster_extension)
+- [Podinfo](https://github.com/stefanprodan/podinfo)
