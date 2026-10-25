@@ -1,0 +1,8 @@
+location           = "northeurope"
+project            = "flux"
+environment        = "demo"
+node_vm_size       = "Standard_D2s_v5"
+node_count         = 2
+git_repository_url = "https://github.com/YOUR-ACCOUNT/YOUR-APP-REPO.git"
+git_branch         = "main"
+gitops_path        = "./apps"
