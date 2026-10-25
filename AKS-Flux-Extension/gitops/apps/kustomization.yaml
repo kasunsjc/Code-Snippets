@@ -4,3 +4,6 @@ namespace: flux-demo
 resources:
   - deployment.yaml
   - service.yaml
+replicas:
+  - name: podinfo
+    count: 3
