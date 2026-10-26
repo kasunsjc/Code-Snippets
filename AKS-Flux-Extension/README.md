@@ -169,7 +169,7 @@ AKS-Flux-Extension/
   `Microsoft.KubernetesConfiguration/extensions` and `fluxConfigurations` resources.
   Provider registration also requires subscription-level permission; ask an
   administrator to register the providers if necessary.
-- Enough regional VM quota for two `Standard_D2s_v5` nodes (four vCPUs, plus upgrade
+- Enough regional VM quota for two `Standard_D2s_v6` nodes (four vCPUs, plus upgrade
   headroom). Change the size or region if unavailable.
 - A **public application repository and published branch containing Kubernetes
   manifests or a Kustomize configuration** at the path you select.
@@ -263,9 +263,12 @@ Run from the repository root:
 cd AKS-Flux-Extension
 az login
 az account set --subscription "<your-subscription-name>"
-export ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 ```
+
+The deployment and cleanup scripts use the active Azure CLI subscription for
+Terraform automatically. Select the intended subscription with `az account set`
+before running them.
 
 Edit the ignored `terraform/terraform.tfvars`:
 
@@ -407,10 +410,13 @@ unset KUBECONFIG
 ```
 
 Type `destroy`, then approve Terraform's destroy plan. Terraform deletes the Flux
-configuration before the extension, then the cluster and resource group. The
-script verifies that both known resource groups are absent before removing local
-state, the `.terraform` provider directory, and the demo kubeconfig. If destroy or
-verification fails, it preserves state for investigation and retry.
+configuration before the extension, then the cluster and resource group. After a
+successful Terraform destroy, the script removes the demo cluster's context,
+cluster, and user entries from its dedicated `kubeconfig` file, but retains the file.
+It verifies that both known resource groups are absent before removing local state
+and the `.terraform` provider directory. If destroy fails, the kubeconfig is left
+intact for investigation; if verification fails, it preserves state for retry. It
+does not modify your shared `~/.kube/config` or other kubeconfigs.
 
 Use the same subscription, variables and local state used for deployment. For an
 interrupted initial apply, `terraform destroy` also removes resources recorded in

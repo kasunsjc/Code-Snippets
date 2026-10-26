@@ -35,7 +35,7 @@ variable "kubernetes_version" {
 variable "node_vm_size" {
   description = "System node VM size; verify regional availability and quota."
   type        = string
-  default     = "Standard_D2s_v5"
+  default     = "Standard_D2s_v6"
 }
 
 variable "node_count" {
