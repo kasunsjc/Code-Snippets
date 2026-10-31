@@ -34,7 +34,7 @@ categorize() {
 get_title() {
   local readme="$1"
   if [[ -f "$readme" ]]; then
-    grep -m1 '^# ' "$readme" | sed 's/^# //' | sed 's/ *$//'
+    grep -m1 '^# ' "$readme" | sed 's/^# //' | sed 's/ *$//' || true
   else
     echo ""
   fi
