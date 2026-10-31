@@ -255,6 +255,52 @@ count; this overrides `spec.replicas` in the Deployment manifest. Change
 to update the message. Publish changes to the configured Git source. No public
 application endpoint is created by this sample.
 
+#### Example Browser Output
+
+Opening <http://localhost:9898/> in a browser displays the Podinfo UI with the
+configured message, serving pod name, version, and Ping button:
+
+![Podinfo UI showing Hello from AKS Flux GitOps](podinfo-output.png)
+
+Podinfo serves HTML to browser User-Agent headers and JSON to ordinary CLI requests.
+The UI loads Vue and Vuetify from `cdn.jsdelivr.net`. If Brave Shields or another
+script blocker produces a blank page, allow those scripts for this localhost site
+or disable Shields for this site only, then reload. This is a browser issue, not a
+Flux or Kubernetes connectivity failure.
+
+#### Example CLI Output
+
+Keep the port-forward running and use a second terminal:
+
+```bash
+curl --fail --silent --show-error http://localhost:9898/ | jq
+```
+
+Example response from the same application:
+
+```json
+{
+  "hostname": "podinfo-6d884f55cc-l8s5p",
+  "version": "6.7.1",
+  "revision": "6b7aab8a10d6ee8b895b0a5048f4ab0966ed29ff",
+  "color": "#34577c",
+  "logo": "https://raw.githubusercontent.com/stefanprodan/podinfo/gh-pages/cuddle_clap.gif",
+  "message": "Hello from AKS Flux GitOps",
+  "goos": "linux",
+  "goarch": "amd64",
+  "runtime": "go1.23.2",
+  "num_goroutine": "6",
+  "num_cpu": "4"
+}
+```
+
+The hostname and runtime fields vary by pod and node; version and revision vary
+with the deployed image. To request the HTML response from the CLI instead:
+
+```bash
+curl --fail --silent --show-error --user-agent 'Mozilla/5.0' http://localhost:9898/
+```
+
 ## 2. Configure And Deploy
 
 Run from the repository root:
