@@ -334,10 +334,12 @@ export KUBECONFIG="$PWD/kubeconfig"
 ```
 
 The script registers required resource providers, validates local files, and runs
-`terraform apply` with an interactive plan approval. It then downloads a dedicated,
-gitignored kubeconfig and displays Flux source and reconciliation status. It does
-**not** validate remote application manifests or wait for a particular Deployment.
-It does not apply application manifests directly: only Flux deploys the workload.
+`terraform apply` with automatic plan approval; it does not pause to display the
+plan for approval. Review your variables before running it. It then downloads a
+dedicated, gitignored kubeconfig and displays Flux source and reconciliation
+status. It does **not** validate remote application manifests or wait for a
+particular Deployment. It does not apply application manifests directly: only Flux
+deploys the workload.
 
 Defaults create `rg-flux-demo`, `aks-flux-demo`, and `rg-flux-demo-nodes`.
 Provisioning typically takes several minutes. Initial reconciliation can take
@@ -455,7 +457,8 @@ bash cleanup.sh
 unset KUBECONFIG
 ```
 
-Type `destroy`, then approve Terraform's destroy plan. Terraform deletes the Flux
+Type `destroy` to confirm cleanup. Terraform's destroy plan is then approved
+automatically, without a separate plan review prompt. Terraform deletes the Flux
 configuration before the extension, then the cluster and resource group. After a
 successful Terraform destroy, the script removes the demo cluster's context,
 cluster, and user entries from its dedicated `kubeconfig` file, but retains the file.
