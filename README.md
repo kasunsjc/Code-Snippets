@@ -5,7 +5,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **26 examples** | Kubernetes: 19 | Docker: 4 | Azure: 1 | *Last Updated: October 2026*
+> **27 examples** | Kubernetes: 20 | Docker: 4 | Azure: 1 | *Last Updated: October 2026*
 
 ## 📝 Related Blog Posts
 
@@ -33,28 +33,29 @@ articles linked below.
 | 2 | [AKS-ACNS-Cilium-Terraform](./AKS-ACNS-Cilium-Terraform/) | Deep network traffic visibility and security on Azure Kubernetes Service using **Advanced Contain... | Kubernetes |
 | 3 | [AKS-AppGW-Containers](./AKS-AppGW-Containers/) | Deploy an AKS cluster using **Application Gateway for Containers** — the next generation of Azure... | Kubernetes |
 | 4 | [AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/) | End-to-end Terraform automation that deploys [Argo CD](https://argo-cd.readthedocs.io/) on Azure ... | Kubernetes |
-| 5 | [AKS-Control-Plane-Metrics](./AKS-Control-Plane-Metrics/) | Enable AKS control plane metrics (API server, etcd, scheduler) and visualize them in Azure Manage... | Kubernetes |
-| 6 | [AKS-Desktop](./AKS-Desktop/) | This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and... | Kubernetes |
-| 7 | [AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/) | A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showc... | Kubernetes |
-| 8 | [AKS-Flux-Extension](./AKS-Flux-Extension/) | Configure AKS with the managed Flux extension and demonstrate GitOps reconciliation with Terraform. | Kubernetes |
-| 9 | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) | A basic Harbor container registry install on AKS via Helm, with Terraform provisioning | Kubernetes |
-| 10 | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) | > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March... | Kubernetes |
-| 11 | [AKS-K6-Load-Testing](./AKS-K6-Load-Testing/) | Load test httpbin through Traefik HTTPS ingress on AKS with Azure DNS, managed Prometheus, and Gr... | Kubernetes |
-| 12 | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) | A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on | Kubernetes |
-| 13 | [AKS-Monitoring](./AKS-Monitoring/) | This guide provides an overview of how to monitor Azure Kubernetes Service (AKS) using Azure Moni... | Kubernetes |
-| 14 | [AKS-Nginx-Add-on](./AKS-Nginx-Add-on/) | Deploy the NGINX Ingress Controller as a native AKS add-on with SSL/TLS termination support. | Kubernetes |
-| 15 | [AKS-Node-Autoprovision](./AKS-Node-Autoprovision/) | Automatically provision AKS nodes based on workload requirements without managing node pools manu... | Kubernetes |
-| 16 | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) | Enhance AKS security by restricting access to node resource group resources. | Kubernetes |
-| 17 | [AKS-OPA-Policy-Demo](./AKS-OPA-Policy-Demo/) | This demo provisions an AKS cluster with the **Azure Policy Add-on** enabled and | Kubernetes |
-| 18 | [Agentic-CLI-AKS](./Agentic-CLI-AKS/) | > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not ... | Kubernetes |
-| 19 | [Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/) | This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot ... | Other |
-| 20 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
-| 21 | [Custom-AKS-Copilot-Agent](./Custom-AKS-Copilot-Agent/) | A custom GitHub Copilot agent specialized in Azure Kubernetes Service (AKS) and Kubernetes troubl... | Kubernetes |
-| 22 | [Docker-Hardened-Images](./Docker-Hardened-Images/) | Welcome to this comprehensive demo on **Docker Hardened Images**! This repository demonstrates Do... | Docker |
-| 23 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
-| 24 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
-| 25 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
-| 26 | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) | This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstr... | Other |
+| 5 | [AKS-Azure-Monitor-Traces](./AKS-Azure-Monitor-Traces/) | Explore distributed traces from an AKS application with Azure Monitor traces (preview). | Kubernetes |
+| 6 | [AKS-Control-Plane-Metrics](./AKS-Control-Plane-Metrics/) | Enable AKS control plane metrics (API server, etcd, scheduler) and visualize them in Azure Manage... | Kubernetes |
+| 7 | [AKS-Desktop](./AKS-Desktop/) | This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and... | Kubernetes |
+| 8 | [AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/) | A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showc... | Kubernetes |
+| 9 | [AKS-Flux-Extension](./AKS-Flux-Extension/) | Configure AKS with the managed Flux extension and demonstrate GitOps reconciliation with Terraform. | Kubernetes |
+| 10 | [AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/) | A basic Harbor container registry install on AKS via Helm, with Terraform provisioning | Kubernetes |
+| 11 | [AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/) | > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March... | Kubernetes |
+| 12 | [AKS-K6-Load-Testing](./AKS-K6-Load-Testing/) | Load test httpbin through Traefik HTTPS ingress on AKS with Azure DNS, managed Prometheus, and Gr... | Kubernetes |
+| 13 | [AKS-KEDA-Demo](./AKS-KEDA-Demo/) | A hands-on demo showing how **KEDA (Kubernetes Event-Driven Autoscaling)** works on | Kubernetes |
+| 14 | [AKS-Monitoring](./AKS-Monitoring/) | This guide provides an overview of how to monitor Azure Kubernetes Service (AKS) using Azure Moni... | Kubernetes |
+| 15 | [AKS-Nginx-Add-on](./AKS-Nginx-Add-on/) | Deploy the NGINX Ingress Controller as a native AKS add-on with SSL/TLS termination support. | Kubernetes |
+| 16 | [AKS-Node-Autoprovision](./AKS-Node-Autoprovision/) | Automatically provision AKS nodes based on workload requirements without managing node pools manu... | Kubernetes |
+| 17 | [AKS-NodeRG-Lockdown](./AKS-NodeRG-Lockdown/) | Enhance AKS security by restricting access to node resource group resources. | Kubernetes |
+| 18 | [AKS-OPA-Policy-Demo](./AKS-OPA-Policy-Demo/) | This demo provisions an AKS cluster with the **Azure Policy Add-on** enabled and | Kubernetes |
+| 19 | [Agentic-CLI-AKS](./Agentic-CLI-AKS/) | > ⚠️ **Preview Feature** - This is an experimental Azure CLI extension currently in preview. Not ... | Kubernetes |
+| 20 | [Azure-Copilot-AKS-Troubleshooting](./Azure-Copilot-AKS-Troubleshooting/) | This demo shows how to use **Microsoft Copilot in Azure** (Azure Portal Copilot) to troubleshoot ... | Other |
+| 21 | [BYO-CNI-AKS](./BYO-CNI-AKS/) | Deploy an AKS cluster using **Bring Your Own CNI (BYO CNI)** and install **Cilium** as the Contai... | Kubernetes |
+| 22 | [Custom-AKS-Copilot-Agent](./Custom-AKS-Copilot-Agent/) | A custom GitHub Copilot agent specialized in Azure Kubernetes Service (AKS) and Kubernetes troubl... | Kubernetes |
+| 23 | [Docker-Hardened-Images](./Docker-Hardened-Images/) | Welcome to this comprehensive demo on **Docker Hardened Images**! This repository demonstrates Do... | Docker |
+| 24 | [Docker-Offload](./Docker-Offload/) | > **Demonstrating Docker's new cloud execution feature for building and running containers** | Docker |
+| 25 | [Docker-Sandboxes-Demo](./Docker-Sandboxes-Demo/) | > **Experimental Feature** - Requires Docker Desktop 4.50 or later | Docker |
+| 26 | [Docker-Scout](./Docker-Scout/) | Detect and remediate vulnerabilities in your container images with Docker Scout. | Docker |
+| 27 | [Falco-AKS-Sentinel](./Falco-AKS-Sentinel/) | This repository contains the complete Infrastructure as Code (IaC) and configuration for demonstr... | Other |
 
 ---
 
@@ -68,6 +69,8 @@ articles linked below.
   - 📄 README: Yes | 📁 Files: 22
 - **[AKS-ArgoCD-Extension](./AKS-ArgoCD-Extension/)** — End-to-end Terraform automation that deploys [Argo CD](https://argo-cd.readthedocs.io/) on Azure Kubernetes Service (AKS) using the **`Microsoft.ArgoCD` cluster extension**, with Microsoft Entra ID single sign-on, group-based RBAC, TLS from Azure Key Vault, and automatic DNS via the App Routing add-on — all in a single `./deploy.sh` invocation.
   - 📄 README: Yes | 📁 Files: 25
+- **[AKS-Azure-Monitor-Traces](./AKS-Azure-Monitor-Traces/)** — Explore distributed traces from an AKS application with Azure Monitor traces (preview).
+  - 📄 README: Yes | 📁 Files: 1
 - **[AKS-Control-Plane-Metrics](./AKS-Control-Plane-Metrics/)** — Enable AKS control plane metrics (API server, etcd, scheduler) and visualize them in Azure Managed Grafana.
   - 📄 README: Yes | 📁 Files: 10
 - **[AKS-Desktop](./AKS-Desktop/)** — This demo shows how **AKS Desktop** works and how to use **Azure Managed Projects** to deploy and manage applications. We use an **AKS Automatic** cluster because Managed Projects only work with AKS Automatic.
