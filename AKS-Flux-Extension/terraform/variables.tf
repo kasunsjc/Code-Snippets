@@ -69,3 +69,14 @@ variable "gitops_path" {
   description = "Repository-relative directory containing the external application's Kubernetes manifests or Kustomize configuration."
   type        = string
 }
+
+variable "gitops_helm_path" {
+  description = "Optional separate repository-relative directory containing Flux Helm sources, releases, and namespace prerequisites."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.gitops_helm_path == null ? true : length(trimspace(var.gitops_helm_path)) > 0
+    error_message = "gitops_helm_path must be null or a non-empty repository-relative path."
+  }
+}

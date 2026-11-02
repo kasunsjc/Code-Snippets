@@ -63,6 +63,7 @@ flowchart TB
    the GitRepository and Flux Kustomization custom resources.
 4. The source controller polls the public Git repository over HTTPS every 60 seconds.
 5. The `apps` Kustomization reconciles the exact directory selected by `gitops_path`.
+   An optional independent `helm` Kustomization reconciles `gitops_helm_path`.
    Namespaces and prerequisites must be included in that configuration or already
    exist. This demo does not require an `infra/apps` layout in the external repo.
 6. Failed reconciliation retries every 30 seconds; the Kustomization has a
@@ -159,6 +160,7 @@ AKS-Flux-Extension/
       namespace.yaml
       gitrepository.yaml
       helmrelease.yaml
+      rbac.yaml
   terraform/
     versions.tf
     variables.tf
@@ -227,7 +229,8 @@ The optional [gitops](gitops) directory contains a Podinfo Deployment with a
 Kustomize override setting three replicas,
 a ClusterIP Service on port 9898, and the `flux-demo` namespace. Its root
 [kustomization.yaml](gitops/kustomization.yaml) includes both `infra` and `apps`,
-so they are reconciled by the existing single `apps` Flux Kustomization.
+so they are reconciled by the `apps` Flux Kustomization. KubePlay is separate and
+is enabled with `gitops_helm_path`, as described below.
 
 Publish these files to your public repository and branch first. To use a fork of
 this repository, set these values in your ignored Terraform variables file:
@@ -310,10 +313,27 @@ curl --fail --silent --show-error --user-agent 'Mozilla/5.0' http://localhost:98
 
 The [gitops/helm](gitops/helm) directory deploys the KubePlay chart from
 [kasunsjc/k8s-demo-sample-app](https://github.com/kasunsjc/k8s-demo-sample-app)
-(`deploy/helm/kubeplay`) with no Terraform change. The managed extension already
-includes `source-controller` and `helm-controller`; the `helm` directory is included by
-[gitops/kustomization.yaml](gitops/kustomization.yaml), so the existing `apps` Flux
-Kustomization applies it:
+(`deploy/helm/kubeplay`). The managed extension already includes `source-controller`
+and `helm-controller`. Enable a separate Flux Kustomization by adding this to your
+ignored Terraform variables file, then running `bash deploy.sh`:
+
+```hcl
+gitops_helm_path = "./AKS-Flux-Extension/gitops/helm"
+```
+
+Both paths refer to the same configured Git repository and branch:
+
+| Flux Kustomization | Path | Application | Delivery |
+| --- | --- | --- | --- |
+| `cluster-config-apps` | `./AKS-Flux-Extension/gitops` | Podinfo in `flux-demo` | Plain Kustomize resources |
+| `cluster-config-helm` | `./AKS-Flux-Extension/gitops/helm` | KubePlay in `kubeplay` | GitRepository and HelmRelease |
+
+Neither Kustomization depends on the other, so a failed Helm release does not block
+Podinfo reconciliation. `cluster-config` is the Azure Flux configuration and source
+namespace, not an application. Its overall compliance still reflects both demos.
+Leave `gitops_helm_path` unset to deploy only the basic Kustomize sample.
+
+The Helm path contains these Flux resources:
 
 1. A `GitRepository` (`kubeplay-chart`) clones the chart repository.
 2. A `HelmRelease` (`kubeplay`) builds the chart from the Git path and installs it
@@ -335,6 +355,7 @@ app routing add-on is not enabled.
 
 ```bash
 kubectl get gitrepositories,helmreleases -n kubeplay
+kubectl get kustomizations -n cluster-config
 kubectl wait --for=condition=Ready helmrelease/kubeplay -n kubeplay --timeout=600s
 kubectl port-forward -n kubeplay service/ui-gateway 8080:80
 ```
@@ -344,9 +365,15 @@ GitOps for Helm, change a value such as `ui.title` or `inspector.replicas` in
 `helmrelease.yaml`, publish it, and watch the release upgrade. Chart changes pushed to
 the chart repository are picked up too (`reconcileStrategy: Revision`).
 
-To reconcile the Helm release separately, add a second `kustomizations` block in
-[terraform/main.tf](terraform/main.tf) pointing at `./AKS-Flux-Extension/gitops/helm`
-and remove `helm` from the root kustomization.
+This example uses a Helm chart stored in Git, not a published `HelmRepository`.
+Flux fetches the Git source, packages the chart as a `HelmChart`, and the Helm
+controller installs it through the `HelmRelease`. Docker Hub stores the application
+images; it is not the chart source.
+
+When migrating an existing combined setup, enable the separate Helm Kustomization
+first and wait for it to become Ready before removing `helm` from the root
+Kustomization. This transfers ownership before pruning and avoids uninstalling
+the release during the split.
 
 ## 2. Configure And Deploy
 

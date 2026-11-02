@@ -82,5 +82,17 @@ resource "azurerm_kubernetes_flux_configuration" "this" {
     timeout_in_seconds         = 300
   }
 
+  dynamic "kustomizations" {
+    for_each = var.gitops_helm_path == null ? [] : [var.gitops_helm_path]
+    content {
+      name                       = "helm"
+      path                       = kustomizations.value
+      garbage_collection_enabled = true
+      sync_interval_in_seconds   = 60
+      retry_interval_in_seconds  = 30
+      timeout_in_seconds         = 600
+    }
+  }
+
   depends_on = [azurerm_kubernetes_cluster_extension.flux]
 }
