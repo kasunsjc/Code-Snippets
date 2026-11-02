@@ -320,10 +320,10 @@ Kustomization applies it:
    into the `kubeplay` namespace, with values set inline in
    [helmrelease.yaml](gitops/helm/helmrelease.yaml).
 
-Before publishing, set `global.imageRegistry` in `helmrelease.yaml` to an ACR that
-contains the KubePlay images and is attached to the cluster
-(`az aks update --attach-acr`); the placeholder `ACR_NAME.azurecr.io` will cause
-`ImagePullBackOff`. Ingress is disabled because the app routing add-on is not enabled.
+The chart's images are pulled from Docker Hub (`kasunsjc/kubeplay-<service>:0.1.2`), so no
+container registry needs to be attached to the cluster. `helmrelease.yaml` overrides each
+service's `image` value to match those repository names. Ingress is disabled because the
+app routing add-on is not enabled.
 
 ```bash
 kubectl get gitrepositories,helmreleases -n kubeplay

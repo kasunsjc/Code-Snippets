@@ -22,14 +22,20 @@ spec:
       retries: 3
   values:
     global:
-      # Replace with an ACR attached to the AKS cluster (az aks update --attach-acr).
-      imageRegistry: ACR_NAME.azurecr.io
-      imageTag: "0.1.1"
-      imagePullPolicy: Always
+      # Images are public on Docker Hub as kasunsjc/kubeplay-<service>, so no registry prefix.
+      imageRegistry: ""
+      imageTag: "0.1.2"
+      imagePullPolicy: IfNotPresent
     ui:
+      image: kasunsjc/kubeplay-ui-gateway
       title: KubePlay via Flux
     inspector:
+      image: kasunsjc/kubeplay-inspector-api
       replicas: 3
+    notes:
+      image: kasunsjc/kubeplay-notes-api
+    worker:
+      image: kasunsjc/kubeplay-worker
     redis:
       storage:
         storageClass: managed-csi
