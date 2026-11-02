@@ -416,6 +416,29 @@ cluster-wide permissions. The managed extension otherwise defaults to a
 for `helm-demo-config` does not grant access to an account in `kubeplay-helm`.
 Keep the Role's resource list in sync when adding new resource types to the chart.
 
+> **Why are a service account and RBAC needed here?**
+> In this managed-extension setup, the Helm controller is configured with
+> `--default-service-account=flux-applier`. It impersonates a service account in
+> the HelmRelease's namespace instead of using its own controller permissions.
+> Service accounts with the same name in different namespaces are different
+> identities: permissions for `helm-demo-config/flux-applier` do not authorize
+> `kubeplay-helm/flux-applier`.
+>
+> This demo explicitly selects `helm-demo-deployer` with
+> `spec.serviceAccountName`. The ServiceAccount supplies the identity, the Role
+> grants namespace-scoped permissions, and the RoleBinding connects them.
+> Helm needs access to Secrets to store release history, plus permission to
+> manage the chart's resources. Without these permissions, installation can
+> fail with `secrets is forbidden` before any application pods are created.
+>
+> With a typical OSS Flux installation, the Helm controller's own service
+> account already has broad permissions, so separate per-release RBAC may not
+> be necessary. OSS Flux also supports restricted service-account impersonation.
+> This distinction is about controller configuration, not the chart source:
+> switching from `GitRepository` to `HelmRepository` does not remove the need
+> for deployment permissions. The [prerequisites](gitops/helm/prerequisites)
+> are included automatically; no manual RBAC command is needed for this demo.
+
 All demo-owned Flux identities use the `helm-demo` prefix. The configuration
 namespace (`helm-demo-config`) and application namespace (`kubeplay-helm`) isolate this
 demo from future Blob, OCI, or other Flux demonstrations on the same cluster.
