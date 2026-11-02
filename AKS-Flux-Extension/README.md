@@ -63,11 +63,13 @@ flowchart TB
    the GitRepository and Flux Kustomization custom resources.
 4. The source controller polls the public Git repository over HTTPS every 60 seconds.
 5. The `apps` Kustomization reconciles the exact directory selected by `gitops_path`.
-   An optional independent `helm` Kustomization reconciles `gitops_helm_path`.
+   An optional separate Azure Flux configuration, `kubeplay-config`, reconciles
+   `gitops_helm_path` through its own `helm` Kustomization.
    Namespaces and prerequisites must be included in that configuration or already
    exist. This demo does not require an `infra/apps` layout in the external repo.
-6. Failed reconciliation retries every 30 seconds; the Kustomization has a
-   five-minute timeout. The deployment script displays status without assuming
+6. Failed reconciliation retries every 30 seconds; the basic Kustomization has a
+   five-minute timeout and the optional Helm path has a ten-minute timeout.
+   The deployment script displays status without assuming
    a particular application or waiting for its rollout.
 7. Flux regularly corrects drift and prunes resources removed from the source.
    Controllers and Azure agents report their status independently of Terraform.
@@ -314,23 +316,24 @@ curl --fail --silent --show-error --user-agent 'Mozilla/5.0' http://localhost:98
 The [gitops/helm](gitops/helm) directory deploys the KubePlay chart from
 [kasunsjc/k8s-demo-sample-app](https://github.com/kasunsjc/k8s-demo-sample-app)
 (`deploy/helm/kubeplay`). The managed extension already includes `source-controller`
-and `helm-controller`. Enable a separate Flux Kustomization by adding this to your
+and `helm-controller`. Enable a separate Azure Flux configuration by adding this to your
 ignored Terraform variables file, then running `bash deploy.sh`:
 
 ```hcl
 gitops_helm_path = "./AKS-Flux-Extension/gitops/helm"
 ```
 
-Both paths refer to the same configured Git repository and branch:
+Both configurations refer to the same configured Git repository and branch, but
+appear as separate rows in the Azure portal's **GitOps** configuration list:
 
-| Flux Kustomization | Path | Application | Delivery |
+| Azure Flux configuration | Flux Kustomization | Application | Delivery |
 | --- | --- | --- | --- |
-| `cluster-config-apps` | `./AKS-Flux-Extension/gitops` | Podinfo in `flux-demo` | Plain Kustomize resources |
-| `cluster-config-helm` | `./AKS-Flux-Extension/gitops/helm` | KubePlay in `kubeplay` | GitRepository and HelmRelease |
+| `cluster-config` | `cluster-config-apps` in `cluster-config` | Podinfo in `flux-demo` | Plain Kustomize resources at `gitops_path` |
+| `kubeplay-config` | `kubeplay-config-helm` in `kubeplay-config` | KubePlay in `kubeplay` | GitRepository and HelmRelease at `gitops_helm_path` |
 
-Neither Kustomization depends on the other, so a failed Helm release does not block
-Podinfo reconciliation. `cluster-config` is the Azure Flux configuration and source
-namespace, not an application. Its overall compliance still reflects both demos.
+Neither configuration depends on the other, so a failed Helm release does not block
+Podinfo reconciliation or make `cluster-config` non-compliant.
+`cluster-config` is the Azure Flux configuration and source namespace, not an application.
 Leave `gitops_helm_path` unset to deploy only the basic Kustomize sample.
 
 The Helm path contains these Flux resources:
@@ -356,6 +359,7 @@ app routing add-on is not enabled.
 ```bash
 kubectl get gitrepositories,helmreleases -n kubeplay
 kubectl get kustomizations -n cluster-config
+kubectl get gitrepositories,kustomizations -n kubeplay-config
 kubectl wait --for=condition=Ready helmrelease/kubeplay -n kubeplay --timeout=600s
 kubectl port-forward -n kubeplay service/ui-gateway 8080:80
 ```
@@ -370,10 +374,13 @@ Flux fetches the Git source, packages the chart as a `HelmChart`, and the Helm
 controller installs it through the `HelmRelease`. Docker Hub stores the application
 images; it is not the chart source.
 
-When migrating an existing combined setup, enable the separate Helm Kustomization
-first and wait for it to become Ready before removing `helm` from the root
-Kustomization. This transfers ownership before pruning and avoids uninstalling
-the release during the split.
+When migrating an existing combined setup, temporarily disable garbage collection
+on the old Kustomization in Terraform and apply that change first. Enable the
+separate Helm configuration and wait for it to become Ready. Then remove the Helm
+path from the old configuration (or `helm` from its root Kustomize resources) and
+wait for reconciliation before restoring garbage collection on any retained
+Kustomization. Disabling pruning during the handoff is important: overlapping
+reconciliations can reclaim ownership and otherwise uninstall the Helm release.
 
 ## 2. Configure And Deploy
 

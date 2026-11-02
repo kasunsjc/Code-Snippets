@@ -31,4 +31,9 @@ chmod 600 "$KUBECONFIG"
 printf 'Flux is configured. Inspect source and reconciliation status for your external application repository:\n'
 kubectl get gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io \
   --namespace cluster-config
+HELM_FLUX_CONFIGURATION="$(terraform -chdir="$TF_DIR" output -raw helm_flux_configuration_name)"
+if [[ -n "$HELM_FLUX_CONFIGURATION" ]]; then
+  kubectl get gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io \
+    --namespace kubeplay-config
+fi
 printf '\nUse this kubeconfig for the walkthrough:\nexport KUBECONFIG="%s"\n' "$KUBECONFIG"

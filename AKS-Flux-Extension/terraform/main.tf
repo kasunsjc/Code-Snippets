@@ -82,16 +82,33 @@ resource "azurerm_kubernetes_flux_configuration" "this" {
     timeout_in_seconds         = 300
   }
 
-  dynamic "kustomizations" {
-    for_each = var.gitops_helm_path == null ? [] : [var.gitops_helm_path]
-    content {
-      name                       = "helm"
-      path                       = kustomizations.value
-      garbage_collection_enabled = true
-      sync_interval_in_seconds   = 60
-      retry_interval_in_seconds  = 30
-      timeout_in_seconds         = 600
-    }
+  depends_on = [azurerm_kubernetes_cluster_extension.flux]
+}
+
+# Reconcile the Helm demo as a separate configuration in the Azure portal.
+resource "azurerm_kubernetes_flux_configuration" "kubeplay" {
+  count                             = var.gitops_helm_path == null ? 0 : 1
+  name                              = "kubeplay-config"
+  cluster_id                        = azurerm_kubernetes_cluster.this.id
+  namespace                         = "kubeplay-config"
+  scope                             = "cluster"
+  continuous_reconciliation_enabled = true
+
+  git_repository {
+    url                      = var.git_repository_url
+    reference_type           = "branch"
+    reference_value          = var.git_branch
+    sync_interval_in_seconds = 60
+    timeout_in_seconds       = 120
+  }
+
+  kustomizations {
+    name                       = "helm"
+    path                       = var.gitops_helm_path
+    garbage_collection_enabled = true
+    sync_interval_in_seconds   = 60
+    retry_interval_in_seconds  = 30
+    timeout_in_seconds         = 600
   }
 
   depends_on = [azurerm_kubernetes_cluster_extension.flux]

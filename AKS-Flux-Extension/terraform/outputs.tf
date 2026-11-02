@@ -17,3 +17,8 @@ output "flux_configuration_name" {
   description = "Azure Flux configuration name."
   value       = azurerm_kubernetes_flux_configuration.this.name
 }
+
+output "helm_flux_configuration_name" {
+  description = "Separate Azure Flux configuration for the Helm demo, when enabled."
+  value       = var.gitops_helm_path == null ? "" : azurerm_kubernetes_flux_configuration.kubeplay[0].name
+}

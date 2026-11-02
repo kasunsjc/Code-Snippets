@@ -71,7 +71,7 @@ variable "gitops_path" {
 }
 
 variable "gitops_helm_path" {
-  description = "Optional separate repository-relative directory containing Flux Helm sources, releases, and namespace prerequisites."
+  description = "Optional repository-relative Helm manifests path; creates a separate kubeplay-config Azure Flux configuration."
   type        = string
   default     = null
 
