@@ -34,6 +34,6 @@ kubectl get gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.to
 HELM_FLUX_CONFIGURATION="$(terraform -chdir="$TF_DIR" output -raw helm_flux_configuration_name)"
 if [[ -n "$HELM_FLUX_CONFIGURATION" ]]; then
   kubectl get gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io \
-    --namespace kubeplay-config
+    --namespace helm-demo-config
 fi
 printf '\nUse this kubeconfig for the walkthrough:\nexport KUBECONFIG="%s"\n' "$KUBECONFIG"
