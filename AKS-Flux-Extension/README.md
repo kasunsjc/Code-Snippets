@@ -63,7 +63,7 @@ flowchart TB
    the GitRepository and Flux Kustomization custom resources.
 4. The source controller polls the public Git repository over HTTPS every 60 seconds.
 5. The `apps` Kustomization reconciles the exact directory selected by `gitops_path`.
-   An optional separate Azure Flux configuration, `kubeplay-config`, reconciles
+   An optional separate Azure Flux configuration, `helm-kubeplay-config`, reconciles
    `gitops_helm_path` through its own `helm` Kustomization.
    Namespaces and prerequisites must be included in that configuration or already
    exist. This demo does not require an `infra/apps` layout in the external repo.
@@ -329,7 +329,7 @@ appear as separate rows in the Azure portal's **GitOps** configuration list:
 | Azure Flux configuration | Flux Kustomization | Application | Delivery |
 | --- | --- | --- | --- |
 | `cluster-config` | `cluster-config-apps` in `cluster-config` | Podinfo in `flux-demo` | Plain Kustomize resources at `gitops_path` |
-| `kubeplay-config` | `kubeplay-config-helm` in `kubeplay-config` | KubePlay in `kubeplay` | GitRepository and HelmRelease at `gitops_helm_path` |
+| `helm-kubeplay-config` | `helm-kubeplay-config-helm` in `kubeplay-config` | KubePlay in `kubeplay` | GitRepository and HelmRelease at `gitops_helm_path` |
 
 Neither configuration depends on the other, so a failed Helm release does not block
 Podinfo reconciliation or make `cluster-config` non-compliant.

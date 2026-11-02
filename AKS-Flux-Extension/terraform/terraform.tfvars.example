@@ -7,5 +7,5 @@ git_repository_url = "https://github.com//YOUR-APP-REPO.git"
 git_branch         = "main"
 gitops_path        = "./apps"
 
-# Optional Helm demo with its own kubeplay-config Azure Flux configuration:
+# Optional Helm demo with its own helm-kubeplay-config Azure Flux configuration:
 # gitops_helm_path = "./AKS-Flux-Extension/gitops/helm"

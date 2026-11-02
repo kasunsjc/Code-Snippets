@@ -88,7 +88,7 @@ resource "azurerm_kubernetes_flux_configuration" "this" {
 # Reconcile the Helm demo as a separate configuration in the Azure portal.
 resource "azurerm_kubernetes_flux_configuration" "kubeplay" {
   count                             = var.gitops_helm_path == null ? 0 : 1
-  name                              = "kubeplay-config"
+  name                              = "helm-kubeplay-config"
   cluster_id                        = azurerm_kubernetes_cluster.this.id
   namespace                         = "kubeplay-config"
   scope                             = "cluster"
