@@ -12,6 +12,66 @@ changes are pulled into AKS, and manual changes are corrected automatically.
 See [Architecture](#architecture) for the diagram, resource ownership, networking,
 and security trade-offs. No Azure resources are created until you run deployment.
 
+## Blog Series: One Cluster, Independent Lessons
+
+The foundation article,
+[Getting started with the AKS Flux extension](https://kasunrajapakse.me/blog/flux-gitops-aks-extension-getting-started/),
+uses `cluster-config` and the optional Podinfo sample. Those names, the
+`gitops_path` variable, and the published GitOps path remain compatible.
+The Helm lesson adds its own configuration; it does not replace the first lesson.
+
+| Layer or lesson | Files | Azure configuration / source namespace | Application namespace |
+| --- | --- | --- | --- |
+| Shared foundation | [terraform/main.tf](terraform/main.tf) | Managed extension in `flux-system` | Shared AKS cluster |
+| Git + Kustomize | [terraform/kustomize-demo.tf](terraform/kustomize-demo.tf), [gitops/apps](gitops/apps), [gitops/infra](gitops/infra) | `cluster-config` | `flux-demo` |
+| Helm chart in Git | [terraform/helm-demo.tf](terraform/helm-demo.tf), [gitops/helm](gitops/helm) | `helm-demo-config` | `kubeplay-helm` |
+
+### Setup Once
+
+1. Follow [Configure And Deploy](#2-configure-and-deploy) with the example
+   Terraform variables. Leave `gitops_helm_path` unset for the foundation article.
+2. Verify Podinfo reconciliation using [the bundled sample](#use-the-bundled-sample).
+3. Keep the same Terraform directory, state, AKS cluster, and managed extension
+   for subsequent lessons. Terraform loads all `.tf` files in this directory;
+   splitting the files does not create separate infrastructure stacks.
+
+The application namespace and deployment permissions are prerequisites, not the
+Helm lesson itself. [gitops/helm/prerequisites](gitops/helm/prerequisites) contains
+the namespace, service account, Role, and RoleBinding. Its parent Kustomize
+definition includes them automatically, so there is no separate manual RBAC step.
+Explain this Azure-managed Flux impersonation requirement once; the Helm lesson
+can then concentrate on its source and release.
+
+### Demonstrate One Concept At A Time
+
+- **Kustomize:** change Podinfo's replica override or UI message in
+  [gitops/apps](gitops/apps), publish the change, and observe `cluster-config-apps`.
+- **Helm:** enable `gitops_helm_path`, then follow
+  [Deploy A Helm Chart From Another Repository](#deploy-a-helm-chart-from-another-repository).
+  Focus on [gitrepository.yaml](gitops/helm/gitrepository.yaml) and
+  [helmrelease.yaml](gitops/helm/helmrelease.yaml), change `ui.title`, publish,
+  and observe the release revision.
+
+Both demos reconcile independently and appear as separate Azure portal entries.
+The Helm lesson currently teaches **a chart stored in Git**, not a published HTTP
+`HelmRepository`. Keep a future Helm repository, Blob, or OCI lesson in its own
+GitOps directory, Azure configuration, configuration namespace, and application
+namespace. Give each its own prerequisites; do not share an application namespace
+or let two configurations reconcile the same objects.
+
+### Remove A Lesson, Not The Shared Cluster
+
+To disable the Helm lesson, set `gitops_helm_path = null` in your ignored variables
+file. Run `terraform -chdir=terraform plan`, review that only the Helm configuration
+is being removed, then run `terraform -chdir=terraform apply`.
+Pruning removes the Helm resources and `kubeplay-helm` namespace, including its
+demo data; confirm the uninstall and check for retained volumes afterward.
+The Kustomize foundation and managed extension remain.
+
+Do **not** use [cleanup.sh](cleanup.sh) between lessons: it destroys the whole
+cluster, including any additional Flux demos you have installed. Reserve it for
+the end of the series. Do not remove individual Terraform files to disable demos.
+
 ## Architecture
 
 The demo separates infrastructure ownership (Terraform) from continuous workload
@@ -84,10 +144,10 @@ from self-managed Flux installation.
 
 | Owner | Resources |
 | --- | --- |
-| Terraform | Resource group, AKS, Flux extension, Azure Flux configuration. |
+| Terraform | Resource group, AKS, Flux extension, independent Azure Flux configurations. |
 | AKS | Node resource group, node VMs, disks and cluster networking. |
 | Managed extension | Flux controllers and Azure configuration agents in `flux-system`. |
-| Azure configuration agents | GitRepository and Flux Kustomizations in `cluster-config`. |
+| Azure configuration agents | GitRepository and Flux Kustomizations in `cluster-config` and, when enabled, `helm-demo-config`. |
 | External application Git repository and Flux | Resources declared at the selected Git path. |
 
 Terraform's explicit dependency ensures the configuration is destroyed before
@@ -159,14 +219,18 @@ AKS-Flux-Extension/
       service.yaml
     helm/
       kustomization.yaml
-      namespace.yaml
       gitrepository.yaml
       helmrelease.yaml
-      rbac.yaml
+      prerequisites/
+        kustomization.yaml
+        namespace.yaml
+        rbac.yaml
   terraform/
     versions.tf
     variables.tf
     main.tf
+    kustomize-demo.tf
+    helm-demo.tf
     outputs.tf
     terraform.tfvars.example
 ```
@@ -345,7 +409,7 @@ The Helm path contains these Flux resources:
    [helmrelease.yaml](gitops/helm/helmrelease.yaml).
 
 The release explicitly uses the `helm-demo-deployer` service account defined in
-[rbac.yaml](gitops/helm/rbac.yaml). Its Role and RoleBinding allow Helm to manage
+[rbac.yaml](gitops/helm/prerequisites/rbac.yaml). Its Role and RoleBinding allow Helm to manage
 release Secrets and the chart's resource types only within `kubeplay-helm`, without
 cluster-wide permissions. The managed extension otherwise defaults to a
 `flux-applier` service account in the HelmRelease's namespace; the account created

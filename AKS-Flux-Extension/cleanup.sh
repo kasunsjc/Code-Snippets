@@ -11,7 +11,8 @@ az account show --output none
 ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
 export ARM_SUBSCRIPTION_ID
 
-printf 'This destroys the demo AKS cluster, Flux configuration, extension and resource groups.\n'
+printf 'This destroys the shared AKS cluster, extension, resource groups, and ALL Flux demos on the cluster.\n'
+printf 'To remove only the Helm lesson, set gitops_helm_path = null and review a Terraform plan instead.\n'
 read -r -p 'Type destroy to continue: ' confirmation
 [[ "$confirmation" == "destroy" ]] || { printf 'Cancelled.\n'; exit 0; }
 

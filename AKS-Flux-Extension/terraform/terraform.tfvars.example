@@ -3,9 +3,9 @@ project            = "flux"
 environment        = "demo"
 node_vm_size       = "Standard_D2s_v6"
 node_count         = 2
-git_repository_url = "https://github.com//YOUR-APP-REPO.git"
+git_repository_url = "https://github.com/YOUR-ACCOUNT/Code-Snippets.git"
 git_branch         = "main"
-gitops_path        = "./apps"
+gitops_path        = "./AKS-Flux-Extension/gitops"
 
 # Optional Helm demo with its own helm-demo-config Azure Flux configuration:
 # gitops_helm_path = "./AKS-Flux-Extension/gitops/helm"
