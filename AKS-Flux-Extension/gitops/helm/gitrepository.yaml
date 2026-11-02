@@ -1,0 +1,15 @@
+# Flux source that clones the repository containing the Helm chart.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: kubeplay-chart
+  namespace: kubeplay
+spec:
+  interval: 1m
+  url: https://github.com/kasunsjc/k8s-demo-sample-app
+  ref:
+    branch: main
+  # Only trigger chart rebuilds when the chart directory changes.
+  ignore: |
+    /*
+    !/deploy/helm/kubeplay

@@ -154,6 +154,11 @@ AKS-Flux-Extension/
       kustomization.yaml
       deployment.yaml
       service.yaml
+    helm/
+      kustomization.yaml
+      namespace.yaml
+      gitrepository.yaml
+      helmrelease.yaml
   terraform/
     versions.tf
     variables.tf
@@ -300,6 +305,40 @@ with the deployed image. To request the HTML response from the CLI instead:
 ```bash
 curl --fail --silent --show-error --user-agent 'Mozilla/5.0' http://localhost:9898/
 ```
+
+### Deploy A Helm Chart From Another Repository
+
+The [gitops/helm](gitops/helm) directory deploys the KubePlay chart from
+[kasunsjc/k8s-demo-sample-app](https://github.com/kasunsjc/k8s-demo-sample-app)
+(`deploy/helm/kubeplay`) with no Terraform change. The managed extension already
+includes `source-controller` and `helm-controller`; the `helm` directory is included by
+[gitops/kustomization.yaml](gitops/kustomization.yaml), so the existing `apps` Flux
+Kustomization applies it:
+
+1. A `GitRepository` (`kubeplay-chart`) clones the chart repository.
+2. A `HelmRelease` (`kubeplay`) builds the chart from the Git path and installs it
+   into the `kubeplay` namespace, with values set inline in
+   [helmrelease.yaml](gitops/helm/helmrelease.yaml).
+
+Before publishing, set `global.imageRegistry` in `helmrelease.yaml` to an ACR that
+contains the KubePlay images and is attached to the cluster
+(`az aks update --attach-acr`); the placeholder `ACR_NAME.azurecr.io` will cause
+`ImagePullBackOff`. Ingress is disabled because the app routing add-on is not enabled.
+
+```bash
+kubectl get gitrepositories,helmreleases -n kubeplay
+kubectl wait --for=condition=Ready helmrelease/kubeplay -n kubeplay --timeout=600s
+kubectl port-forward -n kubeplay service/ui-gateway 8080:80
+```
+
+Check the service name and port with `kubectl get svc -n kubeplay`. To demonstrate
+GitOps for Helm, change a value such as `ui.title` or `inspector.replicas` in
+`helmrelease.yaml`, publish it, and watch the release upgrade. Chart changes pushed to
+the chart repository are picked up too (`reconcileStrategy: Revision`).
+
+To reconcile the Helm release separately, add a second `kustomizations` block in
+[terraform/main.tf](terraform/main.tf) pointing at `./AKS-Flux-Extension/gitops/helm`
+and remove `helm` from the root kustomization.
 
 ## 2. Configure And Deploy
 
