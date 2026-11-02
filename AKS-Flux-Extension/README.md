@@ -329,7 +329,7 @@ appear as separate rows in the Azure portal's **GitOps** configuration list:
 | Azure Flux configuration | Flux Kustomization | Application | Delivery |
 | --- | --- | --- | --- |
 | `cluster-config` | `cluster-config-apps` in `cluster-config` | Podinfo in `flux-demo` | Plain Kustomize resources at `gitops_path` |
-| `helm-demo-config` | `helm-demo-config-helm` in `helm-demo-config` | KubePlay in `helm-demo` | GitRepository and HelmRelease at `gitops_helm_path` |
+| `helm-demo-config` | `helm-demo-config-helm` in `helm-demo-config` | KubePlay in `kubeplay-helm` | GitRepository and HelmRelease at `gitops_helm_path` |
 
 Neither configuration depends on the other, so a failed Helm release does not block
 Podinfo reconciliation or make `cluster-config` non-compliant.
@@ -340,20 +340,20 @@ The Helm path contains these Flux resources:
 
 1. A `GitRepository` (`helm-demo-chart`) clones the chart repository.
 2. A `HelmRelease` (`helm-demo-kubeplay`) builds the chart from the Git path and
-   installs the `helm-demo-kubeplay` release into the `helm-demo` namespace,
+   installs the `helm-demo-kubeplay` release into the `kubeplay-helm` namespace,
    with values set inline in
    [helmrelease.yaml](gitops/helm/helmrelease.yaml).
 
 The release explicitly uses the `helm-demo-deployer` service account defined in
 [rbac.yaml](gitops/helm/rbac.yaml). Its Role and RoleBinding allow Helm to manage
-release Secrets and the chart's resource types only within `helm-demo`, without
+release Secrets and the chart's resource types only within `kubeplay-helm`, without
 cluster-wide permissions. The managed extension otherwise defaults to a
 `flux-applier` service account in the HelmRelease's namespace; the account created
-for `helm-demo-config` does not grant access to an account in `helm-demo`.
+for `helm-demo-config` does not grant access to an account in `kubeplay-helm`.
 Keep the Role's resource list in sync when adding new resource types to the chart.
 
 All demo-owned Flux identities use the `helm-demo` prefix. The configuration
-namespace (`helm-demo-config`) and application namespace (`helm-demo`) isolate this
+namespace (`helm-demo-config`) and application namespace (`kubeplay-helm`) isolate this
 demo from future Blob, OCI, or other Flux demonstrations on the same cluster.
 Chart-internal names such as `redis` and `ui-gateway` remain unchanged inside the
 application namespace to preserve service discovery. The managed `flux-system`
@@ -365,14 +365,14 @@ service's `image` value to match those repository names. Ingress is disabled bec
 app routing add-on is not enabled.
 
 ```bash
-kubectl get gitrepositories,helmreleases -n helm-demo
+kubectl get gitrepositories,helmreleases -n kubeplay-helm
 kubectl get kustomizations -n cluster-config
 kubectl get gitrepositories,kustomizations -n helm-demo-config
-kubectl wait --for=condition=Ready helmrelease/helm-demo-kubeplay -n helm-demo --timeout=600s
-kubectl port-forward -n helm-demo service/ui-gateway 8080:80
+kubectl wait --for=condition=Ready helmrelease/helm-demo-kubeplay -n kubeplay-helm --timeout=600s
+kubectl port-forward -n kubeplay-helm service/ui-gateway 8080:80
 ```
 
-Check the service name and port with `kubectl get svc -n helm-demo`. To demonstrate
+Check the service name and port with `kubectl get svc -n kubeplay-helm`. To demonstrate
 GitOps for Helm, change a value such as `ui.title` or `inspector.replicas` in
 `helmrelease.yaml`, publish it, and watch the release upgrade. Chart changes pushed to
 the chart repository are picked up too (`reconcileStrategy: Revision`).

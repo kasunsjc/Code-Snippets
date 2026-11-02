@@ -3,7 +3,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: helm-demo-kubeplay
-  namespace: helm-demo
+  namespace: kubeplay-helm
 spec:
   releaseName: helm-demo-kubeplay
   serviceAccountName: helm-demo-deployer

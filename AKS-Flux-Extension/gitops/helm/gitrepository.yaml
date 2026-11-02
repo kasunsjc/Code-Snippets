@@ -3,7 +3,7 @@ apiVersion: source.toolkit.fluxcd.io/v1
 kind: GitRepository
 metadata:
   name: helm-demo-chart
-  namespace: helm-demo
+  namespace: kubeplay-helm
 spec:
   interval: 1m
   url: https://github.com/kasunsjc/k8s-demo-sample-app
