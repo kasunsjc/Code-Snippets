@@ -320,6 +320,14 @@ Kustomization applies it:
    into the `kubeplay` namespace, with values set inline in
    [helmrelease.yaml](gitops/helm/helmrelease.yaml).
 
+The release explicitly uses the `helm-deployer` service account defined in
+[rbac.yaml](gitops/helm/rbac.yaml). Its Role and RoleBinding allow Helm to manage
+release Secrets and the chart's resource types only within `kubeplay`, without
+cluster-wide permissions. The managed extension otherwise defaults to a
+`flux-applier` service account in the HelmRelease's namespace; the account created
+for `cluster-config` does not grant access to an account in `kubeplay`.
+Keep the Role's resource list in sync when adding new resource types to the chart.
+
 The chart's images are pulled from Docker Hub (`kasunsjc/kubeplay-<service>:0.1.2`), so no
 container registry needs to be attached to the cluster. `helmrelease.yaml` overrides each
 service's `image` value to match those repository names. Ingress is disabled because the

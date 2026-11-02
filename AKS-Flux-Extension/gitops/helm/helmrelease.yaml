@@ -5,6 +5,7 @@ metadata:
   name: kubeplay
   namespace: kubeplay
 spec:
+  serviceAccountName: helm-deployer
   interval: 5m
   timeout: 10m
   chart:
