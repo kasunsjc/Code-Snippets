@@ -248,7 +248,7 @@ repository and set `gitops_path = "./gitops"`. Select the root directory, not on
 `gitops/apps`, so Flux also creates the namespace. Use your published feature branch
 in `git_branch` if the files are not yet available on `main`.
 
-After deployment, with the demo's `KUBECONFIG` exported:
+After deployment, with the AKS context selected:
 
 ```bash
 kubectl wait --for=create deployment/podinfo -n flux-demo --timeout=600s
@@ -419,16 +419,22 @@ otherwise AKS selects its regional default.
 
 ```bash
 bash deploy.sh
-export KUBECONFIG="$PWD/kubeconfig"
+kubectl config current-context
 ```
 
 The script registers required resource providers, validates local files, and runs
 `terraform apply` with automatic plan approval; it does not pause to display the
-plan for approval. Review your variables before running it. It then downloads a
-dedicated, gitignored kubeconfig and displays Flux source and reconciliation
+plan for approval. Review your variables before running it. It then merges AKS
+credentials into `~/.kube/config` (or the first file in an existing `KUBECONFIG`
+setting), selects the AKS context, and displays Flux source and reconciliation
 status. It does **not** validate remote application manifests or wait for a
 particular Deployment. It does not apply application manifests directly: only Flux
 deploys the workload.
+
+The selected context persists after the script exits; no manual export is needed.
+Existing contexts are retained. If you previously exported the demo-local
+`KUBECONFIG`, run `unset KUBECONFIG` before deployment to use `~/.kube/config`.
+Use the same `KUBECONFIG` setting for deployment and cleanup.
 
 Defaults create `rg-flux-demo`, `aks-flux-demo`, and `rg-flux-demo-nodes`.
 Provisioning typically takes several minutes. Initial reconciliation can take
@@ -543,18 +549,18 @@ uses the Free tier. Delete the demo when finished:
 
 ```bash
 bash cleanup.sh
-unset KUBECONFIG
 ```
 
 Type `destroy` to confirm cleanup. Terraform's destroy plan is then approved
 automatically, without a separate plan review prompt. Terraform deletes the Flux
 configuration before the extension, then the cluster and resource group. After a
 successful Terraform destroy, the script removes the demo cluster's context,
-cluster, and user entries from its dedicated `kubeconfig` file, but retains the file.
+cluster, and unreferenced user entries from the active kubeconfig, but retains the file
+and unrelated contexts.
 It verifies that both known resource groups are absent before removing local state
 and the `.terraform` provider directory. If destroy fails, the kubeconfig is left
 intact for investigation; if verification fails, it preserves state for retry. It
-does not modify your shared `~/.kube/config` or other kubeconfigs.
+only removes entries belonging to the destroyed demo; it does not delete shared kubeconfig files.
 
 Use the same subscription, variables and local state used for deployment. For an
 interrupted initial apply, `terraform destroy` also removes resources recorded in

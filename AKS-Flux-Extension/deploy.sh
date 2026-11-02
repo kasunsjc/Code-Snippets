@@ -22,11 +22,14 @@ terraform -chdir="$TF_DIR" apply "$@" -auto-approve
 
 RESOURCE_GROUP="$(terraform -chdir="$TF_DIR" output -raw resource_group_name)"
 CLUSTER_NAME="$(terraform -chdir="$TF_DIR" output -raw cluster_name)"
-export KUBECONFIG="${SCRIPT_DIR}/kubeconfig"
+KUBECONFIG_PATH="${KUBECONFIG:-${HOME}/.kube/config}"
+KUBECONFIG_PATH="${KUBECONFIG_PATH%%:*}"
 umask 077
 az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$CLUSTER_NAME" \
-  --file "$KUBECONFIG" --overwrite-existing
-chmod 600 "$KUBECONFIG"
+  --file "$KUBECONFIG_PATH" --overwrite-existing
+chmod 600 "$KUBECONFIG_PATH"
+kubectl config use-context "$CLUSTER_NAME"
+printf 'AKS context %s is selected in %s.\n' "$CLUSTER_NAME" "$KUBECONFIG_PATH"
 
 printf 'Flux is configured. Inspect source and reconciliation status for your external application repository:\n'
 kubectl get gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io \
@@ -36,4 +39,5 @@ if [[ -n "$HELM_FLUX_CONFIGURATION" ]]; then
   kubectl get gitrepositories.source.toolkit.fluxcd.io,kustomizations.kustomize.toolkit.fluxcd.io \
     --namespace helm-demo-config
 fi
-printf '\nUse this kubeconfig for the walkthrough:\nexport KUBECONFIG="%s"\n' "$KUBECONFIG"
+printf '\nActive kubectl context: '
+kubectl config current-context
