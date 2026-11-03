@@ -16,8 +16,8 @@ and security trade-offs. No Azure resources are created until you run deployment
 
 The foundation article,
 [Getting started with the AKS Flux extension](https://kasunrajapakse.me/blog/flux-gitops-aks-extension-getting-started/),
-uses `cluster-config` and the optional Podinfo sample. Those names, the
-`gitops_path` variable, and the published GitOps path remain compatible.
+uses `cluster-config` and the optional Podinfo sample. The Kustomize manifests now
+live at `gitops/kustomize`; update older examples to use that path.
 The Helm lesson adds its own configuration; it does not replace the first lesson.
 
 | Layer or lesson | Files | Azure configuration / source namespace | Application namespace |
@@ -212,7 +212,6 @@ AKS-Flux-Extension/
   deploy.sh
   cleanup.sh
   gitops/
-    kustomization.yaml
     kustomize/
       kustomization.yaml
       infra/
@@ -314,8 +313,8 @@ gitops_path        = "./AKS-Flux-Extension/gitops/kustomize"
 
 Alternatively, place the entire `gitops` directory in your separate application
 repository and set `gitops_path = "./gitops/kustomize"`. Select the demo directory, not only
-`gitops/kustomize/apps`, so Flux also creates the namespace. The original `./gitops`
-path remains a compatibility entry point that includes only `kustomize`, never Helm.
+`gitops/kustomize/apps`, so Flux also creates the namespace. Do not select `gitops`
+itself: each demo has its own entry point and there is no shared root Kustomization.
 Use your published feature branch
 in `git_branch` if the files are not yet available on `main`.
 
@@ -711,7 +710,6 @@ bash test-deploy.sh
 # Mock-provider plan tests require Terraform >= 1.7; no Azure access is used.
 terraform -chdir=terraform test
 yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' gitops
-kubectl kustomize gitops
 kubectl kustomize gitops/kustomize
 kubectl kustomize gitops/helm
 ```
