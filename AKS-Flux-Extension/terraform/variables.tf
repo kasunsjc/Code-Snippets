@@ -80,7 +80,7 @@ variable "git_branch" {
 variable "gitops_path" {
   description = "Repository-relative directory containing the external application's Kubernetes manifests or Kustomize configuration."
   type        = string
-  default     = "./AKS-Flux-Extension/gitops"
+  default     = "./AKS-Flux-Extension/gitops/kustomize"
 }
 
 variable "gitops_helm_path" {

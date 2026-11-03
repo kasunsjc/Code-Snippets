@@ -23,7 +23,7 @@ The Helm lesson adds its own configuration; it does not replace the first lesson
 | Layer or lesson | Files | Azure configuration / source namespace | Application namespace |
 | --- | --- | --- | --- |
 | Shared foundation | [terraform/main.tf](terraform/main.tf) | Managed extension in `flux-system` | Shared AKS cluster |
-| Git + Kustomize | [terraform/kustomize-demo.tf](terraform/kustomize-demo.tf), [gitops/apps](gitops/apps), [gitops/infra](gitops/infra) | `cluster-config` | `flux-demo` |
+| Git + Kustomize | [terraform/kustomize-demo.tf](terraform/kustomize-demo.tf), [gitops/kustomize/apps](gitops/kustomize/apps), [gitops/kustomize/infra](gitops/kustomize/infra) | `cluster-config` | `flux-demo` |
 | Helm chart in Git | [terraform/helm-demo.tf](terraform/helm-demo.tf), [gitops/helm](gitops/helm) | `helm-demo-config` | `kubeplay-helm` |
 
 ### Setup Once
@@ -45,7 +45,7 @@ can then concentrate on its source and release.
 ### Demonstrate One Concept At A Time
 
 - **Kustomize:** change Podinfo's replica override or UI message in
-  [gitops/apps](gitops/apps), publish the change, and observe `cluster-config-apps`.
+  [gitops/kustomize/apps](gitops/kustomize/apps), publish the change, and observe `cluster-config-apps`.
 - **Helm:** run `bash deploy.sh --demo helm`, then follow
   [Deploy A Helm Chart From Another Repository](#deploy-a-helm-chart-from-another-repository).
   Focus on [gitrepository.yaml](gitops/helm/gitrepository.yaml) and
@@ -213,13 +213,15 @@ AKS-Flux-Extension/
   cleanup.sh
   gitops/
     kustomization.yaml
-    infra/
+    kustomize/
       kustomization.yaml
-      namespace.yaml
-    apps/
-      kustomization.yaml
-      deployment.yaml
-      service.yaml
+      infra/
+        kustomization.yaml
+        namespace.yaml
+      apps/
+        kustomization.yaml
+        deployment.yaml
+        service.yaml
     helm/
       kustomization.yaml
       gitrepository.yaml
@@ -294,10 +296,10 @@ Keep local Terraform settings and state out of Git.
 
 ### Use The Bundled Sample
 
-The optional [gitops](gitops) directory contains a Podinfo Deployment with a
+The optional [gitops/kustomize](gitops/kustomize) directory contains a Podinfo Deployment with a
 Kustomize override setting three replicas,
 a ClusterIP Service on port 9898, and the `flux-demo` namespace. Its root
-[kustomization.yaml](gitops/kustomization.yaml) includes both `infra` and `apps`,
+[kustomization.yaml](gitops/kustomize/kustomization.yaml) includes both `infra` and `apps`,
 so they are reconciled by the `apps` Flux Kustomization. KubePlay is separate and
 is enabled with `bash deploy.sh --demo helm`, as described below.
 
@@ -307,12 +309,14 @@ this repository, set these values in your ignored Terraform variables file:
 ```hcl
 git_repository_url = "https://github.com/YOUR-ACCOUNT/Code-Snippets.git"
 git_branch         = "main"
-gitops_path        = "./AKS-Flux-Extension/gitops"
+gitops_path        = "./AKS-Flux-Extension/gitops/kustomize"
 ```
 
 Alternatively, place the entire `gitops` directory in your separate application
-repository and set `gitops_path = "./gitops"`. Select the root directory, not only
-`gitops/apps`, so Flux also creates the namespace. Use your published feature branch
+repository and set `gitops_path = "./gitops/kustomize"`. Select the demo directory, not only
+`gitops/kustomize/apps`, so Flux also creates the namespace. The original `./gitops`
+path remains a compatibility entry point that includes only `kustomize`, never Helm.
+Use your published feature branch
 in `git_branch` if the files are not yet available on `main`.
 
 After deployment, with the AKS context selected:
@@ -326,9 +330,9 @@ kubectl port-forward -n flux-demo service/podinfo 9898:9898
 Open <http://localhost:9898> while the port-forward is running. For the Git-change
 and drift walkthroughs below, use `APP_NAMESPACE="flux-demo"` and
 `APP_DEPLOYMENT="podinfo"`. Change `replicas[].count` in
-[gitops/apps/kustomization.yaml](gitops/apps/kustomization.yaml) to adjust the replica
+[gitops/kustomize/apps/kustomization.yaml](gitops/kustomize/apps/kustomization.yaml) to adjust the replica
 count; this overrides `spec.replicas` in the Deployment manifest. Change
-`PODINFO_UI_MESSAGE` in [gitops/apps/deployment.yaml](gitops/apps/deployment.yaml)
+`PODINFO_UI_MESSAGE` in [gitops/kustomize/apps/deployment.yaml](gitops/kustomize/apps/deployment.yaml)
 to update the message. Publish changes to the configured Git source. No public
 application endpoint is created by this sample.
 
@@ -708,6 +712,7 @@ bash test-deploy.sh
 terraform -chdir=terraform test
 yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' gitops
 kubectl kustomize gitops
+kubectl kustomize gitops/kustomize
 kubectl kustomize gitops/helm
 ```
 
