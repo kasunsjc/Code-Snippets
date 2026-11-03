@@ -1,6 +1,6 @@
 # Reconcile the Helm lesson independently using the shared cluster and extension.
 resource "azurerm_kubernetes_flux_configuration" "kubeplay" {
-  count                             = var.gitops_helm_path == null ? 0 : 1
+  count                             = contains(var.enabled_demos, "helm") ? 1 : 0
   name                              = "helm-demo-config"
   cluster_id                        = azurerm_kubernetes_cluster.this.id
   namespace                         = "helm-demo-config"
@@ -25,4 +25,11 @@ resource "azurerm_kubernetes_flux_configuration" "kubeplay" {
   }
 
   depends_on = [azurerm_kubernetes_cluster_extension.flux]
+
+  lifecycle {
+    precondition {
+      condition     = var.git_repository_url != "" && var.gitops_helm_path != null
+      error_message = "The Helm demo requires git_repository_url and a non-null gitops_helm_path."
+    }
+  }
 }

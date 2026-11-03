@@ -29,7 +29,7 @@ The Helm lesson adds its own configuration; it does not replace the first lesson
 ### Setup Once
 
 1. Follow [Configure And Deploy](#2-configure-and-deploy) with the example
-   Terraform variables. Leave `gitops_helm_path` unset for the foundation article.
+   Terraform variables. Use `bash deploy.sh --demo kustomize` for the foundation article.
 2. Verify Podinfo reconciliation using [the bundled sample](#use-the-bundled-sample).
 3. Keep the same Terraform directory, state, AKS cluster, and managed extension
    for subsequent lessons. Terraform loads all `.tf` files in this directory;
@@ -46,7 +46,7 @@ can then concentrate on its source and release.
 
 - **Kustomize:** change Podinfo's replica override or UI message in
   [gitops/apps](gitops/apps), publish the change, and observe `cluster-config-apps`.
-- **Helm:** enable `gitops_helm_path`, then follow
+- **Helm:** run `bash deploy.sh --demo helm`, then follow
   [Deploy A Helm Chart From Another Repository](#deploy-a-helm-chart-from-another-repository).
   Focus on [gitrepository.yaml](gitops/helm/gitrepository.yaml) and
   [helmrelease.yaml](gitops/helm/helmrelease.yaml), change `ui.title`, publish,
@@ -61,9 +61,12 @@ or let two configurations reconcile the same objects.
 
 ### Remove A Lesson, Not The Shared Cluster
 
-To disable the Helm lesson, set `gitops_helm_path = null` in your ignored variables
-file. Run `terraform -chdir=terraform plan`, review that only the Helm configuration
-is being removed, then run `terraform -chdir=terraform apply`.
+To deliberately remove the Helm lesson while retaining Kustomize, run
+`terraform -chdir=terraform plan -var='enabled_demos=["kustomize"]'`, review that
+only the Helm configuration is being removed, then run
+`terraform -chdir=terraform apply -var='enabled_demos=["kustomize"]'`.
+To remove Kustomize instead, use `enabled_demos=["helm"]`; an empty list removes
+both configurations but retains the cluster and extension.
 Pruning removes the Helm resources and `kubeplay-helm` namespace, including its
 demo data; confirm the uninstall and check for retained volumes afterward.
 The Kustomize foundation and managed extension remain.
@@ -119,7 +122,7 @@ flowchart TB
 1. Terraform creates the resource group and managed-identity AKS cluster.
 2. Terraform installs the managed `microsoft.flux` extension on the Stable train.
    No version is pinned, allowing Azure's extension auto-upgrade behavior.
-3. Terraform creates `cluster-config` after the extension. Azure's agents create
+3. Terraform creates the selected demo configurations after the extension. Azure's agents create
    the GitRepository and Flux Kustomization custom resources.
 4. The source controller polls the public Git repository over HTTPS every 60 seconds.
 5. The `apps` Kustomization reconciles the exact directory selected by `gitops_path`.
@@ -296,7 +299,7 @@ Kustomize override setting three replicas,
 a ClusterIP Service on port 9898, and the `flux-demo` namespace. Its root
 [kustomization.yaml](gitops/kustomization.yaml) includes both `infra` and `apps`,
 so they are reconciled by the `apps` Flux Kustomization. KubePlay is separate and
-is enabled with `gitops_helm_path`, as described below.
+is enabled with `bash deploy.sh --demo helm`, as described below.
 
 Publish these files to your public repository and branch first. To use a fork of
 this repository, set these values in your ignored Terraform variables file:
@@ -380,12 +383,14 @@ curl --fail --silent --show-error --user-agent 'Mozilla/5.0' http://localhost:98
 The [gitops/helm](gitops/helm) directory deploys the KubePlay chart from
 [kasunsjc/k8s-demo-sample-app](https://github.com/kasunsjc/k8s-demo-sample-app)
 (`deploy/helm/kubeplay`). The managed extension already includes `source-controller`
-and `helm-controller`. Enable a separate Azure Flux configuration by adding this to your
-ignored Terraform variables file, then running `bash deploy.sh`:
+and `helm-controller`. Enable its separate Azure Flux configuration with:
 
-```hcl
-gitops_helm_path = "./AKS-Flux-Extension/gitops/helm"
+```bash
+bash deploy.sh --demo helm
 ```
+
+The default Helm path is `./AKS-Flux-Extension/gitops/helm`; override
+`gitops_helm_path` in your ignored variables file only for a different repository layout.
 
 Both configurations refer to the same configured Git repository and branch, but
 appear as separate rows in the Azure portal's **GitOps** configuration list:
@@ -398,7 +403,8 @@ appear as separate rows in the Azure portal's **GitOps** configuration list:
 Neither configuration depends on the other, so a failed Helm release does not block
 Podinfo reconciliation or make `cluster-config` non-compliant.
 `cluster-config` is the Azure Flux configuration and source namespace, not an application.
-Leave `gitops_helm_path` unset to deploy only the basic Kustomize sample.
+Use `--demo kustomize` on a fresh setup to deploy only the basic Kustomize sample,
+or `--demo helm` for Helm only.
 
 The Helm path contains these Flux resources:
 
@@ -453,7 +459,6 @@ app routing add-on is not enabled.
 
 ```bash
 kubectl get gitrepositories,helmreleases -n kubeplay-helm
-kubectl get kustomizations -n cluster-config
 kubectl get gitrepositories,kustomizations -n helm-demo-config
 kubectl wait --for=condition=Ready helmrelease/helm-demo-kubeplay -n kubeplay-helm --timeout=600s
 kubectl port-forward -n kubeplay-helm service/ui-gateway 8080:80
@@ -505,9 +510,38 @@ exist. Set `kubernetes_version` only if you need a particular supported version;
 otherwise AKS selects its regional default.
 
 ```bash
-bash deploy.sh
+bash deploy.sh --demo kustomize
 kubectl config current-context
 ```
+
+### Choose The Demo
+
+```bash
+bash deploy.sh --demo setup       # Shared AKS cluster and Flux extension only
+bash deploy.sh --demo kustomize   # Shared infrastructure + basic Git/Kustomize demo
+bash deploy.sh --demo helm        # Shared infrastructure + Helm chart-in-Git demo
+bash deploy.sh --demo all         # Shared infrastructure + both demos
+```
+
+No argument defaults to `kustomize`, preserving the first article's command.
+You can start directly with Helm; you do not need to deploy Kustomize first.
+All modes reuse the same Terraform state and shared infrastructure.
+`setup` does not require a Git URL when neither demo exists.
+
+Selections are **additive**: the script reads existing Flux configuration resources
+from Terraform state and keeps those demos enabled. Running Helm after Kustomize
+retains both; running `setup` later does not remove either. State-read errors stop
+deployment rather than treating an unreadable state as an empty one.
+Only selected or already-deployed demos are provisioned; setting a GitOps path
+alone does not enable a demo.
+
+Additional Terraform apply options can follow the selection, for example
+`bash deploy.sh --demo helm -parallelism=2`. The script supplies `enabled_demos`
+itself, so do not pass it as an override. For direct Terraform commands, always
+specify the complete desired `enabled_demos` list: Terraform's default is only
+Kustomize and does not implement the script's additive behavior.
+Existing `cluster-config` state is automatically moved to its new indexed address
+without recreating the Azure configuration.
 
 The script registers required resource providers, validates local files, and runs
 `terraform apply` with automatic plan approval; it does not pause to display the
@@ -549,6 +583,10 @@ kubectl get pods -n flux-system
 kubectl get gitrepositories.source.toolkit.fluxcd.io -n cluster-config
 kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n cluster-config
 ```
+
+These commands inspect the Kustomize demo. For Helm-only deployments, use
+`--name helm-demo-config` and `-n helm-demo-config` instead of `cluster-config`.
+For `--demo setup`, only the shared controllers in `flux-system` are installed.
 
 Expect the extension provisioning state to be `Succeeded`, the configuration to
 become `Compliant`, and the GitRepository and `apps` Flux Kustomization to report
@@ -664,9 +702,13 @@ cleanup. The group checks only cover the demo's two known resource groups.
 terraform -chdir=terraform fmt -check
 terraform -chdir=terraform init -backend=false -input=false
 terraform -chdir=terraform validate
-shellcheck -S warning -e SC2034,SC2046,SC2207 deploy.sh cleanup.sh
+shellcheck -S warning -e SC2034,SC2046,SC2207 deploy.sh cleanup.sh test-deploy.sh
+bash test-deploy.sh
+# Mock-provider plan tests require Terraform >= 1.7; no Azure access is used.
+terraform -chdir=terraform test
 yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' gitops
 kubectl kustomize gitops
+kubectl kustomize gitops/helm
 ```
 
 Validate your external application manifests in their own repository before
