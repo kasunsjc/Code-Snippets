@@ -5,7 +5,7 @@ Welcome to the **Code Snippets Repository**! This repository contains sample cod
 <!-- AUTO-GENERATED CONTENT BELOW - DO NOT EDIT MANUALLY -->
 <!-- Last updated by GitHub Actions -->
 
-> **26 examples** | Kubernetes: 19 | Docker: 4 | Azure: 1 | *Last Updated: October 2026*
+> **26 examples** | Kubernetes: 19 | Docker: 4 | Azure: 1 | *Last Updated: November 2026*
 
 ## 📝 Related Blog Posts
 
@@ -17,6 +17,7 @@ articles linked below.
 |---|---|
 | [Advanced Container Networking Services on AKS: X-Ray Vision and Kernel-Level Guardrails for Your Cluster Network](https://kasunrajapakse.me/blog/aks-advanced-container-networking-services/) | [AKS Advanced Container Networking Services (ACNS) with Cilium — Terraform](./AKS-ACNS-Cilium-Terraform/) |
 | [Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO](https://kasunrajapakse.me/blog/aks-argo-cd-extension-app-routing-entra-id-sso/) | [AKS Argo CD Extension with Microsoft Entra SSO](./AKS-ArgoCD-Extension/) |
+| [Getting started with the AKS Flux extension](https://kasunrajapakse.me/blog/flux-gitops-aks-extension-getting-started/) | [AKS Flux Extension Demo](./AKS-Flux-Extension/) |
 | [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |
 | [Monitoring Harbor with Azure Monitor and Azure Managed Grafana](https://kasunrajapakse.me/blog/monitor-harbor-azure-monitor-managed-grafana/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |
 | [Migrating AKS Ingress to Istio-Based Gateway API: Moving Beyond NGINX](https://kasunrajapakse.me/blog/aks-istio-gateway-api/) | [AKS Istio Gateway API Demo](./AKS-Istio-Gateway-API/) |
@@ -75,7 +76,7 @@ articles linked below.
 - **[AKS-Fleet-Manager-Demo](./AKS-Fleet-Manager-Demo/)** — A comprehensive demonstration of Azure Kubernetes Service (AKS) Fleet Manager capabilities, showcasing multi-cluster orchestration, resource propagation, and centralized management.
   - 📄 README: Yes | 📁 Files: 21
 - **[AKS-Flux-Extension](./AKS-Flux-Extension/)** — Configure AKS with the managed Flux extension and demonstrate GitOps reconciliation with Terraform.
-  - 📄 README: Yes | 📁 Files: 16
+  - 📄 README: Yes | 📁 Files: 26
 - **[AKS-Harbor-Registry-Demo](./AKS-Harbor-Registry-Demo/)** — A basic Harbor container registry install on AKS via Helm, with Terraform provisioning
   - 📄 README: Yes | 📁 Files: 18
 - **[AKS-Istio-Gateway-API](./AKS-Istio-Gateway-API/)** — > **Blog Reference:** [Announcing Gateway API support for App Routing (preview) — AKS Blog, March 2026](https://blog.aks.azure.com/2026/03/18/app-routing-gateway-api)
