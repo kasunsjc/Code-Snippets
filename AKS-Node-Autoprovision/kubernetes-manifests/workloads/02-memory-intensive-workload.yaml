@@ -1,0 +1,37 @@
+# Memory-hungry workload that requires the memory-optimized NodePool (E-family).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-intensive-demo
+  labels:
+    app: memory-intensive-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memory-intensive-demo
+  template:
+    metadata:
+      labels:
+        app: memory-intensive-demo
+    spec:
+      # Required to schedule onto the tainted memory-optimized NodePool.
+      tolerations:
+        - key: workload-type
+          operator: Equal
+          value: memory-optimized
+          effect: NoSchedule
+      nodeSelector:
+        karpenter.azure.com/sku-family: E
+      containers:
+        - name: memory-stress
+          image: polinux/stress
+          command: ["stress"]
+          args: ["--vm", "1", "--vm-bytes", "24G", "--vm-hang", "0"]
+          resources:
+            requests:
+              cpu: "2"
+              memory: 28Gi
+            limits:
+              cpu: "4"
+              memory: 30Gi
