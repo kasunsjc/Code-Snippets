@@ -1,0 +1,47 @@
+# Installs the chart from the GitRepository above. Values here override the chart's values.yaml.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: helm-demo-kubeplay
+  namespace: kubeplay-helm
+spec:
+  releaseName: helm-demo-kubeplay
+  serviceAccountName: helm-demo-deployer
+  interval: 5m
+  timeout: 10m
+  chart:
+    spec:
+      chart: ./deploy/helm/kubeplay
+      reconcileStrategy: Revision
+      sourceRef:
+        kind: GitRepository
+        name: helm-demo-chart
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+  values:
+    global:
+      # Images are public on Docker Hub as kasunsjc/kubeplay-<service>, so no registry prefix.
+      imageRegistry: ""
+      imageTag: "0.1.2"
+      imagePullPolicy: IfNotPresent
+    ui:
+      image: kasunsjc/kubeplay-ui-gateway
+      title: KubePlay via Flux
+    inspector:
+      image: kasunsjc/kubeplay-inspector-api
+      replicas: 3
+      hpa:
+        enabled: false
+    notes:
+      image: kasunsjc/kubeplay-notes-api
+    worker:
+      image: kasunsjc/kubeplay-worker
+    redis:
+      storage:
+        storageClass: managed-csi
+    ingress:
+      enabled: false

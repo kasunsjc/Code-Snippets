@@ -12,6 +12,84 @@ changes are pulled into AKS, and manual changes are corrected automatically.
 See [Architecture](#architecture) for the diagram, resource ownership, networking,
 and security trade-offs. No Azure resources are created until you run deployment.
 
+## Blog Series: One Cluster, Independent Lessons
+
+The foundation article,
+[Getting started with the AKS Flux extension](https://kasunrajapakse.me/blog/flux-gitops-aks-extension-getting-started/),
+uses `cluster-config` and the optional Podinfo sample. The Kustomize manifests now
+live at `gitops/kustomize`; update older examples to use that path.
+The Helm lesson adds its own configuration; it does not replace the first lesson.
+
+| Layer or lesson | Files | Azure configuration / source namespace | Application namespace |
+| --- | --- | --- | --- |
+| Shared foundation | [terraform/main.tf](terraform/main.tf) | Managed extension in `flux-system` | Shared AKS cluster |
+| Git + Kustomize | [terraform/kustomize-demo.tf](terraform/kustomize-demo.tf), [gitops/kustomize/apps](gitops/kustomize/apps), [gitops/kustomize/infra](gitops/kustomize/infra) | `cluster-config` | `flux-demo` |
+| Helm chart in Git | [terraform/helm-demo.tf](terraform/helm-demo.tf), [gitops/helm](gitops/helm) | `helm-demo-config` | `kubeplay-helm` |
+
+### Setup Once
+
+1. Follow [Configure And Deploy](#2-configure-and-deploy) with the example
+   Terraform variables. Use `bash deploy.sh --demo kustomize` for the foundation article.
+2. Verify Podinfo reconciliation using [the bundled sample](#use-the-bundled-sample).
+3. Keep the same Terraform directory, state, AKS cluster, and managed extension
+   for subsequent lessons. Terraform loads all `.tf` files in this directory;
+   splitting the files does not create separate infrastructure stacks.
+
+The application namespace and deployment permissions are prerequisites, not the
+Helm lesson itself. [gitops/helm/prerequisites](gitops/helm/prerequisites) contains
+the namespace, service account, Role, and RoleBinding. Its parent Kustomize
+definition includes them automatically, so there is no separate manual RBAC step.
+Explain this Azure-managed Flux impersonation requirement once; the Helm lesson
+can then concentrate on its source and release.
+
+### Demonstrate One Concept At A Time
+
+- **Kustomize:** change Podinfo's replica override or UI message in
+  [gitops/kustomize/apps](gitops/kustomize/apps), publish the change, and observe `cluster-config-apps`.
+- **Helm:** run `bash deploy.sh --demo helm`, then follow
+  [Deploy A Helm Chart From Another Repository](#deploy-a-helm-chart-from-another-repository).
+  Focus on [gitrepository.yaml](gitops/helm/gitrepository.yaml) and
+  [helmrelease.yaml](gitops/helm/helmrelease.yaml), change `ui.title`, publish,
+  and observe the release revision.
+
+Both demos reconcile independently and appear as separate Azure portal entries.
+The Helm lesson currently teaches **a chart stored in Git**, not a published HTTP
+`HelmRepository`. Keep a future Helm repository, Blob, or OCI lesson in its own
+GitOps directory, Azure configuration, configuration namespace, and application
+namespace. Give each its own prerequisites; do not share an application namespace
+or let two configurations reconcile the same objects.
+
+### Remove A Lesson, Not The Shared Cluster
+
+To deliberately remove the Helm lesson while retaining Kustomize, first remove
+`helmrelease.yaml` from the resources in `gitops/helm/kustomization.yaml` and publish
+the change. Keep the GitRepository and `prerequisites` deployed while the release
+uninstalls:
+
+```bash
+kubectl wait --for=delete helmrelease/helm-demo-kubeplay -n kubeplay-helm --timeout=600s
+```
+
+After that succeeds, export the subscription ID and remove the Helm configuration:
+
+```bash
+export ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
+terraform -chdir=terraform plan -var='enabled_demos=["kustomize"]'
+terraform -chdir=terraform apply -var='enabled_demos=["kustomize"]'
+```
+
+Review the plan to confirm only the Helm configuration is being removed. For direct
+Terraform commands below, export `ARM_SUBSCRIPTION_ID` in the same shell first.
+To remove Kustomize instead, use `enabled_demos=["helm"]`; an empty list removes
+both configurations but retains the cluster and extension.
+Pruning removes the Helm resources and `kubeplay-helm` namespace, including its
+demo data; confirm the uninstall and check for retained volumes afterward.
+The Kustomize foundation and managed extension remain.
+
+Do **not** use [cleanup.sh](cleanup.sh) between lessons: it destroys the whole
+cluster, including any additional Flux demos you have installed. Reserve it for
+the end of the series. Do not remove individual Terraform files to disable demos.
+
 ## Architecture
 
 The demo separates infrastructure ownership (Terraform) from continuous workload
@@ -59,14 +137,17 @@ flowchart TB
 1. Terraform creates the resource group and managed-identity AKS cluster.
 2. Terraform installs the managed `microsoft.flux` extension on the Stable train.
    No version is pinned, allowing Azure's extension auto-upgrade behavior.
-3. Terraform creates `cluster-config` after the extension. Azure's agents create
+3. Terraform creates the selected demo configurations after the extension. Azure's agents create
    the GitRepository and Flux Kustomization custom resources.
 4. The source controller polls the public Git repository over HTTPS every 60 seconds.
 5. The `apps` Kustomization reconciles the exact directory selected by `gitops_path`.
+   An optional separate Azure Flux configuration, `helm-demo-config`, reconciles
+   `gitops_helm_path` through its own `helm` Kustomization.
    Namespaces and prerequisites must be included in that configuration or already
    exist. This demo does not require an `infra/apps` layout in the external repo.
-6. Failed reconciliation retries every 30 seconds; the Kustomization has a
-   five-minute timeout. The deployment script displays status without assuming
+6. Failed reconciliation retries every 30 seconds; the basic Kustomization has a
+   five-minute timeout and the optional Helm path has a ten-minute timeout.
+   The deployment script displays status without assuming
    a particular application or waiting for its rollout.
 7. Flux regularly corrects drift and prunes resources removed from the source.
    Controllers and Azure agents report their status independently of Terraform.
@@ -81,10 +162,10 @@ from self-managed Flux installation.
 
 | Owner | Resources |
 | --- | --- |
-| Terraform | Resource group, AKS, Flux extension, Azure Flux configuration. |
+| Terraform | Resource group, AKS, Flux extension, independent Azure Flux configurations. |
 | AKS | Node resource group, node VMs, disks and cluster networking. |
 | Managed extension | Flux controllers and Azure configuration agents in `flux-system`. |
-| Azure configuration agents | GitRepository and Flux Kustomizations in `cluster-config`. |
+| Azure configuration agents | GitRepository and Flux Kustomizations in `cluster-config` and, when enabled, `helm-demo-config`. |
 | External application Git repository and Flux | Resources declared at the selected Git path. |
 
 Terraform's explicit dependency ensures the configuration is destroyed before
@@ -146,25 +227,36 @@ AKS-Flux-Extension/
   deploy.sh
   cleanup.sh
   gitops/
-    kustomization.yaml
-    infra/
+    kustomize/
       kustomization.yaml
-      namespace.yaml
-    apps/
+      infra/
+        kustomization.yaml
+        namespace.yaml
+      apps/
+        kustomization.yaml
+        deployment.yaml
+        service.yaml
+    helm/
       kustomization.yaml
-      deployment.yaml
-      service.yaml
+      gitrepository.yaml
+      helmrelease.yaml
+      prerequisites/
+        kustomization.yaml
+        namespace.yaml
+        rbac.yaml
   terraform/
     versions.tf
     variables.tf
     main.tf
+    kustomize-demo.tf
+    helm-demo.tf
     outputs.tf
     terraform.tfvars.example
 ```
 
 ## Prerequisites
 
-- Azure CLI, Terraform >= 1.6, kubectl, Git, and jq for cleanup.
+- Azure CLI, Terraform >= 1.7, kubectl, Git, and jq for cleanup.
 - An Azure subscription with permission to create resource groups, AKS, and
   `Microsoft.KubernetesConfiguration/extensions` and `fluxConfigurations` resources.
   Provider registration also requires subscription-level permission; ask an
@@ -218,11 +310,12 @@ Keep local Terraform settings and state out of Git.
 
 ### Use The Bundled Sample
 
-The optional [gitops](gitops) directory contains a Podinfo Deployment with a
+The optional [gitops/kustomize](gitops/kustomize) directory contains a Podinfo Deployment with a
 Kustomize override setting three replicas,
 a ClusterIP Service on port 9898, and the `flux-demo` namespace. Its root
-[kustomization.yaml](gitops/kustomization.yaml) includes both `infra` and `apps`,
-so they are reconciled by the existing single `apps` Flux Kustomization.
+[kustomization.yaml](gitops/kustomize/kustomization.yaml) includes both `infra` and `apps`,
+so they are reconciled by the `apps` Flux Kustomization. KubePlay is separate and
+is enabled with `bash deploy.sh --demo helm`, as described below.
 
 Publish these files to your public repository and branch first. To use a fork of
 this repository, set these values in your ignored Terraform variables file:
@@ -230,15 +323,17 @@ this repository, set these values in your ignored Terraform variables file:
 ```hcl
 git_repository_url = "https://github.com/YOUR-ACCOUNT/Code-Snippets.git"
 git_branch         = "main"
-gitops_path        = "./AKS-Flux-Extension/gitops"
+gitops_path        = "./AKS-Flux-Extension/gitops/kustomize"
 ```
 
 Alternatively, place the entire `gitops` directory in your separate application
-repository and set `gitops_path = "./gitops"`. Select the root directory, not only
-`gitops/apps`, so Flux also creates the namespace. Use your published feature branch
+repository and set `gitops_path = "./gitops/kustomize"`. Select the demo directory, not only
+`gitops/kustomize/apps`, so Flux also creates the namespace. Do not select `gitops`
+itself: each demo has its own entry point and there is no shared root Kustomization.
+Use your published feature branch
 in `git_branch` if the files are not yet available on `main`.
 
-After deployment, with the demo's `KUBECONFIG` exported:
+After deployment, with the AKS context selected:
 
 ```bash
 kubectl wait --for=create deployment/podinfo -n flux-demo --timeout=600s
@@ -249,9 +344,9 @@ kubectl port-forward -n flux-demo service/podinfo 9898:9898
 Open <http://localhost:9898> while the port-forward is running. For the Git-change
 and drift walkthroughs below, use `APP_NAMESPACE="flux-demo"` and
 `APP_DEPLOYMENT="podinfo"`. Change `replicas[].count` in
-[gitops/apps/kustomization.yaml](gitops/apps/kustomization.yaml) to adjust the replica
+[gitops/kustomize/apps/kustomization.yaml](gitops/kustomize/apps/kustomization.yaml) to adjust the replica
 count; this overrides `spec.replicas` in the Deployment manifest. Change
-`PODINFO_UI_MESSAGE` in [gitops/apps/deployment.yaml](gitops/apps/deployment.yaml)
+`PODINFO_UI_MESSAGE` in [gitops/kustomize/apps/deployment.yaml](gitops/kustomize/apps/deployment.yaml)
 to update the message. Publish changes to the configured Git source. No public
 application endpoint is created by this sample.
 
@@ -301,6 +396,110 @@ with the deployed image. To request the HTML response from the CLI instead:
 curl --fail --silent --show-error --user-agent 'Mozilla/5.0' http://localhost:9898/
 ```
 
+### Deploy A Helm Chart From Another Repository
+
+The [gitops/helm](gitops/helm) directory deploys the KubePlay chart from
+[kasunsjc/k8s-demo-sample-app](https://github.com/kasunsjc/k8s-demo-sample-app)
+(`deploy/helm/kubeplay`). The managed extension already includes `source-controller`
+and `helm-controller`. Enable its separate Azure Flux configuration with:
+
+```bash
+bash deploy.sh --demo helm
+```
+
+The default Helm path is `./AKS-Flux-Extension/gitops/helm`; override
+`gitops_helm_path` in your ignored variables file only for a different repository layout.
+
+Both configurations refer to the same configured Git repository and branch, but
+appear as separate rows in the Azure portal's **GitOps** configuration list:
+
+| Azure Flux configuration | Flux Kustomization | Application | Delivery |
+| --- | --- | --- | --- |
+| `cluster-config` | `cluster-config-apps` in `cluster-config` | Podinfo in `flux-demo` | Plain Kustomize resources at `gitops_path` |
+| `helm-demo-config` | `helm-demo-config-helm` in `helm-demo-config` | KubePlay in `kubeplay-helm` | GitRepository and HelmRelease at `gitops_helm_path` |
+
+Neither configuration depends on the other, so a failed Helm release does not block
+Podinfo reconciliation or make `cluster-config` non-compliant.
+`cluster-config` is the Azure Flux configuration and source namespace, not an application.
+Use `--demo kustomize` on a fresh setup to deploy only the basic Kustomize sample,
+or `--demo helm` for Helm only.
+
+The Helm path contains these Flux resources:
+
+1. A `GitRepository` (`helm-demo-chart`) clones the chart repository.
+2. A `HelmRelease` (`helm-demo-kubeplay`) builds the chart from the Git path and
+   installs the `helm-demo-kubeplay` release into the `kubeplay-helm` namespace,
+   with values set inline in
+   [helmrelease.yaml](gitops/helm/helmrelease.yaml).
+
+The release explicitly uses the `helm-demo-deployer` service account defined in
+[rbac.yaml](gitops/helm/prerequisites/rbac.yaml). Its Role and RoleBinding allow Helm to manage
+release Secrets and the chart's resource types only within `kubeplay-helm`, without
+cluster-wide permissions. The managed extension otherwise defaults to a
+`flux-applier` service account in the HelmRelease's namespace; the account created
+for `helm-demo-config` does not grant access to an account in `kubeplay-helm`.
+Keep the Role's resource list in sync when adding new resource types to the chart.
+
+> **Why are a service account and RBAC needed here?**
+> In this managed-extension setup, the Helm controller is configured with
+> `--default-service-account=flux-applier`. It impersonates a service account in
+> the HelmRelease's namespace instead of using its own controller permissions.
+> Service accounts with the same name in different namespaces are different
+> identities: permissions for `helm-demo-config/flux-applier` do not authorize
+> `kubeplay-helm/flux-applier`.
+>
+> This demo explicitly selects `helm-demo-deployer` with
+> `spec.serviceAccountName`. The ServiceAccount supplies the identity, the Role
+> grants namespace-scoped permissions, and the RoleBinding connects them.
+> Helm needs access to Secrets to store release history, plus permission to
+> manage the chart's resources. Without these permissions, installation can
+> fail with `secrets is forbidden` before any application pods are created.
+>
+> With a typical OSS Flux installation, the Helm controller's own service
+> account already has broad permissions, so separate per-release RBAC may not
+> be necessary. OSS Flux also supports restricted service-account impersonation.
+> This distinction is about controller configuration, not the chart source:
+> switching from `GitRepository` to `HelmRepository` does not remove the need
+> for deployment permissions. The [prerequisites](gitops/helm/prerequisites)
+> are included automatically; no manual RBAC command is needed for this demo.
+
+All demo-owned Flux identities use the `helm-demo` prefix. The configuration
+namespace (`helm-demo-config`) and application namespace (`kubeplay-helm`) isolate this
+demo from future Blob, OCI, or other Flux demonstrations on the same cluster.
+Chart-internal names such as `redis` and `ui-gateway` remain unchanged inside the
+application namespace to preserve service discovery. The managed `flux-system`
+controllers and AKS infrastructure are shared, not owned by this individual demo.
+
+The chart's images are pulled from Docker Hub (`kasunsjc/kubeplay-<service>:0.1.2`), so no
+container registry needs to be attached to the cluster. `helmrelease.yaml` overrides each
+service's `image` value to match those repository names. Ingress is disabled because the
+app routing add-on is not enabled.
+
+```bash
+kubectl get gitrepositories,helmreleases -n kubeplay-helm
+kubectl get gitrepositories,kustomizations -n helm-demo-config
+kubectl wait --for=condition=Ready helmrelease/helm-demo-kubeplay -n kubeplay-helm --timeout=600s
+kubectl port-forward -n kubeplay-helm service/ui-gateway 8080:80
+```
+
+Check the service name and port with `kubectl get svc -n kubeplay-helm`. To demonstrate
+GitOps for Helm, change a value such as `ui.title` or `inspector.replicas` in
+`helmrelease.yaml`, publish it, and watch the release upgrade. Chart changes pushed to
+the chart repository are picked up too (`reconcileStrategy: Revision`).
+
+This example uses a Helm chart stored in Git, not a published `HelmRepository`.
+Flux fetches the Git source, packages the chart as a `HelmChart`, and the Helm
+controller installs it through the `HelmRelease`. Docker Hub stores the application
+images; it is not the chart source.
+
+When migrating an existing combined setup, temporarily disable garbage collection
+on the old Kustomization in Terraform and apply that change first. Enable the
+separate Helm configuration and wait for it to become Ready. Then remove the Helm
+path from the old configuration (or `helm` from its root Kustomize resources) and
+wait for reconciliation before restoring garbage collection on any retained
+Kustomization. Disabling pruning during the handoff is important: overlapping
+reconciliations can reclaim ownership and otherwise uninstall the Helm release.
+
 ## 2. Configure And Deploy
 
 Run from the repository root:
@@ -329,17 +528,52 @@ exist. Set `kubernetes_version` only if you need a particular supported version;
 otherwise AKS selects its regional default.
 
 ```bash
-bash deploy.sh
-export KUBECONFIG="$PWD/kubeconfig"
+bash deploy.sh --demo kustomize
+kubectl config current-context
 ```
+
+### Choose The Demo
+
+```bash
+bash deploy.sh --demo setup       # Shared AKS cluster and Flux extension only
+bash deploy.sh --demo kustomize   # Shared infrastructure + basic Git/Kustomize demo
+bash deploy.sh --demo helm        # Shared infrastructure + Helm chart-in-Git demo
+bash deploy.sh --demo all         # Shared infrastructure + both demos
+```
+
+No argument defaults to `kustomize`, preserving the first article's command.
+You can start directly with Helm; you do not need to deploy Kustomize first.
+All modes reuse the same Terraform state and shared infrastructure.
+`setup` does not require a Git URL when neither demo exists.
+
+Selections are **additive**: the script reads existing Flux configuration resources
+from Terraform state and keeps those demos enabled. Running Helm after Kustomize
+retains both; running `setup` later does not remove either. State-read errors stop
+deployment rather than treating an unreadable state as an empty one.
+Only selected or already-deployed demos are provisioned; setting a GitOps path
+alone does not enable a demo.
+
+Additional Terraform apply options can follow the selection, for example
+`bash deploy.sh --demo helm -parallelism=2`. The script supplies `enabled_demos`
+itself, so do not pass it as an override. For direct Terraform commands, always
+specify the complete desired `enabled_demos` list: Terraform's default is only
+Kustomize and does not implement the script's additive behavior.
+Existing `cluster-config` state is automatically moved to its new indexed address
+without recreating the Azure configuration.
 
 The script registers required resource providers, validates local files, and runs
 `terraform apply` with automatic plan approval; it does not pause to display the
-plan for approval. Review your variables before running it. It then downloads a
-dedicated, gitignored kubeconfig and displays Flux source and reconciliation
+plan for approval. Review your variables before running it. It then merges AKS
+credentials into `~/.kube/config` (or the first file in an existing `KUBECONFIG`
+setting), selects the AKS context, and displays Flux source and reconciliation
 status. It does **not** validate remote application manifests or wait for a
 particular Deployment. It does not apply application manifests directly: only Flux
 deploys the workload.
+
+The selected context persists after the script exits; no manual export is needed.
+Existing contexts are retained. If you previously exported the demo-local
+`KUBECONFIG`, run `unset KUBECONFIG` before deployment to use `~/.kube/config`.
+Use the same `KUBECONFIG` setting for deployment and cleanup.
 
 Defaults create `rg-flux-demo`, `aks-flux-demo`, and `rg-flux-demo-nodes`.
 Provisioning typically takes several minutes. Initial reconciliation can take
@@ -367,6 +601,10 @@ kubectl get pods -n flux-system
 kubectl get gitrepositories.source.toolkit.fluxcd.io -n cluster-config
 kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n cluster-config
 ```
+
+These commands inspect the Kustomize demo. For Helm-only deployments, use
+`--name helm-demo-config` and `-n helm-demo-config` instead of `cluster-config`.
+For `--demo setup`, only the shared controllers in `flux-system` are installed.
 
 Expect the extension provisioning state to be `Succeeded`, the configuration to
 become `Compliant`, and the GitRepository and `apps` Flux Kustomization to report
@@ -454,18 +692,18 @@ uses the Free tier. Delete the demo when finished:
 
 ```bash
 bash cleanup.sh
-unset KUBECONFIG
 ```
 
 Type `destroy` to confirm cleanup. Terraform's destroy plan is then approved
 automatically, without a separate plan review prompt. Terraform deletes the Flux
 configuration before the extension, then the cluster and resource group. After a
 successful Terraform destroy, the script removes the demo cluster's context,
-cluster, and user entries from its dedicated `kubeconfig` file, but retains the file.
+cluster, and unreferenced user entries from the active kubeconfig, but retains the file
+and unrelated contexts.
 It verifies that both known resource groups are absent before removing local state
 and the `.terraform` provider directory. If destroy fails, the kubeconfig is left
 intact for investigation; if verification fails, it preserves state for retry. It
-does not modify your shared `~/.kube/config` or other kubeconfigs.
+only removes entries belonging to the destroyed demo; it does not delete shared kubeconfig files.
 
 Use the same subscription, variables and local state used for deployment. For an
 interrupted initial apply, `terraform destroy` also removes resources recorded in
@@ -482,9 +720,13 @@ cleanup. The group checks only cover the demo's two known resource groups.
 terraform -chdir=terraform fmt -check
 terraform -chdir=terraform init -backend=false -input=false
 terraform -chdir=terraform validate
-shellcheck -S warning -e SC2034,SC2046,SC2207 deploy.sh cleanup.sh
+shellcheck -S warning -e SC2034,SC2046,SC2207 deploy.sh cleanup.sh test-deploy.sh
+bash test-deploy.sh
+# Mock-provider plan tests require Terraform >= 1.7; no Azure access is used.
+terraform -chdir=terraform test
 yamllint -d '{extends: relaxed, rules: {line-length: {max: 200}}}' gitops
-kubectl kustomize gitops
+kubectl kustomize gitops/kustomize
+kubectl kustomize gitops/helm
 ```
 
 Validate your external application manifests in their own repository before

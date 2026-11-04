@@ -15,5 +15,15 @@ output "node_resource_group_name" {
 
 output "flux_configuration_name" {
   description = "Azure Flux configuration name."
-  value       = azurerm_kubernetes_flux_configuration.this.name
+  value       = contains(var.enabled_demos, "kustomize") ? azurerm_kubernetes_flux_configuration.this[0].name : ""
+}
+
+output "helm_flux_configuration_name" {
+  description = "Separate Azure Flux configuration for the Helm demo, when enabled."
+  value       = contains(var.enabled_demos, "helm") ? azurerm_kubernetes_flux_configuration.kubeplay[0].name : ""
+}
+
+output "enabled_demos" {
+  description = "Demo selection used by the last Terraform apply."
+  value       = var.enabled_demos
 }

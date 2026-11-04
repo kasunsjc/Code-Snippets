@@ -11,7 +11,8 @@ az account show --output none
 ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
 export ARM_SUBSCRIPTION_ID
 
-printf 'This destroys the demo AKS cluster, Flux configuration, extension and resource groups.\n'
+printf 'This destroys the shared AKS cluster, extension, resource groups, and ALL Flux demos on the cluster.\n'
+printf 'To remove one lesson, review a Terraform plan with an explicit enabled_demos selection instead.\n'
 read -r -p 'Type destroy to continue: ' confirmation
 [[ "$confirmation" == "destroy" ]] || { printf 'Cancelled.\n'; exit 0; }
 
@@ -22,15 +23,18 @@ CLUSTER_NAME="$(jq -r '.cluster_name.value // empty' <<< "$OUTPUTS")"
 NODE_RESOURCE_GROUP="$(jq -r '.node_resource_group_name.value // empty' <<< "$OUTPUTS")"
 terraform -chdir="$TF_DIR" destroy "$@" -auto-approve
 
-KUBECONFIG_PATH="${SCRIPT_DIR}/kubeconfig"
+KUBECONFIG_PATH="${KUBECONFIG:-${HOME}/.kube/config}"
+KUBECONFIG_PATH="${KUBECONFIG_PATH%%:*}"
 if [[ -f "$KUBECONFIG_PATH" && -n "$CLUSTER_NAME" ]] && command -v kubectl >/dev/null 2>&1; then
-  export KUBECONFIG="$KUBECONFIG_PATH"
   CONFIG="$(kubectl config view --raw -o json 2>/dev/null || true)"
   CONTEXT_DETAILS="$(jq -r --arg name "$CLUSTER_NAME" \
     '.contexts[]? | select(.name == $name) | [.context.cluster // "", .context.user // ""] | @tsv' \
     <<< "$CONFIG" 2>/dev/null || true)"
   if [[ -n "$CONTEXT_DETAILS" ]]; then
     IFS=$'\t' read -r CLUSTER_CONFIG_NAME USER_CONFIG_NAME <<< "$CONTEXT_DETAILS"
+    if [[ "$(jq -r '."current-context" // ""' <<< "$CONFIG")" == "$CLUSTER_NAME" ]]; then
+      kubectl config unset current-context
+    fi
     kubectl config delete-context "$CLUSTER_NAME" >/dev/null 2>&1 || true
     if [[ -n "$CLUSTER_CONFIG_NAME" ]] &&
       ! kubectl config view --raw -o json 2>/dev/null |

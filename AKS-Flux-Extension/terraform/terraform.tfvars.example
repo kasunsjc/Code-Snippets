@@ -3,6 +3,10 @@ project            = "flux"
 environment        = "demo"
 node_vm_size       = "Standard_D2s_v6"
 node_count         = 2
-git_repository_url = "https://github.com//YOUR-APP-REPO.git"
+git_repository_url = "https://github.com/YOUR-ACCOUNT/Code-Snippets.git"
 git_branch         = "main"
-gitops_path        = "./apps"
+gitops_path        = "./AKS-Flux-Extension/gitops/kustomize"
+
+# Select the lesson with deploy.sh --demo kustomize|helm|all|setup.
+# Override the Helm path only if your repository layout differs:
+# gitops_helm_path = "./AKS-Flux-Extension/gitops/helm"
