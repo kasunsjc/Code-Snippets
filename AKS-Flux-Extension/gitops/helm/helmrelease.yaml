@@ -34,6 +34,8 @@ spec:
     inspector:
       image: kasunsjc/kubeplay-inspector-api
       replicas: 3
+      hpa:
+        enabled: false
     notes:
       image: kasunsjc/kubeplay-notes-api
     worker:

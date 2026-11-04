@@ -61,10 +61,25 @@ or let two configurations reconcile the same objects.
 
 ### Remove A Lesson, Not The Shared Cluster
 
-To deliberately remove the Helm lesson while retaining Kustomize, run
-`terraform -chdir=terraform plan -var='enabled_demos=["kustomize"]'`, review that
-only the Helm configuration is being removed, then run
-`terraform -chdir=terraform apply -var='enabled_demos=["kustomize"]'`.
+To deliberately remove the Helm lesson while retaining Kustomize, first remove
+`helmrelease.yaml` from the resources in `gitops/helm/kustomization.yaml` and publish
+the change. Keep the GitRepository and `prerequisites` deployed while the release
+uninstalls:
+
+```bash
+kubectl wait --for=delete helmrelease/helm-demo-kubeplay -n kubeplay-helm --timeout=600s
+```
+
+After that succeeds, export the subscription ID and remove the Helm configuration:
+
+```bash
+export ARM_SUBSCRIPTION_ID="$(az account show --query id --output tsv)"
+terraform -chdir=terraform plan -var='enabled_demos=["kustomize"]'
+terraform -chdir=terraform apply -var='enabled_demos=["kustomize"]'
+```
+
+Review the plan to confirm only the Helm configuration is being removed. For direct
+Terraform commands below, export `ARM_SUBSCRIPTION_ID` in the same shell first.
 To remove Kustomize instead, use `enabled_demos=["helm"]`; an empty list removes
 both configurations but retains the cluster and extension.
 Pruning removes the Helm resources and `kubeplay-helm` namespace, including its
@@ -241,7 +256,7 @@ AKS-Flux-Extension/
 
 ## Prerequisites
 
-- Azure CLI, Terraform >= 1.6, kubectl, Git, and jq for cleanup.
+- Azure CLI, Terraform >= 1.7, kubectl, Git, and jq for cleanup.
 - An Azure subscription with permission to create resource groups, AKS, and
   `Microsoft.KubernetesConfiguration/extensions` and `fluxConfigurations` resources.
   Provider registration also requires subscription-level permission; ask an

@@ -44,8 +44,8 @@ terraform -chdir="$TF_DIR" init -input=false
 terraform -chdir="$TF_DIR" fmt -check
 terraform -chdir="$TF_DIR" validate
 # Read resources rather than outputs so interrupted applies and older states are covered.
-STATE="$(terraform -chdir="$TF_DIR" show -json)"
-ENABLED_DEMOS="$(jq -cn --arg demo "$DEMO" --argjson state "$STATE" '
+ENABLED_DEMOS="$(terraform -chdir="$TF_DIR" show -json | jq -cn --arg demo "$DEMO" '
+  input as $state |
   [
     ($state.values.root_module.resources[]? |
       select(.type == "azurerm_kubernetes_flux_configuration") |

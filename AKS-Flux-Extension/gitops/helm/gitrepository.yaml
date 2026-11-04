@@ -9,7 +9,7 @@ spec:
   url: https://github.com/kasunsjc/k8s-demo-sample-app
   ref:
     branch: main
-  # Only trigger chart rebuilds when the chart directory changes.
+  # Include only the chart directory in the packaged artifact.
   ignore: |
     /*
     !/deploy/helm/kubeplay
