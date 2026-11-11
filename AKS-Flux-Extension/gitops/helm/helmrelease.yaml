@@ -30,10 +30,10 @@ spec:
       imagePullPolicy: IfNotPresent
     ui:
       image: kasunsjc/kubeplay-ui-gateway
-      title: KubePlay via Flux
+      title: KubePlay via Flux Helm
     inspector:
       image: kasunsjc/kubeplay-inspector-api
-      replicas: 3
+      replicas: 4
       hpa:
         enabled: false
     notes:
