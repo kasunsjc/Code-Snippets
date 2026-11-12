@@ -487,6 +487,18 @@ GitOps for Helm, change a value such as `ui.title` or `inspector.replicas` in
 `helmrelease.yaml`, publish it, and watch the release upgrade. Chart changes pushed to
 the chart repository are picked up too (`reconcileStrategy: Revision`).
 
+Helm drift detection is enabled: Flux checks the installed resources against the
+stored Helm release manifest and corrects manual changes. For example, scale the
+`inspector-api` Deployment to one replica and watch Flux restore the declared count:
+
+```bash
+kubectl scale deployment/inspector-api -n kubeplay-helm --replicas=1
+kubectl get deployment inspector-api -n kubeplay-helm --watch
+```
+
+The chart's inspector HPA is disabled in this demo so it does not conflict with
+drift correction of the replica count.
+
 This example uses a Helm chart stored in Git, not a published `HelmRepository`.
 Flux fetches the Git source, packages the chart as a `HelmChart`, and the Helm
 controller installs it through the `HelmRelease`. Docker Hub stores the application

@@ -9,6 +9,8 @@ spec:
   serviceAccountName: helm-demo-deployer
   interval: 5m
   timeout: 10m
+  driftDetection:
+    mode: enabled
   chart:
     spec:
       chart: ./deploy/helm/kubeplay
