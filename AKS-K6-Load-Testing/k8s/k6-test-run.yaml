@@ -1,0 +1,17 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: distributed-load-test
+  namespace: k6-demo
+spec:
+  parallelism: 4
+  runner:
+    env:
+      - name: TEST_TYPE
+        value: "load"
+      - name: BASE_URL
+        value: "https://httpbin.kasunrajapakse.xyz"
+  script:
+    configMap:
+      name: k6-test-script
+      file: test.js
