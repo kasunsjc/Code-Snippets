@@ -11,7 +11,8 @@ TEST_REPO="$TMP_DIR/repo"
 mkdir -p "$TEST_REPO/scripts" \
          "$TEST_REPO/AKS-ArgoCD-Extension" \
          "$TEST_REPO/AKS-Harbor-Registry-Demo" \
-         "$TEST_REPO/BYO-CNI-AKS"
+         "$TEST_REPO/BYO-CNI-AKS" \
+         "$TEST_REPO/New-Demo"
 
 cp "$REPO_ROOT/scripts/generate-readme.sh" "$TEST_REPO/scripts/generate-readme.sh"
 cp "$REPO_ROOT/scripts/generate_blog_mappings.py" "$TEST_REPO/scripts/generate_blog_mappings.py"
@@ -35,10 +36,15 @@ cat > "$TEST_REPO/AKS-Harbor-Registry-Demo/README.md" <<'EOF'
 - [Harbor Audit Logs duplicate](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/?utm=test#section)
 EOF
 
+cat > "$TEST_REPO/New-Demo/README.md" <<'EOF'
+A new demo README without an H1 heading.
+EOF
+
 bash "$TEST_REPO/scripts/generate-readme.sh"
 
 grep -Fq "Deploying the AKS Argo CD Extension with App Routing Ingress and Entra ID SSO" "$TEST_REPO/README.md"
 grep -Fq "[BYO CNI on AKS \\| with Cilium](./BYO-CNI-AKS/)" "$TEST_REPO/README.md"
+grep -Fq "| [New-Demo](./New-Demo/)" "$TEST_REPO/README.md"
 
 harbor_count="$(grep -Fc "| [Harbor Audit Logs in Azure Log Analytics: A Fluent Bit Bridge](https://kasunrajapakse.me/blog/harbor-audit-logs-azure-log-analytics/) | [Harbor on AKS — Terraform + Traefik + cert-manager + Azure DNS](./AKS-Harbor-Registry-Demo/) |" "$TEST_REPO/README.md")"
 if [[ "$harbor_count" -ne 1 ]]; then

@@ -1,0 +1,25 @@
+apiVersion: k6.io/v1alpha1
+kind: TestRun
+metadata:
+  name: httpbin-stress
+  namespace: k6-demo
+spec:
+  # The target rate is split across runners, so 2 runners each send half of PEAK_RPS.
+  parallelism: 2
+  runner:
+    env:
+      - name: BASE_URL
+        value: "https://httpbin.kasunrajapakse.xyz"
+      - name: PEAK_RPS
+        value: "300"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 512Mi
+  script:
+    configMap:
+      name: k6-stress-script
+      file: stress.js

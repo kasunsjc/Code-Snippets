@@ -1,0 +1,131 @@
+# ------------------------------------------------------------------------------
+# API server load generator
+# ------------------------------------------------------------------------------
+# Generates kube-apiserver and etcd traffic so the control plane dashboards have
+# something interesting to show. It uses curl with the pod's ServiceAccount
+# token to:
+#   - LIST pods across all namespaces (read path / apiserver cache)
+#   - CREATE + DELETE ConfigMaps (write path / etcd)
+#   - GET a resource that does not exist (404 response codes)
+#
+# Start:  kubectl apply -f k8s/apiserver-load-generator.yaml
+# Stop:   kubectl delete -f k8s/apiserver-load-generator.yaml
+# ------------------------------------------------------------------------------
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cp-metrics-demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: apiserver-load
+  namespace: cp-metrics-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cp-metrics-demo-pod-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cp-metrics-demo-pod-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cp-metrics-demo-pod-reader
+subjects:
+  - kind: ServiceAccount
+    name: apiserver-load
+    namespace: cp-metrics-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-writer
+  namespace: cp-metrics-demo
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: configmap-writer
+  namespace: cp-metrics-demo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: configmap-writer
+subjects:
+  - kind: ServiceAccount
+    name: apiserver-load
+    namespace: cp-metrics-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apiserver-load
+  namespace: cp-metrics-demo
+  labels:
+    app: apiserver-load
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: apiserver-load
+  template:
+    metadata:
+      labels:
+        app: apiserver-load
+    spec:
+      serviceAccountName: apiserver-load
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: load
+          image: curlimages/curl:8.11.1
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              SA=/var/run/secrets/kubernetes.io/serviceaccount
+              TOKEN=$(cat "$SA/token")
+              API=https://kubernetes.default.svc
+              NS=cp-metrics-demo
+              k() { curl -s -o /dev/null -w "%{http_code} " --cacert "$SA/ca.crt" -H "Authorization: Bearer $TOKEN" "$@"; }
+              echo "Generating API server load from $HOSTNAME..."
+              i=0
+              while true; do
+                i=$((i + 1))
+                name="load-$HOSTNAME-$i"
+                k "$API/api/v1/pods?limit=500"
+                k "$API/api/v1/namespaces/$NS/configmaps"
+                k -X POST -H "Content-Type: application/json" \
+                  -d "{\"apiVersion\":\"v1\",\"kind\":\"ConfigMap\",\"metadata\":{\"name\":\"$name\"},\"data\":{\"iteration\":\"$i\"}}" \
+                  "$API/api/v1/namespaces/$NS/configmaps"
+                k -X DELETE "$API/api/v1/namespaces/$NS/configmaps/$name"
+                k "$API/api/v1/namespaces/$NS/configmaps/does-not-exist"
+                echo ""
+                sleep 0.5
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
