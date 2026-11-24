@@ -9,8 +9,7 @@ A hands-on deep dive into the **Istio-based service mesh add-on for Azure Kubern
 > [Deploy the add-on](https://learn.microsoft.com/azure/aks/istio-deploy-addon) ·
 > [Upgrade the add-on](https://learn.microsoft.com/azure/aks/istio-upgrade) ·
 > [Performance & scaling](https://learn.microsoft.com/azure/aks/istio-scale) ·
-> [`azurerm_kubernetes_cluster` `service_mesh_profile`](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster) ·
-> [cert-manager Azure DNS solver](https://cert-manager.io/docs/configuration/acme/dns01/azuredns/)
+> [`azurerm_kubernetes_cluster` `service_mesh_profile`](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/kubernetes_cluster)
 
 ---
 
@@ -19,16 +18,12 @@ A hands-on deep dive into the **Istio-based service mesh add-on for Azure Kubern
 ```mermaid
 graph TB
     subgraph Azure["Azure Resource Group"]
-        subgraph AKS["AKS Cluster (service_mesh_profile.mode = Istio, Workload Identity)"]
+        subgraph AKS["AKS Cluster (service_mesh_profile.mode = Istio)"]
             subgraph MeshSys["aks-istio-system namespace"]
                 Istiod["istiod (control plane)<br/>revision: asm-X-Y"]
             end
             subgraph MeshIngress["aks-istio-ingress namespace"]
                 GW["aks-istio-ingressgateway-external<br/>(Envoy, HPA-managed)"]
-                TLSSecret["Secret: bookinfo-gateway-tls"]
-            end
-            subgraph CertMgrNs["cert-manager namespace"]
-                CertMgr["cert-manager<br/>(Workload Identity)"]
             end
             subgraph Default["default namespace (istio.io/rev=asm-X-Y label)"]
                 PP["productpage + sidecar"]
@@ -43,32 +38,26 @@ graph TB
         LAW["Log Analytics Workspace"]
         PROM["Azure Monitor workspace<br/>(managed Prometheus)"]
         GRAF["Azure Managed Grafana"]
-        DNS[("Azure DNS Zone<br/>(existing)")]
     end
 
-    Internet(("Client")) -->|"https://bookinfo.example.com"| DNS --> LB --> GW
-    GW -->|"Gateway + VirtualService"| PP
+    Internet(("Client")) -->|"http://<gateway-ip>"| LB --> GW
+    GW -->|"Gateway + VirtualService (optional lessons)"| PP
     PP --> RV1 & RV2 & RV3
     RV1 & RV2 & RV3 --> RT
     PP --> DT
     Istiod -.->|"mTLS certs + xDS config"| PP & RV1 & RV2 & RV3 & RT & DT & GW
-    CertMgr -->|"DNS-01 TXT record"| DNS
-    CertMgr -->|"issues"| TLSSecret
-    GW -.->|"SDS reads"| TLSSecret
     AKS -->|oms_agent| LAW
     AKS -->|monitor_metrics| PROM --> GRAF
 ```
 
 | Layer | What's provisioned | How |
 |---|---|---|
-| Resource group + AKS cluster | Azure CNI Overlay, standard LB, system node pool, OIDC issuer + Workload Identity enabled | Terraform (`terraform/main.tf`) |
-| **Istio add-on** | `istiod` control plane + external ingress gateway, via `service_mesh_profile { mode = "Istio" }` | Terraform |
+| Resource group + AKS cluster | Azure CNI Overlay, standard LB, system node pool | Terraform (`terraform/main.tf`) |
+| **Istio add-on** | `istiod` control plane + optional external ingress gateway, via `service_mesh_profile { mode = "Istio" }` | Terraform |
 | Observability (officially verified path) | Log Analytics, Azure Monitor managed Prometheus, Azure Managed Grafana | Terraform |
-| **TLS for the ingress gateway** | cert-manager (Workload Identity, no client secret) + a `ClusterIssuer` using the Azure DNS DNS-01 solver against your **existing** Azure DNS zone | Terraform (identity/RBAC) + `deploy.sh` (Helm install + `kubectl apply`) |
 | Sample mesh app | Istio's `bookinfo` app (productpage/details/reviews v1-v3/ratings) | `deploy.sh` (`kubectl apply` from the istio/istio release matching the installed revision) |
-| Traffic management | `DestinationRule` subsets, weighted/canary `VirtualService`, header-based routing, fault injection | `kubernetes-manifests/traffic-management/` |
-| Security | Mesh-wide strict mTLS (`PeerAuthentication`), identity-based `AuthorizationPolicy` | `kubernetes-manifests/security/` |
-| Ingress | Istio `Gateway` (HTTP→HTTPS redirect + TLS termination) + `VirtualService`, bound to the AKS-managed external ingress gateway, on your real Azure DNS hostname | `kubernetes-manifests/ingress/*.tpl` (rendered by `deploy.sh`) |
+| **Gateway lesson** | Public gateway IP only; no DNS, certificate, or app route is configured automatically | Apply the Istio `Gateway` and `VirtualService` separately from `kubernetes-manifests/ingress/` |
+| Traffic management and security | Optional, independent `DestinationRule`, `VirtualService`, `PeerAuthentication`, and `AuthorizationPolicy` examples | Apply the lesson manifests in `kubernetes-manifests/` as you reach them |
 
 ---
 
@@ -85,10 +74,7 @@ graph TB
 | **`istioctl` (optional)** | Only needed for advanced day-2 operations such as revision-tag based canary upgrades ([Upgrade the add-on](https://learn.microsoft.com/azure/aks/istio-upgrade)) — not required for this demo. |
 | **AKS cluster version >= 1.23** | Enforced by Terraform/AKS itself; `terraform.tfvars.example` defaults to a recent GA minor version. |
 | No **Open Service Mesh (OSM) add-on** and no **self-managed Istio install** already on the target cluster | The Istio add-on refuses to coexist with either — see [Limitations](#limitations-of-the-aks-istio-add-on). |
-| **Helm 3** | Installs cert-manager (not part of the Istio add-on itself). |
-| **`envsubst`** (part of `gettext`) | Renders the `.tpl` manifests (`kubernetes-manifests/**/*.tpl`) with Terraform outputs before `kubectl apply`. On macOS: `brew install gettext`. |
-| **An existing Azure DNS zone** already delegated to Azure DNS (e.g. `example.com`), plus its resource group | `deploy.sh` does **not** create the zone — only an A record for the sample app inside it, and a TXT record per DNS-01 challenge. Pass it via `dns_zone_name`/`dns_zone_resource_group` in `terraform.tfvars`. |
-| **A contact email** for Let's Encrypt (`acme_email` in `terraform.tfvars`) | Used for certificate expiry notices, not for login. |
+| DNS zone, domain, cert-manager, or Helm | Not required. The optional ingress lesson uses the external gateway's IP over HTTP and does not create DNS records or certificates. |
 
 ---
 
@@ -97,14 +83,15 @@ graph TB
 ```bash
 cd AKS-Istio-Service-Mesh-Demo
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-# edit terraform.tfvars: set dns_zone_name, dns_zone_resource_group, bookinfo_subdomain, acme_email
 az login
 ./deploy.sh
 ```
 
-`deploy.sh` runs `terraform apply` (creating the resource group, AKS cluster with the Istio add-on, the cert-manager Workload Identity/RBAC, and the observability stack), fetches credentials, installs cert-manager and a Let's Encrypt `ClusterIssuer` (Azure DNS DNS-01), waits for `istiod`, labels the `default` namespace for sidecar injection, deploys the `bookinfo` sample app, applies the baseline traffic-management/security manifests, then renders and applies the ingress `Gateway`/`VirtualService` for your real hostname, points your Azure DNS zone's A record at the gateway's public IP, and waits for the certificate to become `Ready`. It prints the HTTPS URL and the Azure Managed Grafana endpoint at the end.
+`deploy.sh` provisions AKS with the Istio add-on and observability stack, fetches credentials, labels the `default` namespace for sidecar injection, and deploys the `bookinfo` sample app. It does **not** apply any Gateway, VirtualService, traffic-management, or security policies: each concept is an opt-in lesson in the walkthrough below. The external gateway is enabled by default so the ingress lesson can use its public IP; no DNS record or TLS certificate is configured. Set `external_ingress_gateway_enabled = false` in `terraform.tfvars` if you do not want a public gateway.
 
-`dns_zone_name`, `dns_zone_resource_group`, and `acme_email` have no defaults and must be set in `terraform.tfvars` before the first apply. To further customize the deployment (region, node size, ingress gateway placement, a pinned Istio revision, etc.), edit the rest of `terraform/terraform.tfvars.example` as needed.
+To further customize the deployment (region, node size, ingress gateway placement, a pinned Istio revision, etc.), edit `terraform/terraform.tfvars` as needed.
+
+If upgrading a cluster deployed by an earlier version of this demo, run `./cleanup.sh` before deploying this version. That removes the old DNS record and cluster resources; also remove the obsolete DNS and Let's Encrypt entries from your existing `terraform.tfvars`.
 
 ---
 
@@ -121,8 +108,9 @@ Every manifest in `kubernetes-manifests/` demonstrates one specific Istio concep
 | 3c | Header-based routing | `virtualservice-user-routing.yaml` | Route specific users/cohorts to a specific version (dogfooding, beta rings) |
 | 3d | Fault injection | `virtualservice-fault-injection.yaml` | Chaos-test downstream latency/timeout handling without touching app code |
 | 4 | Identity-based authorization | `security/authorization-policy-ratings.yaml` | Zero-trust access control keyed on cryptographic workload identity (SPIFFE), not IP/network |
-| 5 | Ingress + TLS | `ingress/gateway.yaml.tpl` + `ingress/virtualservice-productpage.yaml.tpl` + cert-manager | Edge encryption terminated by the AKS-managed gateway, certificate lifecycle fully automated |
-| 6 | Observability | Azure Monitor managed Prometheus + Grafana (Terraform) | Golden-signal metrics (`istio_requests_total`, latency histograms) with zero app instrumentation |
+| 5a | Gateway listener | `ingress/gateway.yaml` | Opens an HTTP listener on the AKS-managed external gateway; does not define an application route |
+| 5b | VirtualService route | `ingress/virtualservice-productpage.yaml` | Attaches a route to the Gateway and sends `/productpage` traffic to Bookinfo |
+| 6 | Observability | `kubernetes-manifests/observability/istio-bookinfo-podmonitor.yaml` + `grafana/istio-service-mesh-dashboard.json` | Scrapes Istio pod metrics into Azure Managed Prometheus and visualizes request rate, 5xx rate, and p95 latency |
 
 ### 1. Sidecar injection — the data plane
 
@@ -130,33 +118,36 @@ Every manifest in `kubernetes-manifests/` demonstrates one specific Istio concep
 
 ```bash
 kubectl get pods -n aks-istio-system                  # istiod
-kubectl get pods -n aks-istio-ingress                  # external ingress gateway
+kubectl get pods -n aks-istio-ingress                  # external ingress gateway (if enabled)
 kubectl get pods -n default -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[*].name}{"\n"}{end}'
 ```
 
-**Expected result:** every `bookinfo` pod lists two containers (the app + `istio-proxy`). On Kubernetes 1.29+ revisions `istio-proxy` may instead run as a *native sidecar* `initContainer` — `kubectl describe pod <pod>` will show it either way, and `kubectl get pods` still reports `2/2 Running`.
+**Expected result:** every `bookinfo` pod lists the app plus an injected `istio-proxy`. On Kubernetes 1.29+ revisions `istio-proxy` may instead run as a *native sidecar* `initContainer` — `kubectl describe pod <pod>` will show it either way.
 
 ### 2. Mutual TLS — zero-trust transport security
 
-**What it demonstrates:** `deploy.sh` already applied `security/peer-authentication-strict.yaml`, putting the entire mesh in `STRICT` mTLS mode — every sidecar-to-sidecar connection must be mutually authenticated with certificates `istiod` issues and rotates automatically. There is no app-level TLS code anywhere in `bookinfo`.
+**What it demonstrates:** apply `security/peer-authentication-strict.yaml` to put the entire mesh in `STRICT` mTLS mode — every sidecar-to-sidecar connection must be mutually authenticated with certificates `istiod` issues and rotates automatically. There is no app-level TLS code anywhere in `bookinfo`.
 
-**Test it — prove plaintext traffic is rejected:** run a pod *without* a sidecar (skip injection with an annotation) in the same namespace, and try to call a mesh service directly:
+Apply the policy, then prove plaintext traffic is rejected by running a pod *without* a sidecar (skip injection with an annotation) in the same namespace and trying to call a mesh service directly:
 
 ```bash
+kubectl apply -f kubernetes-manifests/security/peer-authentication-strict.yaml
 kubectl run plaintext-test --image=curlimages/curl --restart=Never --rm -it \
   --annotations="sidecar.istio.io/inject=false" -n default -- \
   curl -sS --max-time 5 http://productpage:9080/productpage
 ```
 
-**Expected result:** the connection is reset (`curl: (56) Recv failure: Connection reset by peer` or similar) — `productpage`'s own sidecar refuses the plaintext handshake. Delete the `PeerAuthentication` (`kubectl delete peerauthentication default -n aks-istio-system`) and re-run the same command to see it succeed instead — then re-apply it to restore `STRICT` mode.
+**Expected result:** the connection is reset (`curl: (56) Recv failure: Connection reset by peer` or similar) — `productpage`'s own sidecar refuses the plaintext handshake. Delete the `PeerAuthentication` (`kubectl delete peerauthentication default -n aks-istio-system`) and re-run the same command to see it succeed instead.
 
 ### 3. Traffic management
 
-All four manifests act on the same `reviews` service; apply them **in order** to build up the story (each overwrites the previous `VirtualService`/`DestinationRule` object since they share the same `metadata.name`).
+The deterministic, canary, and header-routing lessons target the `reviews` service. The canary and header `VirtualService` objects replace the preceding `reviews` VirtualService. Fault injection is a separate lesson for the `ratings` service. Nothing in this section is applied during initial deployment.
 
-**3a. Deterministic routing (baseline).** By default, Kubernetes' `reviews` Service round-robins across *all* `v1`/`v2`/`v3` pods with no control over the mix. `destination-rule-reviews.yaml` defines named subsets by the `version` pod label; `virtualservice-all-v1.yaml` pins 100% of traffic to `v1` (no star ratings) — already applied by `deploy.sh`.
+**3a. Deterministic routing (baseline).** By default, Kubernetes' `reviews` Service round-robins across *all* `v1`/`v2`/`v3` pods with no control over the mix. `destination-rule-reviews.yaml` defines named subsets by the `version` pod label; `virtualservice-all-v1.yaml` pins 100% of traffic to `v1` (no star ratings).
 
 ```bash
+kubectl apply -f kubernetes-manifests/traffic-management/destination-rule-reviews.yaml
+kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-all-v1.yaml
 kubectl get destinationrule reviews -n default -o yaml
 kubectl get virtualservice reviews -n default -o yaml
 ```
@@ -167,11 +158,12 @@ kubectl get virtualservice reviews -n default -o yaml
 kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-canary-v3.yaml
 ```
 
-**Test it — prove the 90/10 split empirically** (re-run after logging into `https://<bookinfo_fqdn>/productpage` as any user, or via curl):
+**Test it — prove the 90/10 split empirically** (after applying the Gateway and VirtualService lessons in section 5):
 
 ```bash
+GATEWAY_IP=$(kubectl get svc aks-istio-ingressgateway-external -n aks-istio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 for i in $(seq 1 20); do
-  curl -s "https://$(terraform -chdir=terraform output -raw bookinfo_fqdn)/productpage" | grep -o 'color="[a-z]*"'
+  curl -s "http://${GATEWAY_IP}/productpage" | grep -o 'color="[a-z]*"'
 done | sort | uniq -c
 ```
 
@@ -186,14 +178,14 @@ kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-user-rou
 **Test it:** log into the web UI as user `jason` (any password) — you should always see `v2` (black stars); log in as anyone else (or stay logged out) and you always see `v1`. To test without a browser:
 
 ```bash
-FQDN=$(terraform -chdir=terraform output -raw bookinfo_fqdn)
+GATEWAY_IP=$(kubectl get svc aks-istio-ingressgateway-external -n aks-istio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 COOKIE_JAR=$(mktemp)
-curl -s -c "$COOKIE_JAR" -d "username=jason&password=x" "https://${FQDN}/login" >/dev/null
-curl -s -b "$COOKIE_JAR" "https://${FQDN}/productpage" | grep -o 'color="[a-z]*"'
+curl -s -c "$COOKIE_JAR" -d "username=jason&password=x" "http://${GATEWAY_IP}/login" >/dev/null
+curl -s -b "$COOKIE_JAR" "http://${GATEWAY_IP}/productpage" | grep -o 'color="[a-z]*"'
 # -> color="black" every time, regardless of how many times you repeat it
 ```
 
-**3d. Fault injection.** Injects a fixed 7s delay into calls to `ratings` — a chaos-engineering technique for validating that callers (timeouts, retries, circuit breakers, user-facing loading states) behave correctly under degraded dependencies, without touching any application code.
+**3d. Fault injection.** Injects a fixed 7s delay into calls to `ratings` — a chaos-engineering technique for validating that callers (timeouts, retries, circuit breakers, user-facing loading states) behave correctly under degraded dependencies, without touching any application code. This lesson creates its own `ratings` `DestinationRule` and `VirtualService`.
 
 > **Prerequisite:** `reviews-v1` never calls `ratings` at all (that's why it shows no stars), so the delay is invisible unless `jason` is routed to `v2`/`v3` first — apply **3c or 3b** before this step.
 
@@ -204,13 +196,15 @@ kubectl apply -f kubernetes-manifests/traffic-management/virtualservice-fault-in
 **Test it:**
 
 ```bash
-time curl -s -b "$COOKIE_JAR" "https://${FQDN}/productpage" >/dev/null
+time curl -s -b "$COOKIE_JAR" "http://${GATEWAY_IP}/productpage" >/dev/null
 # -> real  0m7.0xxs   (every other user is unaffected and returns immediately)
 ```
 
 ### 4. Authorization Policy — zero-trust identity-based access control
 
 **What it demonstrates:** with `STRICT` mTLS in place, Istio can enforce access control based on a workload's cryptographically-verified **identity** (its Kubernetes ServiceAccount, expressed as a SPIFFE principal) rather than IP address or network segment — the essence of zero-trust. `authorization-policy-ratings.yaml` allows only the `bookinfo-reviews` ServiceAccount to call `ratings`; everything else is denied by default once any `AuthorizationPolicy` selects a workload.
+
+**Prerequisite:** apply `security/peer-authentication-strict.yaml` from section 2 first.
 
 ```bash
 kubectl apply -f kubernetes-manifests/security/authorization-policy-ratings.yaml
@@ -221,42 +215,56 @@ kubectl run curl --image=curlimages/curl -n default --rm -it --restart=Never -- 
 # -> 403 RBAC: access denied
 
 # But the app still works end-to-end, because reviews (the allowed identity) still calls ratings on its behalf:
-curl -s "https://${FQDN}/productpage" -o /dev/null -w "%{http_code}\n"
+curl -s "http://${GATEWAY_IP}/productpage" -o /dev/null -w "%{http_code}\n"
 # -> 200
 ```
 
-### 5. Ingress — HTTPS via cert-manager + your Azure DNS zone
+### 5. Ingress — Gateway and VirtualService, one concept at a time
 
-**What it demonstrates:** edge encryption for the mesh's public entry point, with the entire certificate lifecycle (issuance, DNS-01 validation, renewal) automated — no manually-uploaded certs, no client secrets.
+This lesson uses the external gateway's public IP over HTTP. It does not configure a DNS name, TLS, or a certificate. Apply the two resources separately to see their distinct responsibilities.
 
-```bash
-curl -sv "https://$(terraform -chdir=terraform output -raw bookinfo_fqdn)/productpage" | head -n 5
-```
-
-What makes this work end to end:
-
-1. **Terraform** creates a user-assigned managed identity for cert-manager, a federated credential trusting the AKS cluster's OIDC issuer (Azure Workload Identity — no client secret), and grants it `DNS Zone Contributor` scoped to *only* your existing DNS zone (not the whole subscription/resource group).
-2. **`deploy.sh`** installs cert-manager via Helm with that identity's client ID annotated on its service account, applies a `letsencrypt-prod` `ClusterIssuer` configured with the [Azure DNS DNS-01 solver](https://cert-manager.io/docs/configuration/acme/dns01/azuredns/), and requests a `Certificate` for your hostname.
-3. cert-manager proves domain ownership by writing a `TXT` record into your Azure DNS zone, then writes the issued certificate into a `Secret` named `bookinfo-gateway-tls` **in the `aks-istio-ingress` namespace** — that's a hard requirement: the AKS-managed ingress gateway pods only read TLS secrets (via SDS) from their own pod namespace, regardless of which namespace the `Gateway` resource itself lives in.
-4. The rendered `Gateway` (`kubernetes-manifests/ingress/gateway.yaml.tpl`) terminates TLS on port 443 using `credentialName: bookinfo-gateway-tls` and redirects port 80 to HTTPS.
-5. `deploy.sh` also creates/updates an **A record** for your subdomain in the same Azure DNS zone, pointing at the ingress gateway's public IP.
-
-Check certificate status directly if needed:
+Get the gateway IP:
 
 ```bash
-kubectl get certificate bookinfo-gateway-tls -n aks-istio-ingress
-kubectl describe certificate bookinfo-gateway-tls -n aks-istio-ingress
+GATEWAY_IP=$(kubectl get svc aks-istio-ingressgateway-external -n aks-istio-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "$GATEWAY_IP"
 ```
 
-### 6. Observability
-
-**What it demonstrates:** Istio's sidecars emit golden-signal metrics (request volume, error rate, latency) for every service **automatically** — no app instrumentation. This demo wires up the path Microsoft explicitly verifies for the add-on — **Azure Monitor managed Prometheus + Azure Managed Grafana** (see [How is the add-on different from open-source Istio?](https://learn.microsoft.com/azure/aks/istio-about#how-is-the-add-on-different-from-open-source-istio)):
+**5a. Gateway — define the listener.** A Gateway configures the ports, protocols, and accepted hosts for an ingress proxy. It does not decide which application receives a request:
 
 ```bash
-terraform -chdir=terraform output grafana_endpoint
+kubectl apply -f kubernetes-manifests/ingress/gateway.yaml
+curl -i "http://${GATEWAY_IP}/productpage"
 ```
 
-Import Istio's official dashboards (control plane, mesh, service, workload — [istio.io/latest/docs/ops/integrations/grafana](https://istio.io/latest/docs/ops/integrations/grafana/)) into the Grafana workspace and query `istio_requests_total`, `istio_request_duration_milliseconds_bucket`, etc. — generate the traffic from sections 3-4 above first so there's something to see.
+At this point the request reaches the gateway, but there is no route to Bookinfo yet.
+
+**5b. VirtualService — define the route.** The VirtualService binds to `bookinfo-gateway`, matches the Bookinfo paths, and forwards them to the `productpage` service:
+
+```bash
+kubectl apply -f kubernetes-manifests/ingress/virtualservice-productpage.yaml
+curl -i "http://${GATEWAY_IP}/productpage"
+```
+
+The second request should return the Bookinfo page. The `*` host allows requests addressed directly to the IP, so no DNS record or `Host` override is needed.
+
+### 6. Observability — Azure Managed Prometheus + Grafana dashboard
+
+**What it demonstrates:** Istio proxies emit request and latency metrics without application instrumentation. Terraform provisions an Azure Monitor workspace for managed Prometheus, Azure Managed Grafana, the workspace integration, and the Grafana managed identity's `Monitoring Data Reader` role. The integration automatically adds the Prometheus data source to Grafana.
+
+When monitoring is enabled, Azure Monitor installs its `azmonitoring.coreos.com/v1` PodMonitor CRD. `deploy.sh` waits for that CRD and applies `kubernetes-manifests/observability/istio-bookinfo-podmonitor.yaml`, which selects the Bookinfo pods and scrapes the named `http-envoy-prom` endpoint while retaining Istio metrics. This uses Azure Monitor's managed PodMonitor API group, not the upstream Prometheus Operator group.
+
+Open the endpoint and import the included dashboard:
+
+```bash
+terraform -chdir=terraform output -raw grafana_endpoint
+```
+
+In Grafana, choose **Dashboards > New > Import**, upload [`grafana/istio-service-mesh-dashboard.json`](./grafana/istio-service-mesh-dashboard.json), and select the Prometheus data source that was added by the Azure Monitor workspace integration. The dashboard includes request rate by workload, 5xx response rate, p95 request duration, and request rate by response code. Generate traffic by applying the Gateway and VirtualService lessons and then the traffic-management examples.
+
+> **mTLS limitation:** Microsoft currently documents Istio metrics collection with Azure Managed Prometheus as unsupported when Istio mutual TLS is enabled. Run the dashboard lesson before applying strict mTLS, or remove the `PeerAuthentication` after that lesson with `kubectl delete peerauthentication default -n aks-istio-system`.
+
+For official background, see [Collect Istio metrics with Managed Prometheus](https://learn.microsoft.com/azure/azure-monitor/containers/prometheus-istio-integration) and [Connect an Azure Monitor workspace to Azure Managed Grafana](https://learn.microsoft.com/azure/managed-grafana/how-to-connect-azure-monitor-workspace).
 
 **Kiali and Jaeger/distributed tracing are *not* part of the managed add-on** — they're optional, self-managed OSS components you install yourself with Helm, pointed at the add-on's control plane namespace (`aks-istio-system` instead of the upstream default of `istio-system`). Treat this as an advanced follow-up exercise; see [Kiali's Helm install docs](https://kiali.io/docs/installation/installation-guide/) and the [Istio addons](https://github.com/istio/istio/tree/master/samples/addons) sample manifests as starting points.
 
@@ -321,7 +329,7 @@ The add-on uses [canary minor-revision upgrades](https://learn.microsoft.com/azu
 ./cleanup.sh
 ```
 
-Prompts for confirmation, then removes the A record `deploy.sh` added to your Azure DNS zone (the zone itself is never touched), runs `terraform destroy`, removes local state files, deletes the `.terraform` provider cache and rendered manifest cache, and removes the cluster's context/cluster/user entries from your local `~/.kube/config` — leaving no orphaned Azure resources, stale provider locks, or dead kubeconfig entries behind.
+Prompts for confirmation, runs `terraform destroy`, removes local state files and the `.terraform` provider cache, and removes the cluster's context/cluster/user entries from your local `~/.kube/config`. If you deployed an earlier version of this demo, run cleanup **before** applying this version so it can remove the legacy Azure DNS A record.
 
 ## Troubleshooting
 
@@ -330,8 +338,5 @@ Prompts for confirmation, then removes the A record `deploy.sh` added to your Az
 | Pods stuck with 1/1 containers instead of 2/2 | Namespace isn't labeled with `istio.io/rev=<revision>` (the generic `istio-injection=enabled` label does **not** work for the add-on), or the pod was created before the label was applied — restart the deployment. |
 | `403 RBAC: access denied` on requests that should be allowed | Check the `AuthorizationPolicy` `selector` and `principals` match the caller's actual ServiceAccount (`kubectl get pod <pod> -o jsonpath='{.spec.serviceAccountName}'`). |
 | `terraform apply`/`plan` fails with `No Istio add-on revision compatible with Kubernetes ...` | No supported Istio revision for your `location`/`kubernetes_version` combo. Run `az aks mesh get-revisions --location <region> -o table` (requires `aks-preview`) and either adjust `kubernetes_version` or pin a supported `istio_revisions` value in `terraform.tfvars`. |
-| Ingress gateway has no external IP | Standard Load Balancer provisioning can take a few minutes; re-run `kubectl get svc aks-istio-ingressgateway-external -n aks-istio-ingress -w`. |
-| `Certificate` stuck `Pending`/not `Ready` | DNS-01 propagation delay (wait a minute and re-check), or Workload Identity misconfigured. Check `kubectl describe certificate bookinfo-gateway-tls -n aks-istio-ingress` and `kubectl logs -n cert-manager deploy/cert-manager`; confirm the federated credential subject matches `system:serviceaccount:cert-manager:cert-manager`. |
-| cert-manager gets a `403`/`Forbidden` from Azure DNS | RBAC propagation delay (wait 30-90s after `terraform apply`) or the `DNS Zone Contributor` role assignment on `data.azurerm_dns_zone.this` is missing/wrong — check `terraform/main.tf`. |
-| `productpage` loads over HTTP but not HTTPS, or shows a self-signed cert warning | The `Secret` `bookinfo-gateway-tls` doesn't exist yet in `aks-istio-ingress` — the `Certificate` hasn't finished issuing. Confirm with `kubectl get secret bookinfo-gateway-tls -n aks-istio-ingress`. |
-| `bookinfo_fqdn` doesn't resolve | The A record `deploy.sh` created can take a few minutes to propagate; verify it exists with `az network dns record-set a show --resource-group <dns_zone_resource_group> --zone-name <dns_zone_name> --name <bookinfo_subdomain>`. |
+| Ingress gateway has no external IP | Confirm `external_ingress_gateway_enabled = true`; Standard Load Balancer provisioning can take a few minutes. Check `kubectl get svc aks-istio-ingressgateway-external -n aks-istio-ingress -w`. |
+| Gateway IP responds but Bookinfo does not load | Apply the Gateway first, then the VirtualService; check `kubectl get gateway,virtualservice -n default` and verify the external gateway selector in `ingress/gateway.yaml`. |

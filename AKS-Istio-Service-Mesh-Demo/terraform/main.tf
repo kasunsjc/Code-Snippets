@@ -6,8 +6,7 @@ locals {
   log_workspace_name  = "log-${local.name_prefix}"
   prometheus_ws_name  = "prom-${local.name_prefix}"
   # Azure Managed Grafana names are capped at 23 chars, letters/digits/dashes only.
-  grafana_name  = "graf-${substr(replace(local.name_prefix, "-", ""), 0, 12)}-${random_string.suffix.result}"
-  bookinfo_fqdn = "${var.bookinfo_subdomain}.${var.dns_zone_name}"
+  grafana_name = "graf-${substr(replace(local.name_prefix, "-", ""), 0, 12)}-${random_string.suffix.result}"
 
   tags = merge({
     project     = var.project
@@ -16,8 +15,6 @@ locals {
     managed_by  = "terraform"
   }, var.tags)
 }
-
-data "azurerm_client_config" "current" {}
 
 # service_mesh_profile.revisions requires >= 1 entry (the provider docs'
 # "leave it empty" claim doesn't hold in practice) - resolve AKS's current
@@ -43,39 +40,6 @@ resource "azurerm_resource_group" "this" {
   name     = local.resource_group_name
   location = var.location
   tags     = local.tags
-}
-
-# --- Existing Azure DNS zone (not created here; must already be delegated) ----
-
-data "azurerm_dns_zone" "this" {
-  name                = var.dns_zone_name
-  resource_group_name = var.dns_zone_resource_group
-}
-
-# --- Workload identity for cert-manager's Azure DNS DNS-01 solver -------------
-# No client secret: cert-manager exchanges its Kubernetes service account token
-# for an Azure AD token via the cluster's OIDC issuer (Azure Workload Identity).
-
-resource "azurerm_user_assigned_identity" "cert_manager" {
-  name                = "id-cert-manager-${local.name_prefix}"
-  resource_group_name = azurerm_resource_group.this.name
-  location            = azurerm_resource_group.this.location
-  tags                = local.tags
-}
-
-resource "azurerm_federated_identity_credential" "cert_manager" {
-  name                      = "cert-manager"
-  user_assigned_identity_id = azurerm_user_assigned_identity.cert_manager.id
-  audience                  = ["api://AzureADTokenExchange"]
-  issuer                    = azurerm_kubernetes_cluster.this.oidc_issuer_url
-  subject                   = "system:serviceaccount:cert-manager:cert-manager"
-}
-
-# Scoped to the single DNS zone only - not subscription- or RG-wide access.
-resource "azurerm_role_assignment" "cert_manager_dns_zone_contributor" {
-  scope                = data.azurerm_dns_zone.this.id
-  role_definition_name = "DNS Zone Contributor"
-  principal_id         = azurerm_user_assigned_identity.cert_manager.principal_id
 }
 
 # --- Observability (officially verified path for the Istio add-on) ------------
@@ -148,10 +112,6 @@ resource "azurerm_kubernetes_cluster" "this" {
   identity {
     type = "SystemAssigned"
   }
-
-  # Required for cert-manager's Azure Workload Identity federated credential.
-  oidc_issuer_enabled       = true
-  workload_identity_enabled = true
 
   network_profile {
     network_plugin      = "azure"

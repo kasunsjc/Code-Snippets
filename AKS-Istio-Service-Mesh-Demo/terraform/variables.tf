@@ -55,14 +55,9 @@ variable "internal_ingress_gateway_enabled" {
 }
 
 variable "external_ingress_gateway_enabled" {
-  description = "Enable the AKS-managed external Istio ingress gateway (public Azure Load Balancer). This demo requires it for public DNS and TLS."
+  description = "Enable the AKS-managed external Istio ingress gateway (public Azure Load Balancer) for the optional Gateway and VirtualService lessons."
   type        = bool
   default     = true
-
-  validation {
-    condition     = var.external_ingress_gateway_enabled
-    error_message = "This demo requires the external Istio ingress gateway to expose Bookinfo over public DNS and TLS."
-  }
 }
 
 # --- Observability --------------------------------------------------------------
@@ -71,29 +66,6 @@ variable "enable_monitoring" {
   description = "Provision Log Analytics + Azure Monitor managed Prometheus + Azure Managed Grafana, the officially verified observability path for the Istio add-on."
   type        = bool
   default     = true
-}
-
-# --- cert-manager + Azure DNS (TLS for the Istio ingress gateway) -------------
-
-variable "dns_zone_name" {
-  description = "Name of an EXISTING Azure DNS zone (e.g. example.com) already delegated to Azure DNS. This demo does not create the zone."
-  type        = string
-}
-
-variable "dns_zone_resource_group" {
-  description = "Resource group that contains the existing Azure DNS zone."
-  type        = string
-}
-
-variable "bookinfo_subdomain" {
-  description = "Subdomain the bookinfo sample app is exposed on, combined with dns_zone_name (e.g. bookinfo-demo -> bookinfo-demo.example.com)."
-  type        = string
-  default     = "bookinfo"
-}
-
-variable "acme_email" {
-  description = "Contact email registered with Let's Encrypt for certificate expiry notices."
-  type        = string
 }
 
 variable "tags" {

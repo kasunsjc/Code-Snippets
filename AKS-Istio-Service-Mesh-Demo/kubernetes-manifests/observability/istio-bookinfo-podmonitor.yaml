@@ -1,0 +1,27 @@
+apiVersion: azmonitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: istio-bookinfo
+  namespace: default
+spec:
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  selector:
+    matchExpressions:
+      - key: app
+        operator: In
+        values:
+          - details
+          - productpage
+          - ratings
+          - reviews
+  podMetricsEndpoints:
+    - port: http-envoy-prom
+      path: /stats/prometheus
+      interval: 30s
+      metricRelabelings:
+        - sourceLabels:
+            - __name__
+          action: keep
+          regex: istio_.*
