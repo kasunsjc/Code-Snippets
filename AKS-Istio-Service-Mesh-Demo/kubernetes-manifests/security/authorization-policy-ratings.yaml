@@ -1,0 +1,21 @@
+# Zero-trust demo: explicitly DENY any caller other than the `reviews`
+# workload's ServiceAccount from reaching `ratings`. Because mTLS is STRICT
+# (see peer-authentication-strict.yaml), Istio can cryptographically verify
+# the caller's identity from its mTLS certificate - not just its IP/labels.
+#
+# Try it: `kubectl exec` into a curl pod (no matching identity) and call the
+# ratings ClusterIP directly - it will be rejected with RBAC: access denied.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: ratings-allow-reviews-only
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: ratings
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals: ["cluster.local/ns/default/sa/bookinfo-reviews"]

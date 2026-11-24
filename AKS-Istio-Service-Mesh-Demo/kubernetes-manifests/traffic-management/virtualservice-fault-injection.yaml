@@ -1,0 +1,42 @@
+# Resilience testing demo: inject a 7s delay for user "jason" calling ratings
+# (via reviews-v2) to observe how productpage's timeout/circuit-breaking
+# behaves without touching any application code.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: ratings
+spec:
+  hosts:
+    - ratings
+  http:
+    - match:
+        - headers:
+            end-user:
+              exact: jason
+      fault:
+        delay:
+          percentage:
+            value: 100
+          fixedDelay: 7s
+      route:
+        - destination:
+            host: ratings
+            subset: v1
+    - route:
+        - destination:
+            host: ratings
+            subset: v1
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: ratings
+spec:
+  host: ratings
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+    - name: v1
+      labels:
+        version: v1

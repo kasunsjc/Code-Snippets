@@ -1,0 +1,31 @@
+# Routes external traffic arriving on the Gateway above to the productpage
+# service. Apply this after gateway.yaml to demonstrate that a Gateway opens a
+# listener while a VirtualService defines where matching requests are routed.
+# Access the app with http://<external-gateway-ip>/productpage.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: bookinfo
+  namespace: default
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - bookinfo-gateway
+  http:
+    - match:
+        - uri:
+            exact: /productpage
+        - uri:
+            prefix: /static
+        - uri:
+            exact: /login
+        - uri:
+            exact: /logout
+        - uri:
+            prefix: /api/v1/products
+      route:
+        - destination:
+            host: productpage
+            port:
+              number: 9080
